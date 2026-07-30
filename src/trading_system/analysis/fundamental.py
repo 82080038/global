@@ -142,7 +142,7 @@ class FundamentalAnalysisEngine:
         eps_g = ratios.get("eps_growth") or 0
         rev_g = ratios.get("revenue_growth") or 0
         if eps_g is not None or rev_g is not None:
-            avg = (eps_g or 0 + rev_g or 0) / 2
+            avg = ((eps_g or 0) + (rev_g or 0)) / 2
             breakdown["growth"] = min(25, max(0, 12.5 + avg))
         else:
             breakdown["growth"] = 12.5

@@ -23,7 +23,6 @@ from trading_system.xai.engine import ExplainableAIEngine
 from trading_system.monitoring.engine import MonitoringEngine
 from trading_system.paper_trading.engine import PaperTradingEngine
 from trading_system.ai_learning.engine import AILearningEngine
-from trading_system.config import DEFAULT_BENCHMARK
 
 app = FastAPI(title="Trading System API", version="0.1.0")
 

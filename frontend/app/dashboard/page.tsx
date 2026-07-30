@@ -27,73 +27,119 @@ interface ScoreData {
   score: number;
 }
 
+function StatCard({
+  label,
+  value,
+  sub,
+  color,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub?: string;
+  color?: string;
+}) {
+  return (
+    <div className="border border-zinc-800 bg-zinc-900/50 p-3">
+      <div className="text-[10px] uppercase tracking-wide text-zinc-500 font-mono">{label}</div>
+      <div className={`mt-1 text-lg font-semibold ${color || ""}`}>{value}</div>
+      {sub && <div className="mt-1 text-[10px] text-zinc-400 font-mono">{sub}</div>}
+    </div>
+  );
+}
+
+interface Recommendation {
+  action?: string;
+  conviction_score?: number;
+  position_size?: number;
+  entry_price_range?: number[];
+  stop_loss?: number;
+  take_profit?: number;
+  risk_flags?: string[];
+}
+
+interface Explanation {
+  narrative?: string;
+  top_factors?: [string, number][];
+  confidence_interval?: number[];
+}
+
+interface Monitor {
+  status?: string;
+  tickers_in_db?: string[];
+  score_count?: number;
+  alerts?: unknown[];
+}
+
 export default function Dashboard() {
   const [ticker, setTicker] = useState("BBCA.JK");
   const [input, setInput] = useState("BBCA.JK");
   const [ohlcv, setOhlcv] = useState<Candle[]>([]);
   const [scores, setScores] = useState<ScoreData[]>([]);
-  const [recommendation, setRecommendation] = useState<any>(null);
-  const [explanation, setExplanation] = useState<any>(null);
-  const [monitor, setMonitor] = useState<any>(null);
+  const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
+  const [explanation, setExplanation] = useState<Explanation | null>(null);
+  const [monitor, setMonitor] = useState<Monitor | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState<string>("—");
 
-  const fetchAll = async (t: string) => {
-    setLoading(true);
-    setError("");
-    try {
-      const [ohlcvRes, scoresRes, recRes, expRes, monRes] = await Promise.all([
-        fetch(`/api/data/ohlcv?ticker=${t}`),
-        fetch(`/api/scores/${t}`),
-        fetch(`/api/recommend/${t}`),
-        fetch(`/api/explain/${t}`),
-        fetch(`/api/monitor`),
-      ]);
-
-      const ohlcvJson = await ohlcvRes.json();
-      const scoresJson = await scoresRes.json();
-      const recJson = await recRes.json();
-      const expJson = await expRes.json();
-      const monJson = await monRes.json();
-
-      if (ohlcvRes.ok) {
-        setOhlcv(
-          ohlcvJson.data.map((row: any) => ({
-            time: row.timestamp.split("T")[0],
-            open: row.open,
-            high: row.high,
-            low: row.low,
-            close: row.close,
-            volume: row.volume ?? 0,
-          }))
-        );
-      } else {
-        setOhlcv([]);
-      }
-
-      if (scoresRes.ok) {
-        const scoreList = Object.entries(scoresJson.scores || {}).map(
-          ([engine, score]) => ({ engine, score: Number(score) })
-        );
-        setScores(scoreList);
-      } else {
-        setScores([]);
-      }
-
-      setRecommendation(recRes.ok ? recJson.recommendation : null);
-      setExplanation(expRes.ok ? expJson : null);
-      setMonitor(monRes.ok ? monJson : null);
-      setLastUpdated(new Date().toLocaleString());
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchAll(ticker);
+    let active = true;
+    const run = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const [ohlcvRes, scoresRes, recRes, expRes, monRes] = await Promise.all([
+          fetch(`/api/data/ohlcv?ticker=${ticker}`),
+          fetch(`/api/scores/${ticker}`),
+          fetch(`/api/recommend/${ticker}`),
+          fetch(`/api/explain/${ticker}`),
+          fetch(`/api/monitor`),
+        ]);
+
+        const ohlcvJson = await ohlcvRes.json();
+        const scoresJson = await scoresRes.json();
+        const recJson = await recRes.json();
+        const expJson = await expRes.json();
+        const monJson = await monRes.json();
+
+        if (!active) return;
+
+        if (ohlcvRes.ok) {
+          setOhlcv(
+            ohlcvJson.data.map((row: Record<string, unknown>) => ({
+              time: (row.timestamp as string).split("T")[0],
+              open: row.open as number,
+              high: row.high as number,
+              low: row.low as number,
+              close: row.close as number,
+              volume: (row.volume as number) ?? 0,
+            }))
+          );
+        } else {
+          setOhlcv([]);
+        }
+
+        if (scoresRes.ok) {
+          const scoreList = Object.entries(scoresJson.scores || {}).map(
+            ([engine, score]) => ({ engine, score: Number(score) })
+          );
+          setScores(scoreList);
+        } else {
+          setScores([]);
+        }
+
+        setRecommendation(recRes.ok ? recJson.recommendation : null);
+        setExplanation(expRes.ok ? expJson : null);
+        setMonitor(monRes.ok ? monJson : null);
+        setLastUpdated(new Date().toLocaleString());
+      } catch (e: unknown) {
+        if (active) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    run();
+    return () => { active = false; };
   }, [ticker]);
 
   const metrics = useMemo(() => {
@@ -128,24 +174,6 @@ export default function Dashboard() {
 
   const formatNumber = (n: number | null) =>
     n == null ? "—" : n.toLocaleString("id-ID", { maximumFractionDigits: 2 });
-
-  const StatCard = ({
-    label,
-    value,
-    sub,
-    color,
-  }: {
-    label: string;
-    value: React.ReactNode;
-    sub?: string;
-    color?: string;
-  }) => (
-    <div className="border border-zinc-800 bg-zinc-900/50 p-3">
-      <div className="text-[10px] uppercase tracking-wide text-zinc-500 font-mono">{label}</div>
-      <div className={`mt-1 text-lg font-semibold ${color || ""}`}>{value}</div>
-      {sub && <div className="mt-1 text-[10px] text-zinc-400 font-mono">{sub}</div>}
-    </div>
-  );
 
   return (
     <TerminalLayout active="dashboard" ticker={ticker}>
@@ -272,8 +300,8 @@ export default function Dashboard() {
                         entry.score >= 70
                           ? "#22c55e"
                           : entry.score >= 40
-                          ? "#facc15"
-                          : "#ef4444"
+                            ? "#facc15"
+                            : "#ef4444"
                       }
                     />
                   ))}
@@ -317,7 +345,7 @@ export default function Dashboard() {
               <div>
                 <div className="mb-1 text-zinc-500">Top Factors</div>
                 <ul className="list-disc pl-5">
-                  {explanation.top_factors?.map(([name, value]: any) => (
+                  {explanation.top_factors?.map(([name, value]: [string, number]) => (
                     <li key={name}>
                       {name}: {value}
                     </li>
@@ -355,7 +383,7 @@ export default function Dashboard() {
             <div className="text-zinc-200">{monitor?.alerts?.length || 0}</div>
           </div>
         </div>
-        {monitor?.tickers_in_db?.length > 0 && (
+        {monitor?.tickers_in_db && monitor.tickers_in_db.length > 0 && (
           <div className="mt-2">
             <div className="mb-1 text-zinc-500 text-xs font-mono">Available tickers</div>
             <div className="flex flex-wrap gap-1">

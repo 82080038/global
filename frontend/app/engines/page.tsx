@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import TerminalLayout from "../components/TerminalLayout";
 
 interface Engine {
@@ -22,7 +22,10 @@ interface EnginesResponse {
 
 type ConnStatus = "connecting" | "open" | "closed" | "error";
 
-const WS_URL = "ws://localhost:8000/ws/engines";
+const WS_URL =
+  typeof window !== "undefined"
+    ? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:8000/ws/engines`
+    : "ws://localhost:8000/ws/engines";
 
 export default function EnginesPage() {
   const [data, setData] = useState<EnginesResponse | null>(null);
@@ -43,7 +46,7 @@ export default function EnginesPage() {
           try {
             const payload = JSON.parse(event.data);
             if (payload?.engines) setData(payload);
-          } catch (e) {
+          } catch {
             // ignore
           }
         };
@@ -54,7 +57,7 @@ export default function EnginesPage() {
         };
 
         ws.onerror = () => setStatus("error");
-      } catch (e) {
+      } catch {
         setStatus("error");
         reconnect = setTimeout(connect, 3000);
       }
@@ -134,11 +137,10 @@ export default function EnginesPage() {
           <button
             key={engine.name}
             onClick={() => setSelected(engine.name)}
-            className={`relative border p-2 text-left transition hover:bg-zinc-800/50 ${
-              selected === engine.name
+            className={`relative border p-2 text-left transition hover:bg-zinc-800/50 ${selected === engine.name
                 ? "border-blue-500 bg-zinc-800/70"
                 : "border-zinc-800 bg-zinc-900/50"
-            }`}
+              }`}
           >
             <div className="mb-2 flex items-center gap-2">
               <div className={`h-2 w-2 rounded-full ${statusDot(engine.status)}`} />
@@ -169,9 +171,8 @@ export default function EnginesPage() {
               )}
             </div>
             <div
-              className={`absolute left-0 top-0 h-full w-1 ${
-                statusColor(engine.status).split(" ")[0]
-              }`}
+              className={`absolute left-0 top-0 h-full w-1 ${statusColor(engine.status).split(" ")[0]
+                }`}
             />
           </button>
         ))}

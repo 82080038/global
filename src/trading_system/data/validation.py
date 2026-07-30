@@ -23,6 +23,7 @@ class DataQualityValidator:
         if df.empty:
             return df, DataQualityReport(record_count=0, data_quality_score=0.0, action="pause")
 
+        df = df.copy()
         anomalies = []
         n = len(df)
         score = 100.0
@@ -106,7 +107,6 @@ class DataQualityValidator:
         else:
             action = "accept"
 
-        df = df.copy()
         df["data_quality_score"] = score
 
         report = DataQualityReport(

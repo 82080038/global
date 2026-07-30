@@ -107,6 +107,9 @@ class DataStorage:
         try:
             yield conn
             conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             conn.close()
 
@@ -268,12 +271,24 @@ class DataStorage:
         with self._connect() as conn:
             if status == "ok":
                 conn.execute(
-                    "INSERT OR REPLACE INTO source_health (source, last_success, status) VALUES (?, ?, ?)",
+                    """
+                    INSERT INTO source_health (source, last_success, last_error, status)
+                    VALUES (?, ?, NULL, ?)
+                    ON CONFLICT(source) DO UPDATE SET
+                        last_success = excluded.last_success,
+                        status = excluded.status
+                    """,
                     (source, now, status),
                 )
             else:
                 conn.execute(
-                    "INSERT OR REPLACE INTO source_health (source, last_error, status) VALUES (?, ?, ?)",
+                    """
+                    INSERT INTO source_health (source, last_success, last_error, status)
+                    VALUES (?, NULL, ?, ?)
+                    ON CONFLICT(source) DO UPDATE SET
+                        last_error = excluded.last_error,
+                        status = excluded.status
+                    """,
                     (source, now, status),
                 )
 

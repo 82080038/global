@@ -44,8 +44,9 @@ ALL_TICKERS = {
 
 def _generate_ohlcv(ticker: str, config: dict, days: int = 500) -> pd.DataFrame:
     """Generate synthetic OHLCV using geometric brownian motion."""
-    random.seed(hash(ticker) & 0xFFFFFFFF)
-    np.random.seed(hash(ticker) & 0xFFFFFFFF)
+    seed_val = sum(ord(c) for c in ticker)
+    random.seed(seed_val)
+    np.random.seed(seed_val)
 
     base = config["base_price"]
     drift = config["drift"]
@@ -77,7 +78,7 @@ def _generate_ohlcv(ticker: str, config: dict, days: int = 500) -> pd.DataFrame:
             "adjusted_close": close,
             "source": "seeder",
             "ingested_at": datetime.now(timezone.utc).isoformat(),
-            "data_quality_score": 1.0,
+            "data_quality_score": 100.0,
         })
     return pd.DataFrame(records)
 

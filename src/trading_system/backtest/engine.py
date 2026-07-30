@@ -120,6 +120,7 @@ class BacktestEngine:
                     "pnl": float(pnl),
                     "fees_pct": float(cost.sell_cost_pct()),
                 })
+                sold_shares = position
                 position = 0
                 self.storage.audit(
                     "backtest.trade",
@@ -128,7 +129,7 @@ class BacktestEngine:
                         "ticker": ticker,
                         "action": "SELL",
                         "price": fill_price,
-                        "shares": int(position),
+                        "shares": int(sold_shares),
                         "pnl": float(pnl),
                     },
                 )
@@ -152,7 +153,6 @@ class BacktestEngine:
             })
             position = 0
 
-        equity_curve.append((df.index[-1], capital))
         equity = pd.DataFrame(equity_curve, columns=["timestamp", "equity"]).set_index("timestamp")["equity"]
 
         trade_df = pd.DataFrame(trade_history)

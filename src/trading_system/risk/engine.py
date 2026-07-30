@@ -30,8 +30,10 @@ class RiskEngine:
 
         last_price = float(close.iloc[-1])
         atr = self._atr(df, 14)
-        avg_volume = float(volume.rolling(20).mean().iloc[-1])
-        volatility = float(close.pct_change().rolling(20).std().iloc[-1] * np.sqrt(252))
+        avg_volume_raw = float(volume.rolling(20).mean().iloc[-1]) if len(volume) >= 20 else float(volume.mean()) if not volume.empty else 0
+        avg_volume = avg_volume_raw if not pd.isna(avg_volume_raw) else 0
+        volatility_raw = float(close.pct_change().rolling(20).std().iloc[-1] * np.sqrt(252)) if len(close) >= 20 else 0.2
+        volatility = volatility_raw if not pd.isna(volatility_raw) else 0.2
 
         # Position sizing: target risk 1% of capital, stop = 1.5 ATR
         stop_distance = 1.5 * atr if not pd.isna(atr) and atr > 0 else last_price * 0.05
