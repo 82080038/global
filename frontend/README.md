@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Frontend Dashboard — Sistem Trading Profesional
+
+Terminal-style dashboard untuk Sistem Trading Profesional (IDX).
+
+## Tech Stack
+
+- **Next.js** (App Router) + TypeScript
+- **TailwindCSS** — terminal/zinc dark theme
+- **Recharts** — price charts & equity curves
+- **FastAPI backend** — http://localhost:8000
+
+## Pages
+
+- `/` — Home / ticker selector
+- `/dashboard` — Main dashboard (charts, scores, recommendation, execution logs, rebalance panel, toggle switches)
+- `/engines` — Engine registry monitor
+
+## Dashboard Features
+
+- Candlestick price chart with RSI, MACD, MA, Bollinger Bands
+- Multi-factor score table (technical, fundamental, macro, global, sentiment, relationship)
+- Decision engine recommendation with conviction score
+- Explainable AI narrative + top factors
+- Execution log (orders + audit events) with auto-refresh
+- **Auto-Trade toggle** (green/red switch in Execution Log header)
+- **Rebalance toggle** (purple/gray switch in Rebalancing panel)
+- Portfolio performance analytics (return, Sharpe, drawdown, win rate, equity curve)
+- Watchlist with favorite toggle
+- System health footer (status, tickers, scores, alerts)
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## API Proxy
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The frontend proxies `/api/*` requests to the FastAPI backend at `http://localhost:8000`.
 
-## Learn More
+See `next.config.ts` for rewrite rules.
 
-To learn more about Next.js, take a look at the following resources:
+## Build
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run build
+npm start
+```
