@@ -9,6 +9,11 @@ RAW_ZONE = DATA_DIR / "raw"
 CLEAN_ZONE = DATA_DIR / "clean"
 DB_PATH = DATA_DIR / "trading_system.db"
 
+# Archive zone untuk data raw permanen (Parquet).
+# Default: subfolder di dalam data/, bisa di-override ke external HDD via env.
+# Contoh: DATA_ARCHIVE_DIR=K:\trading_data\raw
+DATA_ARCHIVE_DIR = Path(os.getenv("DATA_ARCHIVE_DIR", str(DATA_DIR / "archive")))
+
 DEFAULT_BENCHMARK = "^JKSE"  # IHSG
 DEFAULT_BROKER_FEE_BUY = 0.0015       # 0.15% beli
 DEFAULT_BROKER_FEE_SELL = 0.0025      # 0.15% broker + 0.1% PPh
@@ -74,3 +79,4 @@ DEFAULT_GLOBAL_TICKERS = {
 def ensure_dirs():
     RAW_ZONE.mkdir(parents=True, exist_ok=True)
     CLEAN_ZONE.mkdir(parents=True, exist_ok=True)
+    DATA_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
