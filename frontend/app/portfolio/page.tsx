@@ -2,16 +2,15 @@
 
 import { useEffect, useState } from "react";
 import TerminalLayout from "../components/TerminalLayout";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+import { apiFetch } from "../lib/api";
 
 interface Position {
   ticker: string;
   quantity: number;
   avg_entry_price: number;
   current_price?: number;
-  pnl?: number;
-  pnl_pct?: number;
+  unrealized_pnl?: number;
+  return_pct?: number;
 }
 
 interface Exposure {
@@ -33,8 +32,8 @@ export default function PortfolioPage() {
     setError(null);
     try {
       const [posRes, expRes] = await Promise.all([
-        fetch(`${API_BASE}/api/positions`),
-        fetch(`${API_BASE}/api/portfolio/exposure`),
+        apiFetch("/api/positions"),
+        apiFetch("/api/portfolio/exposure"),
       ]);
       if (posRes.ok) {
         const posData = await posRes.json();
@@ -113,11 +112,11 @@ export default function PortfolioPage() {
                   <td className="py-0.5 font-mono text-zinc-200">{pos.ticker}</td>
                   <td className="py-0.5 text-right">{pos.quantity?.toLocaleString("id-ID")}</td>
                   <td className="py-0.5 text-right">{pos.avg_entry_price?.toLocaleString("id-ID")}</td>
-                  <td className={`py-0.5 text-right ${(pos.pnl || 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
-                    {pos.pnl?.toLocaleString("id-ID")}
+                  <td className={`py-0.5 text-right ${(pos.unrealized_pnl || 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
+                    {pos.unrealized_pnl?.toLocaleString("id-ID")}
                   </td>
-                  <td className={`py-0.5 text-right ${(pos.pnl_pct || 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
-                    {pos.pnl_pct?.toFixed(2)}%
+                  <td className={`py-0.5 text-right ${(pos.return_pct || 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
+                    {pos.return_pct?.toFixed(2)}%
                   </td>
                 </tr>
               ))}

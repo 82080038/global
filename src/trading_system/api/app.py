@@ -14,14 +14,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from datetime import UTC
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from trading_system.ai_learning.engine import AILearningEngine
 from trading_system.analysis.pipeline import AnalysisPipeline
 from trading_system.backtest.engine import BacktestEngine
-from trading_system.backtest.strategies import BuyAndHold, MovingAverageCrossover
+from trading_system.backtest.strategies import BuyAndHold, ConvictionStrategy, MovingAverageCrossover
 from trading_system.config import TRADING_CAPITAL
 from trading_system.corporate.actions import CorporateActionEngine
 from trading_system.data.acquisition import YahooFinanceAdapter, normalize_ohlcv
@@ -33,7 +33,7 @@ from trading_system.monitoring.engine import MonitoringEngine
 from trading_system.paper_trading.engine import PaperTradingEngine
 from trading_system.xai.engine import ExplainableAIEngine
 
-app = FastAPI(title="Trading System API", version="0.1.7")
+app = FastAPI(title="Trading System API", version="0.1.8")
 
 # CORS middleware — allow frontend (port 3000) and any origin in dev
 app.add_middleware(
@@ -66,13 +66,12 @@ _SENSITIVE_PATHS = {
     "/api/execution/run",
     "/api/rebalance",
     "/api/fetch",
-    "/api/data/{ticker}",
     "/api/scores/{ticker}",
     "/api/orders",
     "/api/audit",
     "/api/positions/{position_id}",
     "/api/ai/weights",
-    "/api/performance/snapshots",
+    "/api/performance/snapshot",
     "/api/risk/daily",
     "/api/archive/{ticker}",
     "/api/relationships",
@@ -102,7 +101,19 @@ async def api_key_auth(request: Request, call_next):
         return await call_next(request)
 
     # DELETE methods are always sensitive (destructive operations)
-    is_sensitive = method == _DELETE_METHOD or path in _SENSITIVE_PATHS
+    # Also check parameterized paths like /api/data/{category} by prefix matching
+    is_sensitive = method == _DELETE_METHOD
+    if not is_sensitive:
+        for sp in _SENSITIVE_PATHS:
+            if "{" in sp:
+                # Parameterized path: match prefix before the {param} segment
+                prefix = sp.split("{")[0].rstrip("/")
+                if path.startswith(prefix + "/"):
+                    is_sensitive = True
+                    break
+            elif path == sp:
+                is_sensitive = True
+                break
 
     if is_sensitive and not _API_KEY:
         return JSONResponse(status_code=503, content={"detail": "API_KEY belum dikonfigurasi di server; endpoint ini dinonaktifkan demi keamanan."})
@@ -351,17 +362,32 @@ def run_backtest(payload: dict):
         strategy = BuyAndHold()
     elif strategy_name == "ma_crossover":
         strategy = MovingAverageCrossover(20, 50)
+    elif strategy_name == "conviction":
+        strategy = ConvictionStrategy(storage=storage, ticker=ticker)
     else:
         raise HTTPException(status_code=400, detail="Unknown strategy")
     result = engine.run(ticker, strategy, initial_capital=capital)
     if result["status"] == "error":
         raise HTTPException(status_code=404, detail=result["message"])
+    metrics = result.get("metrics", {})
+    equity_curve = result.get("equity_curve")
+    equity_data = []
+    if equity_curve is not None and not equity_curve.empty:
+        equity_data = [
+            {"date": str(idx), "equity": round(float(val), 2)}
+            for idx, val in equity_curve.items()
+        ]
     return {
         "ticker": ticker,
         "strategy": result["strategy"],
         "final_equity": result["final_equity"],
-        "metrics": result["metrics"],
-        "trade_count": len(result["trade_history"]),
+        "total_return": round(metrics.get("total_return", 0) * 100, 2),
+        "sharpe_ratio": metrics.get("sharpe_ratio", 0),
+        "max_drawdown": round(abs(metrics.get("max_drawdown", 0)) * 100, 2),
+        "win_rate": round(metrics.get("win_rate", 0) * 100, 1),
+        "total_trades": len(result["trade_history"]),
+        "equity_curve": equity_data,
+        "metrics": metrics,
     }
 
 
@@ -465,7 +491,7 @@ def get_orders(ticker: str | None = None, limit: int = 100):
 
 
 @app.post("/api/execution/run")
-def run_execution_cycle(payload: dict):
+def run_execution_cycle(payload: dict = Body(default_factory=dict)):
     """Run one execution cycle (manual trigger)."""
     from trading_system.execution.automated import AutomatedExecutionEngine
 
@@ -476,7 +502,7 @@ def run_execution_cycle(payload: dict):
 
 
 @app.post("/api/rebalance")
-def trigger_rebalance(payload: dict | None = None):
+def trigger_rebalance(payload: dict = Body(default_factory=dict)):
     """Trigger portfolio rebalancing manually."""
     from trading_system.portfolio.rebalancer import PortfolioRebalancer
 
@@ -840,6 +866,17 @@ def refresh_daily_risk():
     from trading_system.risk.engine import RiskEngine
     engine = RiskEngine()
     result = engine.save_daily_risk()
+    return result
+
+
+@app.get("/api/risk/{ticker}")
+def get_ticker_risk(ticker: str, capital: float = TRADING_CAPITAL):
+    """Get risk analysis for a specific ticker (VaR, position sizing, risk flags)."""
+    from trading_system.risk.engine import RiskEngine
+    engine = RiskEngine(storage=storage)
+    result = engine.analyze(ticker, capital=capital)
+    if result.get("status") == "error":
+        raise HTTPException(status_code=404, detail=result.get("message", "Risk analysis failed"))
     return result
 
 

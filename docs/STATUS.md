@@ -1,6 +1,6 @@
 # Status Implementasi Sistem Trading
 
-> **Versi aplikasi:** 0.1.7  
+> **Versi aplikasi:** 0.1.8  
 > **Update:** 1 Agustus 2026  
 > **Total unit tests:** 562 (semua passing, 0 warnings)
 
@@ -49,6 +49,21 @@
 - Test plan: `docs/TEST_PLAN.md` ✅
 - Blueprint extraction: `docs/TIP_BLUEPRINT_EXTRACTION.md` ✅
 - Total TIP component tests: 155 new tests across 6 test files ✅
+
+**Deep Audit (v0.1.8) — Frontend-backend integration, Docker, code quality (selesai):**
+- **Frontend API key support**: Shared `apiFetch()` utility (`frontend/app/lib/api.ts`) dengan automatic `X-API-Key` header injection; semua 5 halaman frontend (dashboard, backtest, portfolio, audit, engines) dimigrasi.
+- **Backtest API response**: Flattened metrics (`total_return`, `sharpe_ratio`, `max_drawdown`, `win_rate`, `total_trades`) dengan percentage conversion + `equity_curve` array untuk frontend compatibility.
+- **Portfolio field names**: `pnl`→`unrealized_pnl`, `pnl_pct`→`return_pct` (sesuai API schema).
+- **WebSocket auth**: `?token=` query param untuk API key di WebSocket `/ws/live`.
+- **CLI `schedule` subcommand**: Added missing command with `--once` option for cron mode.
+- **Docker fixes**: Backend Dockerfile copies alembic + runs migrations; frontend Dockerfile accepts build-time env args; docker-compose adds volumes + build args; CI builds frontend Docker image.
+- **Win rate fix**: `portfolio/performance.py` kini menggunakan `realized_pnl` dari SELL orders (bukan estimasi rata-rata BUY historis).
+- **CSS dark theme**: Forced dark mode di `globals.css`, restored Geist font variables.
+- **Sensitive path matching**: Fixed parameterized path prefix matching; removed read-only GET endpoints from `_SENSITIVE_PATHS`.
+- **POST body validation**: `/api/rebalance` dan `/api/execution/run` menerima empty body via `Body(default_factory=dict)`.
+- **Missing endpoint**: Added `GET /api/risk/{ticker}` (per-ticker risk analysis).
+- **Dependency cleanup**: Removed unused `plotly` from `pyproject.toml`.
+- **Documentation**: README endpoints corrected, `.env.example` frontend vars added, CHANGELOG updated.
 
 **Belum dikerjakan:** Seluruh item P3 (lihat `docs/SARAN_PENGEMBANGAN.md`).
 
@@ -208,16 +223,20 @@
 
 | Modul | File | Status | Catatan |
 |-------|------|--------|---------|
-| FastAPI App | `api/app.py` | ✅ Done | 30+ REST endpoints, WebSocket, runtime toggles, engine registry |
+| FastAPI App | `api/app.py` | ✅ Done | 64+ REST endpoints, WebSocket, runtime toggles, engine registry |
 
 ## Frontend
 
 | Modul | File | Status | Catatan |
 |-------|------|--------|---------|
-| Dashboard | `app/dashboard/page.tsx` | ✅ Done | Charts, scores, recommendation, execution log, toggles, performance, watchlist |
-| Engine Monitor | `app/engines/page.tsx` | ✅ Done | WebSocket real-time, engine status grid |
-| Terminal Layout | `components/TerminalLayout.tsx` | ✅ Done | Header, sidebar, navigation |
-| Price Chart | `components/PriceChart.tsx` | ✅ Done | Candlestick via TradingView Lightweight Charts |
+| Dashboard | `app/dashboard/page.tsx` | **Done** | Charts, scores, recommendation, execution log, toggles, performance, watchlist |
+| Engine Monitor | `app/engines/page.tsx` | **Done** | WebSocket real-time, engine status grid |
+| Terminal Layout | `components/TerminalLayout.tsx` | **Done** | Header, sidebar, navigation |
+| Price Chart | `components/PriceChart.tsx` | **Done** | Candlestick via TradingView Lightweight Charts |
+| Backtest | `app/backtest/page.tsx` | **Done** | Strategy selection (buy_and_hold, ma_crossover, conviction), equity curve, metrics display |
+| Portfolio | `app/portfolio/page.tsx` | **Done** | Open positions, exposure summary, unrealized PnL |
+| Audit Log | `app/audit/page.tsx` | **Done** | Audit log entries with filtering |
+| Shared API Utils | `app/lib/api.ts` | **Done** | `apiFetch()` with automatic API key header injection |
 
 ## CLI
 
@@ -233,6 +252,7 @@
 | `corporate-actions` | ✅ Done | Split/dividend |
 | `relationship` | ✅ Done | Rolling correlation |
 | `execution` | ✅ Done | Robot trader, --once / --interval |
+| `schedule` | ✅ Done | Daily scheduler, --once for cron mode |
 | `test-e2e` | ✅ Done | End-to-end pipeline test |
 | `list` | ✅ Done | Tickers in DB |
 
@@ -245,7 +265,7 @@
 | E2E Test Script | `scripts/test_end_to_end.py` | ✅ Done | Full pipeline test |
 | Start Production (Linux) | `scripts/start_production.sh` | ✅ Done | Backend + frontend |
 | Start Production (Windows) | `scripts/start_production.bat` | ✅ Done | Backend + frontend |
-| Dockerfile | `Dockerfile` | ✅ Done | Backend container |
+| Dockerfile | `Dockerfile` | ✅ Done | Backend container, alembic migrations on startup |
 | docker-compose.yml | `docker-compose.yml` | ✅ Done | Multi-service |
 | Telegram Notifier | `utils/notifier.py` | ✅ Done | Alert untuk order, risk, anomaly |
 | Database Migration | `alembic/` | ✅ Done | Alembic setup with initial schema migration, SQLite batch mode |
@@ -289,6 +309,6 @@ Data Layer → Analysis Layer → Sentiment Layer → Risk Layer
 ```
 
 **Total engines:** 18 base + 18 TIP-adopted = 36 (lihat Lampiran C di buku-sistem-trading.md)  
-**Total API endpoints:** 63 REST (47 GET/POST + 12 DELETE + 4 PATCH/PUT/GET update) + 1 WebSocket  
+**Total API endpoints:** 64 REST (48 GET/POST + 12 DELETE + 4 PATCH/PUT/GET update) + 1 WebSocket  
 **Total database tables:** 32  
 **Total unit tests:** 562

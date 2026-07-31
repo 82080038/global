@@ -79,5 +79,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Docker image
+      - name: Build backend Docker image
         run: docker build -t trading-system-api .
+
+      - name: Build frontend Docker image
+        run: docker build -t trading-system-frontend ./frontend

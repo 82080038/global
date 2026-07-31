@@ -92,7 +92,7 @@ def main():
 
     p_backtest = sub.add_parser("backtest", help="Run backtest")
     p_backtest.add_argument("ticker", help="Ticker to backtest")
-    p_backtest.add_argument("--strategy", default="buy_and_hold", help="buy_and_hold or ma_crossover")
+    p_backtest.add_argument("--strategy", default="buy_and_hold", help="buy_and_hold, ma_crossover, or conviction")
     p_backtest.add_argument("--capital", type=float, default=TRADING_CAPITAL)
     p_backtest.add_argument("--monte-carlo", action="store_true", help="Run Monte Carlo simulation")
     p_backtest.add_argument("--walk-forward", action="store_true", help="Run walk-forward analysis")
@@ -139,6 +139,9 @@ def main():
 
     p_e2e = sub.add_parser("test-e2e", help="Run end-to-end pipeline test")
     p_e2e.add_argument("--tickers", nargs="+", default=["BBCA.JK", "TLKM.JK", "ASII.JK"], help="Tickers to test")
+
+    p_sched = sub.add_parser("schedule", help="Run daily scheduler (fetch, scores, recommendations, execution)")
+    p_sched.add_argument("--once", action="store_true", help="Run daily job once and exit")
 
     args = parser.parse_args()
     if args.cmd == "fetch":
@@ -269,6 +272,15 @@ def main():
         success = run_e2e_test(args.tickers)
         import sys
         sys.exit(0 if success else 1)
+    elif args.cmd == "schedule":
+        import os
+        if args.once:
+            os.environ["DAILY_RUNNER_ONCE"] = "1"
+        from scripts.daily_runner import run_once_mode, run_scheduler_mode
+        if os.getenv("DAILY_RUNNER_ONCE") == "1":
+            run_once_mode()
+        else:
+            run_scheduler_mode()
     else:
         parser.print_help()
 

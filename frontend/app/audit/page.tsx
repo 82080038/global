@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import TerminalLayout from "../components/TerminalLayout";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+import { apiFetch } from "../lib/api";
 
 interface AuditEntry {
   event_id: number;
@@ -23,7 +22,7 @@ export default function AuditPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/audit?limit=100`);
+      const res = await apiFetch("/api/audit?limit=100");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setEntries(data.logs || []);

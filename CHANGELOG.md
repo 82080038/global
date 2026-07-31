@@ -6,6 +6,52 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dan
 
 ---
 
+## [0.1.8] — 2026-08-01
+
+Deep audit: frontend-backend integration, CLI gaps, Docker/CI fixes, code quality bugs, missing API endpoints.
+
+### Fixed — Frontend-Backend Integration
+
+- **Shared API utility** (`frontend/app/lib/api.ts`): Created `apiFetch()` with automatic `X-API-Key` header injection and `Content-Type` handling. All 5 frontend pages (dashboard, backtest, portfolio, audit, engines) migrated to use it.
+- **Backtest API response** (`api/app.py`): Flattened metrics for frontend compatibility — `total_return`, `sharpe_ratio`, `max_drawdown`, `win_rate`, `total_trades` as top-level fields with percentage conversion; added `equity_curve` array.
+- **Portfolio page** (`portfolio/page.tsx`): Fixed field names `pnl`→`unrealized_pnl`, `pnl_pct`→`return_pct` to match API schema.
+- **WebSocket auth** (`engines/page.tsx`): Added `?token=` query param for WebSocket API key auth, matching backend's `ws_engines` handler.
+- **Unused import** (`dashboard/page.tsx`): Removed unused `API_BASE` import (used indirectly via `apiFetch`).
+
+### Added — CLI & Documentation
+
+- **`schedule` subcommand** (`cli.py`): Added missing `schedule` command with `--once` option for cron/Task Scheduler mode. Was referenced in README but didn't exist.
+- **`conviction` strategy** in backtest CLI help text and API endpoint.
+- **`.env.example`**: Added `NEXT_PUBLIC_API_BASE` and `NEXT_PUBLIC_API_KEY` for frontend environment.
+- **README.md**: Fixed endpoint paths (`/api/recommendation/{ticker}`→`/api/recommend/{ticker}`), added 15+ missing endpoints, added `schedule` command examples, fixed CLI command name `decision`→`recommend`/`explain`.
+
+### Fixed — Docker & Infrastructure
+
+- **Backend Dockerfile**: Copy `alembic/`, `alembic.ini`, `scripts/` into container; run `alembic upgrade head` before starting server.
+- **Frontend Dockerfile**: Added `ARG NEXT_PUBLIC_API_BASE` and `ARG NEXT_PUBLIC_API_KEY` for build-time env var injection.
+- **docker-compose.yml**: Added frontend build args, `logs/` volume for backend, `/app/.next` anonymous volume.
+- **CI workflow** (`.github/workflows/ci.yml`): Added frontend Docker image build step.
+
+### Fixed — Code Quality
+
+- **Win rate calculation** (`portfolio/performance.py`): Fixed to use `realized_pnl` from SELL orders (stored at execution time) instead of comparing sell price to average of all historical buy prices.
+- **CSS dark theme** (`frontend/app/globals.css`): Forced dark mode (removed light-mode defaults that conflicted with terminal UI); restored Geist font CSS variables instead of Arial.
+- **Unused dependency** (`pyproject.toml`): Removed `plotly>=5.15.0` (not imported anywhere in `src/`).
+- **Sensitive path matching** (`api/app.py`): Fixed parameterized path matching (e.g., `/api/scores/{ticker}`) to use prefix matching instead of broken exact string match. Removed read-only GET endpoints from `_SENSITIVE_PATHS` (`/api/data/{category}`).
+- **POST body validation** (`api/app.py`): Fixed `/api/rebalance` and `/api/execution/run` to accept empty body via `Body(default_factory=dict)` — previously caused 422 validation errors when frontend sent no body.
+- **Sensitive path typo** (`api/app.py`): Fixed `/api/performance/snapshots`→`/api/performance/snapshot` (singular POST endpoint).
+
+### Added — Missing API Endpoint
+
+- **`GET /api/risk/{ticker}`** (`api/app.py`): Per-ticker risk analysis endpoint (VaR, position sizing, risk flags) — was documented in README but didn't exist.
+
+### Tests
+
+- Total: **562 unit tests**, all passing, 0 warnings.
+- `ruff check src/` clean, `tsc --noEmit` clean, `eslint` clean.
+
+---
+
 ## [0.1.7] — 2026-08-01
 
 Complete CRUD operations, frontend-backend integration fixes, lint cleanup, security hardening.

@@ -62,17 +62,25 @@ python -m trading_system.cli compute-scores BBCA.JK
 ```bash
 python -m trading_system.cli backtest BBCA.JK --strategy buy_and_hold
 python -m trading_system.cli backtest BBCA.JK --strategy ma_crossover
+python -m trading_system.cli backtest BBCA.JK --strategy conviction
 ```
 
 ### Decision (recommendation + explanation)
 ```bash
-python -m trading_system.cli decision BBCA.JK
+python -m trading_system.cli recommend BBCA.JK
+python -m trading_system.cli explain BBCA.JK
 ```
 
 ### Automated execution
 ```bash
 python -m trading_system.cli execution --once
 python -m trading_system.cli execution --interval 15
+```
+
+### Daily scheduler
+```bash
+python -m trading_system.cli schedule            # persistent scheduler mode
+python -m trading_system.cli schedule --once    # run once and exit (cron mode)
 ```
 
 ### API
@@ -82,15 +90,26 @@ uvicorn src.trading_system.api.app:app --host 0.0.0.0 --port 8000
 
 Endpoints:
 - `GET /api/health` — system health check
-- `GET /api/tickers` — list all tickers in DB
+- `GET /api/tickers` — list all tickers in DB (paginated)
+- `GET /api/data/{category}?ticker=...` — raw OHLCV data (paginated)
 - `GET /api/indicators/{ticker}` — OHLCV + technical indicators
 - `GET /api/scores/{ticker}` — multi-factor scores
-- `GET /api/recommendation/{ticker}` — decision engine recommendation
+- `POST /api/scores/compute` — compute scores for a ticker
+- `GET /api/recommend/{ticker}` — decision engine recommendation
+- `POST /api/recommend` — recommendation with custom weights
 - `GET /api/explain/{ticker}` — explainable AI narrative
 - `GET /api/sentiment/{ticker}` — news-based sentiment (Indonesian NLP)
 - `GET /api/risk/{ticker}` — risk analysis (VaR, position sizing)
+- `GET /api/risk/daily` — daily portfolio risk metrics
+- `POST /api/risk/refresh` — recalculate daily risk metrics
 - `GET /api/performance` — portfolio performance analytics
+- `POST /api/performance/snapshot` — save equity snapshot manually
+- `GET /api/positions` — all open positions
+- `GET /api/positions/{ticker}` — position for a specific ticker
+- `GET /api/orders` — order history
+- `GET /api/portfolio/exposure` — portfolio exposure summary
 - `GET /api/execution/logs` — execution order + audit logs
+- `POST /api/execution/run` — run one execution cycle manually
 - `GET /api/execution/toggle` — auto-trade toggle status
 - `POST /api/execution/toggle` — toggle auto-trade on/off (runtime)
 - `GET /api/rebalance/status` — rebalance status & drift
@@ -100,10 +119,17 @@ Endpoints:
 - `GET /api/watchlist` — favorite tickers
 - `POST /api/watchlist/{ticker}` — toggle favorite
 - `POST /api/fetch` — fetch & store OHLCV data
-- `POST /api/backtest` — run backtest
+- `POST /api/paper-trade` — simulate paper trade
+- `GET /api/monitor` — system health & alerts
+- `GET /api/factor-weights/{ticker}` — AI learning factor weights
+- `POST /api/ai/train` — train AI weights from historical data
+- `GET /api/corporate/{ticker}` — corporate actions
+- `GET /api/relationship/{ticker}` — market relationship analysis
+- `POST /api/backtest` — run backtest (buy_and_hold, ma_crossover, conviction)
 - `POST /api/backtest/monte-carlo` — Monte Carlo simulation
 - `POST /api/backtest/walk-forward` — walk-forward analysis
-- `WS /ws/live` — WebSocket real-time updates
+- `GET /api/audit` — audit log entries
+- `WS /ws/live` — WebSocket real-time engine status
 
 ## Deployment with Docker
 

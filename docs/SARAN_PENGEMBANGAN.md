@@ -100,13 +100,15 @@ Strategi yang tersedia hanya `BuyAndHold` dan `MovingAverageCrossover`. **Tidak 
 
 **Saran:** satu sumber kebenaran — `TRADING_CAPITAL` dibaca di `config.py` dan di-inject ke semua engine.
 
-### 3.4 Perhitungan Daily Loss Limit tidak akurat
+### 3.4 Perhitungan Daily Loss Limit tidak akurat ✅ SELESAI (v0.1.3)
 
 `automated.py::_check_daily_loss_limit` mengestimasi PnL dengan **rata-rata harga semua BUY historis** untuk ticker tersebut (baris 331–335), bukan harga entry posisi yang benar-benar dijual. Estimasi bisa jauh meleset (mis. buy lama di harga rendah menurunkan rata-rata → loss hari ini tampak lebih kecil → circuit breaker tidak trigger).
 
 **Saran:** simpan `realized_pnl` di tabel `orders` saat SELL dieksekusi (data sudah tersedia di `_execute_sell`), lalu jumlahkan langsung dari kolom itu. Juga: circuit breaker hanya berhenti untuk **satu siklus** — flag "halted for today" perlu dipersist (DB/state) agar siklus berikutnya di hari yang sama tetap berhenti.
 
-### 3.5 Keamanan API
+> **Resolved:** `realized_pnl` kini disimpan di tabel `orders` saat SELL; daily loss limit dihitung dari kolom tersebut; flag halt dipersist di `system_state`. Win rate calculation di `portfolio/performance.py` juga diperbaiki di v0.1.8 untuk menggunakan `realized_pnl` dari SELL orders.
+
+### 3.5 Keamanan API ✅ SELESAI (v0.1.3 + v0.1.8)
 
 `api/app.py`:
 
@@ -117,6 +119,10 @@ Strategi yang tersedia hanya `BuyAndHold` dan `MovingAverageCrossover`. **Tidak 
 - `sys.path.insert` hack di `app.py` dan `cli.py` — instal paket secara editable (`pip install -e .`) dan hapus hack.
 
 **Saran:** wajibkan `API_KEY` non-kosong di production (fail-fast saat startup jika `ENV=production` dan key kosong), pakai `slowapi`/Redis untuk rate limiting, tambahkan auth token pada handshake WS, dan pertimbangkan role terpisah (read-only vs admin) untuk endpoint toggle/trigger.
+
+> **Resolved (v0.1.3):** `secrets.compare_digest` diterapkan; auth token di WebSocket `/ws/live`; `API_KEY` wajib di production (fail-fast); rate limiter membersihkan entri idle; endpoint sensitif selalu wajib API key.
+>
+> **Resolved (v0.1.8):** Sensitive path matching diperbaiki untuk parameterized paths (prefix matching); read-only GET endpoints dikeluarkan dari `_SENSITIVE_PATHS`; POST body validation untuk `/api/rebalance` dan `/api/execution/run` menggunakan `Body(default_factory=dict)`.
 
 ### 3.6 Metodologi risiko
 

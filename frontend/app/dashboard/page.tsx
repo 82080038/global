@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import TerminalLayout from "../components/TerminalLayout";
 import PriceChart from "../components/PriceChart";
+import { apiFetch } from "../lib/api";
 import {
   BarChart,
   Bar,
@@ -127,8 +128,6 @@ interface PerformanceData {
   equity_curve: { date: string; equity: number }[];
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
-
 export default function Dashboard() {
   const [ticker, setTicker] = useState("BBCA.JK");
   const [input, setInput] = useState("BBCA.JK");
@@ -155,7 +154,7 @@ export default function Dashboard() {
 
   const fetchPerformance = useCallback(async (period: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/performance?period=${period}`);
+      const res = await apiFetch(`/api/performance?period=${period}`);
       if (res.ok) {
         setPerformanceData(await res.json());
       }
@@ -166,7 +165,7 @@ export default function Dashboard() {
 
   const fetchWatchlist = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/watchlist`);
+      const res = await apiFetch(`/api/watchlist`);
       if (res.ok) {
         const json = await res.json();
         setWatchlist(json.tickers || []);
@@ -178,7 +177,7 @@ export default function Dashboard() {
 
   const fetchExecutionLogs = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/execution/logs?limit=20`);
+      const res = await apiFetch(`/api/execution/logs?limit=20`);
       if (res.ok) {
         const json = await res.json();
         setExecutionLogs(json.logs || []);
@@ -190,7 +189,7 @@ export default function Dashboard() {
 
   const fetchRebalanceStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/rebalance/status`);
+      const res = await apiFetch(`/api/rebalance/status`);
       if (res.ok) {
         setRebalanceStatus(await res.json());
       }
@@ -201,7 +200,7 @@ export default function Dashboard() {
 
   const fetchAutoTradeToggle = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/execution/toggle`);
+      const res = await apiFetch(`/api/execution/toggle`);
       if (res.ok) {
         setAutoTradeToggle(await res.json());
       }
@@ -212,7 +211,7 @@ export default function Dashboard() {
 
   const fetchRebalanceToggle = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/rebalance/toggle`);
+      const res = await apiFetch(`/api/rebalance/toggle`);
       if (res.ok) {
         setRebalanceToggle(await res.json());
       }
@@ -225,9 +224,8 @@ export default function Dashboard() {
     setTogglingAutoTrade(true);
     try {
       const newValue = !autoTradeToggle?.auto_trade_enabled;
-      const res = await fetch(`${API_BASE}/api/execution/toggle`, {
+      const res = await apiFetch(`/api/execution/toggle`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: newValue }),
       });
       if (res.ok) {
@@ -244,9 +242,8 @@ export default function Dashboard() {
     setTogglingRebalance(true);
     try {
       const newValue = !rebalanceToggle?.rebalance_enabled;
-      const res = await fetch(`${API_BASE}/api/rebalance/toggle`, {
+      const res = await apiFetch(`/api/rebalance/toggle`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: newValue }),
       });
       if (res.ok) {
@@ -263,7 +260,7 @@ export default function Dashboard() {
     setRebalanceLoading(true);
     setRebalanceError("");
     try {
-      const res = await fetch(`${API_BASE}/api/rebalance`, { method: "POST" });
+      const res = await apiFetch(`/api/rebalance`, { method: "POST" });
       const data = await res.json();
       if (res.ok) {
         await Promise.all([fetchExecutionLogs(), fetchRebalanceStatus()]);
@@ -309,11 +306,11 @@ export default function Dashboard() {
       setError("");
       try {
         const [ohlcvRes, scoresRes, recRes, expRes, monRes] = await Promise.all([
-          fetch(`${API_BASE}/api/indicators/${ticker}`),
-          fetch(`${API_BASE}/api/scores/${ticker}`),
-          fetch(`${API_BASE}/api/recommend/${ticker}`),
-          fetch(`${API_BASE}/api/explain/${ticker}`),
-          fetch(`${API_BASE}/api/monitor`),
+          apiFetch(`/api/indicators/${ticker}`),
+          apiFetch(`/api/scores/${ticker}`),
+          apiFetch(`/api/recommend/${ticker}`),
+          apiFetch(`/api/explain/${ticker}`),
+          apiFetch(`/api/monitor`),
         ]);
 
         const ohlcvJson = await ohlcvRes.json();

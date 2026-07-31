@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import TerminalLayout from "../components/TerminalLayout";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+import { apiFetch } from "../lib/api";
 
 interface BacktestResult {
   ticker: string;
@@ -26,7 +25,7 @@ export default function BacktestPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/backtest`, {
+      const res = await apiFetch("/api/backtest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticker, strategy }),

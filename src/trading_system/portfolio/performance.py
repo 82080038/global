@@ -170,20 +170,16 @@ class PerformanceAnalytics:
             if dd > max_drawdown:
                 max_drawdown = dd
 
-        # Win rate from orders
+        # Win rate from orders — use realized_pnl stored on SELL orders
         orders = self.storage.get_orders(limit=10000)
         sell_orders = [o for o in orders if o.get("order_type") == "SELL"]
-        buy_orders = [o for o in orders if o.get("order_type") == "BUY"]
 
         wins = 0
         total_sells = len(sell_orders)
         for sell in sell_orders:
-            ticker = sell.get("ticker", "")
-            ticker_buys = [o for o in buy_orders if o.get("ticker") == ticker]
-            if ticker_buys:
-                avg_buy = sum(float(o["price"]) for o in ticker_buys) / len(ticker_buys)
-                if float(sell["price"]) > avg_buy:
-                    wins += 1
+            pnl = float(sell.get("realized_pnl") or 0)
+            if pnl > 0:
+                wins += 1
 
         win_rate = (wins / total_sells * 100) if total_sells > 0 else 0
 

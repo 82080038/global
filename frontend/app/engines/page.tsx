@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import TerminalLayout from "../components/TerminalLayout";
+import { API_BASE } from "../lib/api";
 
 interface Engine {
   name: string;
@@ -22,10 +23,10 @@ interface EnginesResponse {
 
 type ConnStatus = "connecting" | "open" | "closed" | "error";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
 const WS_URL =
   typeof window !== "undefined"
-    ? `${API_BASE.replace(/^http/, "ws")}/ws/live`
+    ? `${API_BASE.replace(/^http/, "ws")}/ws/live${API_KEY ? `?token=${encodeURIComponent(API_KEY)}` : ""}`
     : "ws://localhost:8000/ws/live";
 
 export default function EnginesPage() {

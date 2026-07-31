@@ -14,7 +14,7 @@
 Status dan versi aplikasi.
 
 ```json
-{"status": "ok", "version": "0.1.7"}
+{"status": "ok", "version": "0.1.8"}
 ```
 
 ### GET `/api/health`
@@ -219,7 +219,10 @@ Factor weights dari AI Learning Engine.
 
 ### GET `/api/risk/{ticker}`
 
-Risk analysis lengkap.
+Risk analysis per ticker (VaR, position sizing, stop-loss, take-profit, risk flags).
+
+**Query Parameters:**
+- `capital` (optional, default: `TRADING_CAPITAL`): Capital for position sizing calculation.
 
 ```json
 {
@@ -324,12 +327,7 @@ Riwayat order.
 
 ### POST `/api/execution/run`
 
-Jalankan satu siklus execution manual.
-
-**Request:**
-```json
-{"tickers": ["BBCA.JK", "TLKM.JK"]}
-```
+Jalankan satu siklus execution manual. Accepts empty body or optional `{"tickers": [...]}`.
 
 **Response:**
 ```json
@@ -376,12 +374,7 @@ Toggle auto-trade on/off (runtime, no restart).
 
 ### POST `/api/rebalance`
 
-Trigger manual rebalance.
-
-**Request:**
-```json
-{}
-```
+Trigger manual rebalance. Accepts empty body (no request body required).
 
 **Response:**
 ```json
@@ -501,23 +494,29 @@ Toggle status favorit ticker.
 
 ### POST `/api/backtest`
 
-Jalankan backtest.
+Jalankan backtest. Strategy: `buy_and_hold`, `ma_crossover`, `conviction`.
 
 **Request:**
 ```json
-{"ticker": "BBCA.JK", "strategy": "ma_crossover", "capital": 100000000, "start": "2024-01-01", "end": "2026-07-31"}
+{"ticker": "BBCA.JK", "strategy": "conviction", "capital": 100000000}
 ```
 
 **Response:**
 ```json
 {
   "ticker": "BBCA.JK",
-  "strategy": "ma_crossover",
-  "total_return": 0.15,
-  "sharpe": 1.1,
-  "max_drawdown": -0.08,
-  "trades": 25,
-  "equity_curve": [...]
+  "strategy": "conviction",
+  "final_equity": 115000000,
+  "total_return": 15.0,
+  "sharpe_ratio": 1.1,
+  "max_drawdown": 8.0,
+  "win_rate": 60.0,
+  "total_trades": 25,
+  "equity_curve": [
+    {"date": "2024-01-02", "equity": 100000000},
+    {"date": "2024-01-03", "equity": 100500000}
+  ],
+  "metrics": {"total_return": 0.15, "sharpe_ratio": 1.1, "max_drawdown": -0.08, "win_rate": 0.6, "profit_factor": 1.8}
 }
 ```
 
@@ -653,7 +652,7 @@ Frontend Engine Monitor (`/engines`) terhubung ke WebSocket ini dengan auto-reco
 
 ### API Key Authentication
 
-Jika env var `API_KEY` di-set, semua endpoint (kecuali `/` dan `/api/health`) membutuhkan header:
+Jika env var `API_KEY` di-set, semua endpoint (kecuali `/` dan `/api/health`) membutuhkan header `X-API-Key`. Endpoint sensitif (toggle, execution, rebalance, fetch, dll.) selalu wajib API key meski di development. DELETE method selalu wajib API key.
 
 ```
 X-API-Key: your_api_key
