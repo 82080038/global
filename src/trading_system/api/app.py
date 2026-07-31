@@ -345,6 +345,7 @@ def run_monte_carlo(payload: dict):
     n_simulations = payload.get("n_simulations", 1000)
     n_periods = payload.get("n_periods", 252)
     capital = payload.get("capital", TRADING_CAPITAL)
+    block_size = payload.get("block_size")
     if not ticker:
         raise HTTPException(status_code=400, detail="ticker required")
 
@@ -353,7 +354,7 @@ def run_monte_carlo(payload: dict):
         raise HTTPException(status_code=404, detail="Data not found")
 
     returns = df["close"].pct_change().dropna()
-    result = monte_carlo_simulation(returns, n_simulations=n_simulations, n_periods=n_periods, initial_capital=capital)
+    result = monte_carlo_simulation(returns, n_simulations=n_simulations, n_periods=n_periods, initial_capital=capital, block_size=block_size)
     return {"ticker": ticker, **result}
 
 

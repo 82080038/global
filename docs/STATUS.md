@@ -2,7 +2,7 @@
 
 > **Versi aplikasi:** 0.1.0  
 > **Update:** 31 Juli 2026  
-> **Total unit tests:** 182 (semua passing)
+> **Total unit tests:** 198 (semua passing)
 
 ## Perbaikan Terbaru (implementasi `docs/SARAN_PENGEMBANGAN.md`)
 
@@ -12,13 +12,20 @@
 - Sinyal SELL berbasis conviction diimplementasikan (`decision/engine.py::decide_action`, ambang `EXIT_CONVICTION_THRESHOLD` di `config.py`).
 - AI Learning: koefisien negatif di-clip ke 0 (bukan `np.abs`), validasi out-of-sample via `TimeSeriesSplit`, ambang minimal sampel dinaikkan 20→60 (`ai_learning/engine.py`).
 
-**P1 — Kebenaran kuantitatif & keamanan (selesai sebagian):**
+**P1 — Kebenaran kuantitatif & keamanan (selesai):**
 - `TRADING_CAPITAL` & `EXIT_CONVICTION_THRESHOLD` disatukan sebagai satu sumber kebenaran di `config.py`, dipakai konsisten di `risk/engine.py`, `decision/engine.py`, `execution/automated.py`, `cli.py`, `api/app.py`.
 - Daily loss limit kini dihitung dari kolom `orders.realized_pnl` yang dipersist saat SELL (bukan estimasi rata-rata BUY historis); flag halt dipersist di tabel `system_state` lintas siklus (`execution/automated.py`, `data/storage.py`).
 - Keamanan API: `secrets.compare_digest` (anti timing-attack), autentikasi WebSocket `/ws/live` via token, `API_KEY` wajib non-kosong saat `ENV=production` (fail-fast), endpoint sensitif (`/api/execution/toggle`, `/api/rebalance/toggle`) selalu wajib API key, rate-limiter membersihkan entri IP idle (`api/app.py`).
 - Historical VaR (percentile empiris) ditambahkan sebagai pembanding VaR parametrik (`risk/engine.py`).
 
-**Belum dikerjakan (lihat `docs/SARAN_PENGEMBANGAN.md` untuk detail):** look-ahead bias backtest (§3.1), `ConvictionStrategy` backtest (§3.2), block-bootstrap Monte Carlo, refresh data macro/global berbasis umur, konsolidasi ATR/fee, `DataSourceAdapter` multi-sumber, dan seluruh item P3.
+**Sprint 2 — Kebenaran kuantitatif (selesai):**
+- Backtest engine: eksekusi next-bar-open (`df["open"].shift(-1)`) untuk eliminasi look-ahead bias; share count dibulatkan ke lot IDX (100); fill price dibulatkan ke tick size IDX (Rp1/2/5/10/25); `run` dan `run_with_data` disatukan ke `_run_core` (§3.1).
+- `ConvictionStrategy`: backtest strategi conviction multi-factor yang mereplay skor historis dari tabel `scores` (point-in-time via `merge_asof`) dan menghasilkan sinyal BUY/SELL sesuai `decide_action` (§3.2).
+- Block bootstrap Monte Carlo: parameter `block_size` di `monte_carlo_simulation` untuk preserve autokorelasi & volatility clustering (§3.6).
+- Refresh data macro/global berbasis umur: `ensure_data` kini cek `max_age_days` (default 1 hari bursa) dan re-fetch jika data basi; `data_age_days` ditambahkan ke breakdown skor (§4.2).
+- `IDX_LOT_SIZE` (100) dan `idx_tick_size()` / `round_to_tick()` helper ditambahkan ke `config.py`.
+
+**Belum dikerjakan (lihat `docs/SARAN_PENGEMBANGAN.md` untuk detail):** integrasi corporate action → `adjusted_close` (§4.3), konsolidasi ATR/fee, `DataSourceAdapter` multi-sumber, dan seluruh item P3.
 
 ## Legenda
 

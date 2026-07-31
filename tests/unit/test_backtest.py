@@ -1,11 +1,14 @@
 """Unit tests for BacktestEngine and strategies."""
 
+import numpy as np
 import pandas as pd
 import pytest
 from unittest.mock import patch, MagicMock
 
 from trading_system.backtest.engine import BacktestEngine, CostModel
-from trading_system.backtest.strategies import BuyAndHold, MovingAverageCrossover
+from trading_system.backtest.strategies import BuyAndHold, MovingAverageCrossover, ConvictionStrategy
+from trading_system.backtest.metrics import monte_carlo_simulation
+from trading_system.config import IDX_LOT_SIZE, round_to_tick, idx_tick_size
 
 
 class TestStrategies:
@@ -121,3 +124,198 @@ class TestBacktestEngine:
 
         assert result["status"] == "ok"
         assert "metrics" in result
+
+
+class TestIDXTickSize:
+
+    def test_tick_size_below_200(self):
+        assert idx_tick_size(150) == 1.0
+        assert idx_tick_size(199) == 1.0
+
+    def test_tick_size_200_to_499(self):
+        assert idx_tick_size(200) == 2.0
+        assert idx_tick_size(499) == 2.0
+
+    def test_tick_size_500_to_1999(self):
+        assert idx_tick_size(500) == 5.0
+        assert idx_tick_size(1999) == 5.0
+
+    def test_tick_size_2000_to_4999(self):
+        assert idx_tick_size(2000) == 10.0
+        assert idx_tick_size(4999) == 10.0
+
+    def test_tick_size_5000_plus(self):
+        assert idx_tick_size(5000) == 25.0
+        assert idx_tick_size(10000) == 25.0
+
+    def test_round_to_tick_rounds_correctly(self):
+        assert round_to_tick(8050) == 8050  # already on tick
+        assert round_to_tick(8053) == 8050  # rounds down to nearest 25
+        assert round_to_tick(8063) == 8075  # rounds up to nearest 25
+        assert round_to_tick(153) == 153    # tick=1, no change
+        assert round_to_tick(253) == 252    # tick=2
+
+
+class TestNextBarOpenExecution:
+
+    @patch("trading_system.backtest.engine.DataStorage")
+    def test_shares_rounded_to_lot_size(self, mock_storage_cls, mock_ohlcv_indexed_df):
+        """Shares bought should be multiples of IDX_LOT_SIZE (100)."""
+        mock_storage = MagicMock()
+        mock_storage.load_ohlcv.return_value = mock_ohlcv_indexed_df
+        mock_storage_cls.return_value = mock_storage
+
+        engine = BacktestEngine(storage=mock_storage)
+        result = engine.run("TEST.JK", BuyAndHold())
+
+        assert result["status"] == "ok"
+        trades = result.get("trade_history")
+        if not trades.empty:
+            for _, trade in trades.iterrows():
+                assert trade["shares"] % IDX_LOT_SIZE == 0
+
+    @patch("trading_system.backtest.engine.DataStorage")
+    def test_fill_price_on_tick(self, mock_storage_cls, mock_ohlcv_indexed_df):
+        """Fill prices should be on IDX tick grid."""
+        mock_storage = MagicMock()
+        mock_storage.load_ohlcv.return_value = mock_ohlcv_indexed_df
+        mock_storage_cls.return_value = mock_storage
+
+        engine = BacktestEngine(storage=mock_storage)
+        result = engine.run("TEST.JK", BuyAndHold())
+
+        assert result["status"] == "ok"
+        trades = result.get("trade_history")
+        if not trades.empty:
+            for _, trade in trades.iterrows():
+                tick = idx_tick_size(trade["entry_price"])
+                assert trade["entry_price"] % tick == 0
+                assert trade["exit_price"] % tick == 0
+
+    @patch("trading_system.backtest.engine.DataStorage")
+    def test_no_trade_on_last_bar_signal(self, mock_storage_cls):
+        """Signal on last bar should not execute (no next bar open)."""
+        # Create a tiny DF where BuyAndHold buys on bar 0 and sells on last bar
+        n = 5
+        dates = pd.date_range("2024-01-01", periods=n, freq="B")
+        df = pd.DataFrame({
+            "open": [8000, 8010, 8020, 8030, 8040],
+            "high": [8050, 8060, 8070, 8080, 8090],
+            "low": [7950, 7960, 7970, 7980, 7990],
+            "close": [8000, 8010, 8020, 8030, 8040],
+            "volume": [1e6] * n,
+        }, index=dates)
+
+        mock_storage = MagicMock()
+        mock_storage.load_ohlcv.return_value = df
+        mock_storage_cls.return_value = mock_storage
+
+        engine = BacktestEngine(storage=mock_storage)
+        result = engine.run("TEST.JK", BuyAndHold())
+
+        assert result["status"] == "ok"
+        # BuyAndHold sets signal=1 on bar 0, signal=-1 on last bar
+        # Buy executes at next_open (bar 1 open=8010)
+        # Sell signal on last bar has no next_open -> force close at last close
+        trades = result.get("trade_history")
+        assert not trades.empty
+        # Entry should be at next bar's open, not bar 0's close
+        assert trades.iloc[0]["entry_price"] != 8000  # Should be ~8010 adjusted
+
+
+class TestConvictionStrategy:
+
+    def test_no_scores_returns_all_zero(self, mock_ohlcv_indexed_df):
+        """With no scores, all signals should be 0."""
+        storage = MagicMock()
+        storage.load_scores.return_value = pd.DataFrame()
+        strategy = ConvictionStrategy(storage=storage, ticker="TEST.JK")
+        df = strategy.generate_signals(mock_ohlcv_indexed_df)
+        assert (df["signal"] == 0).all()
+
+    def test_buy_signal_when_conviction_above_threshold(self, mock_ohlcv_indexed_df):
+        """Conviction >= 70 should generate BUY."""
+        dates = mock_ohlcv_indexed_df.index[:5]
+        scores = pd.DataFrame({
+            "as_of": dates,
+            "conviction": [75, 80, 72, 68, 65],
+        })
+        strategy = ConvictionStrategy(scores_df=scores)
+        df = strategy.generate_signals(mock_ohlcv_indexed_df)
+        # First bar with conviction >= 70 should be BUY
+        assert df["signal"].iloc[0] == 1
+
+    def test_sell_signal_when_conviction_drops_below_exit(self, mock_ohlcv_indexed_df):
+        """Conviction < exit_threshold while in position should generate SELL."""
+        dates = mock_ohlcv_indexed_df.index[:10]
+        scores = pd.DataFrame({
+            "as_of": dates,
+            "conviction": [75, 72, 71, 35, 30, 80, 78, 76, 74, 72],
+        })
+        strategy = ConvictionStrategy(scores_df=scores)
+        df = strategy.generate_signals(mock_ohlcv_indexed_df)
+        # Bar 0: BUY (75 >= 70)
+        assert df["signal"].iloc[0] == 1
+        # Bar 3: SELL (35 < 40, in position)
+        assert df["signal"].iloc[3] == -1
+        # Bar 5: BUY again (80 >= 70, not in position)
+        assert df["signal"].iloc[5] == 1
+
+    def test_hold_when_conviction_between_thresholds(self, mock_ohlcv_indexed_df):
+        """Conviction between exit and buy threshold should be HOLD (0)."""
+        dates = mock_ohlcv_indexed_df.index[:5]
+        scores = pd.DataFrame({
+            "as_of": dates,
+            "conviction": [75, 55, 50, 45, 35],
+        })
+        strategy = ConvictionStrategy(scores_df=scores)
+        df = strategy.generate_signals(mock_ohlcv_indexed_df)
+        # Bar 0: BUY, Bar 1-2: HOLD, Bar 3: HOLD (still >= 40), Bar 4: SELL
+        assert df["signal"].iloc[0] == 1
+        assert df["signal"].iloc[1] == 0
+        assert df["signal"].iloc[2] == 0
+        assert df["signal"].iloc[3] == 0
+        assert df["signal"].iloc[4] == -1
+
+
+class TestBlockBootstrapMC:
+
+    def test_block_bootstrap_runs(self):
+        """Block bootstrap MC should produce results with block_size set."""
+        rng = np.random.default_rng(42)
+        returns = pd.Series(rng.normal(0.001, 0.02, 100))
+        result = monte_carlo_simulation(returns, n_simulations=50, n_periods=60, block_size=10)
+
+        assert "status" not in result or result.get("status") != "insufficient_data"
+        assert result["block_size"] == 10
+        assert "mean_final_equity" in result
+        assert "prob_profit" in result
+
+    def test_iid_bootstrap_still_works(self):
+        """IID bootstrap (block_size=None) should still work."""
+        rng = np.random.default_rng(42)
+        returns = pd.Series(rng.normal(0.001, 0.02, 100))
+        result = monte_carlo_simulation(returns, n_simulations=50, n_periods=60)
+
+        assert "status" not in result or result.get("status") != "insufficient_data"
+        assert result["block_size"] is None
+
+    def test_block_bootstrap_preserves_structure(self):
+        """Block bootstrap should produce different results than IID."""
+        rng = np.random.default_rng(42)
+        # Create returns with strong autocorrelation
+        n = 200
+        raw = rng.normal(0, 0.02, n)
+        # Add autocorrelation
+        for i in range(1, n):
+            raw[i] = 0.5 * raw[i-1] + 0.5 * raw[i]
+        returns = pd.Series(raw)
+
+        iid_result = monte_carlo_simulation(returns, n_simulations=200, n_periods=100, block_size=None)
+        block_result = monte_carlo_simulation(returns, n_simulations=200, n_periods=100, block_size=15)
+
+        # Results should differ because block bootstrap preserves autocorrelation
+        assert iid_result["block_size"] is None
+        assert block_result["block_size"] == 15
+        # The max drawdown distributions should differ
+        assert iid_result["worst_drawdown"] != block_result["worst_drawdown"]

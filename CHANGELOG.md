@@ -6,6 +6,37 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dan
 
 ---
 
+## [0.1.4] — 2026-07-31
+
+Implementasi Sprint 2 dari `docs/SARAN_PENGEMBANGAN.md` — kebenaran kuantitatif.
+
+### Fixed (§3.1 — look-ahead bias backtest)
+
+- **Next-bar-open execution**: sinyal di bar t dieksekusi di open bar t+1 (`df["open"].shift(-1)`), bukan close bar yang sama — menghapus look-ahead bias 1 bar — `backtest/engine.py`.
+- **Lot IDX (100)**: share count dibulatkan ke kelipatan `IDX_LOT_SIZE` (100 lembar), konsisten dengan `execution/automated.py` — `backtest/engine.py`, `config.py`.
+- **Tick size IDX**: fill price dibulatkan ke tick size BEI (Rp1 <200, Rp2 <500, Rp5 <2000, Rp10 <5000, Rp25 ≥5000) via `round_to_tick()` — `config.py`, `backtest/engine.py`.
+- **Refactor**: `run` dan `run_with_data` disatukan ke `_run_core` (sebelumnya ~90% duplikat) — `backtest/engine.py`.
+
+### Added (§3.2 — ConvictionStrategy backtest)
+
+- `ConvictionStrategy` di `backtest/strategies.py`: strategi backtest yang mereplay skor historis dari tabel `scores` (point-in-time via `pd.merge_asof` direction="backward") dan menghasilkan sinyal BUY/SELL sesuai logika `decide_action` (conviction ≥ 70 → BUY, < EXIT_CONVICTION_THRESHOLD → SELL). CLI: `--strategy conviction`.
+
+### Added (§3.6 — Block bootstrap Monte Carlo)
+
+- Parameter `block_size` di `monte_carlo_simulation` — block bootstrap yang preserve autokorelasi & volatility clustering (sebelumnya IID bootstrap saja). CLI: `--block-size N`. API: field `block_size` di `/api/backtest/monte-carlo`.
+
+### Fixed (§4.2 — Refresh data macro/global berbasis umur)
+
+- `MacroEconomicEngine.ensure_data` dan `GlobalMarketEngine.ensure_data` kini menerima `max_age_days` (default 1); re-fetch jika `max(timestamp)` lebih tua dari threshold — sebelumnya data hanya di-fetch jika tabel kosong (sekali fetch, selamanya basi).
+- `data_age_days` ditambahkan ke breakdown skor macro & global agar Decision Engine dapat mendiskon faktor basi — `analysis/macro.py`, `analysis/global_market.py`.
+
+### Added
+
+- Konstanta `IDX_LOT_SIZE` (100) dan helper `idx_tick_size()` / `round_to_tick()` di `config.py`.
+- 16 unit test baru (total 182 → 198): `TestIDXTickSize`, `TestNextBarOpenExecution`, `TestConvictionStrategy`, `TestBlockBootstrapMC` di `test_backtest.py`.
+
+---
+
 ## [0.1.3] — 2026-07-31
 
 Implementasi temuan P0/P1 dari `docs/SARAN_PENGEMBANGAN.md`.

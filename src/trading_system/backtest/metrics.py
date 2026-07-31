@@ -94,13 +94,19 @@ def monte_carlo_simulation(
     returns: pd.Series,
     n_simulations: int = 1000,
     n_periods: int = 252,
-    initial_capital: float = 1_000_000_000,
+    initial_capital: float = 100_000_000,
     confidence_levels: tuple = (0.05, 0.50, 0.95),
+    block_size: int | None = None,
 ) -> dict:
     """Run Monte Carlo simulation by resampling historical returns.
 
     Generates n_simulations random return sequences (bootstrap) and computes
     the distribution of final equity, max drawdown, and Sharpe ratio.
+
+    When ``block_size`` is set, uses **block bootstrap** to preserve
+    autocorrelation and volatility clustering present in the original
+    series (§3.6 SARAN_PENGEMBANGAN.md).  When ``None``, falls back to
+    IID bootstrap.
 
     Args:
         returns: Daily returns series from backtest.
@@ -108,6 +114,7 @@ def monte_carlo_simulation(
         n_periods: Length of each simulated path (default 252 = 1 year).
         initial_capital: Starting capital for each simulation.
         confidence_levels: Percentiles to report (0-1 scale).
+        block_size: Block length for block bootstrap (None = IID).
 
     Returns:
         Dict with percentile bands for final_equity, max_drawdown, sharpe_ratio.
@@ -117,14 +124,30 @@ def monte_carlo_simulation(
 
     rng = np.random.default_rng(seed=42)
     returns_arr = returns.values
+    n = len(returns_arr)
+
+    # Validate block_size
+    if block_size is not None and block_size < 1:
+        block_size = None
 
     final_equities = np.zeros(n_simulations)
     max_drawdowns = np.zeros(n_simulations)
     sharpe_ratios = np.zeros(n_simulations)
 
     for i in range(n_simulations):
-        # Bootstrap: sample with replacement
-        sampled = rng.choice(returns_arr, size=n_periods, replace=True)
+        if block_size is not None and block_size < n:
+            # Block bootstrap: resample in contiguous blocks
+            sampled = np.empty(n_periods)
+            filled = 0
+            while filled < n_periods:
+                start = rng.integers(0, n - block_size + 1)
+                block = returns_arr[start:start + block_size]
+                take = min(block_size, n_periods - filled)
+                sampled[filled:filled + take] = block[:take]
+                filled += take
+        else:
+            # IID bootstrap
+            sampled = rng.choice(returns_arr, size=n_periods, replace=True)
         equity = initial_capital * np.cumprod(1 + sampled)
 
         final_equities[i] = equity[-1]
@@ -148,6 +171,7 @@ def monte_carlo_simulation(
         "n_simulations": n_simulations,
         "n_periods": n_periods,
         "initial_capital": initial_capital,
+        "block_size": block_size,
         "final_equity": {
             f"p{int(p*100)}": round(pct(final_equities, p), 2)
             for p in confidence_levels

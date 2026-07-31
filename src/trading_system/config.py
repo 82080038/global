@@ -16,6 +16,29 @@ DEFAULT_LEVY = 0.0000043              # 0.00043% levy bursa
 DEFAULT_SLIPPAGE = 0.0005             # 0.05% slippage default
 DEFAULT_TIMEZONE = "Asia/Jakarta"
 
+# IDX market conventions (§3.1 SARAN_PENGEMBANGAN.md)
+IDX_LOT_SIZE = 100  # 1 lot = 100 lembar di Bursa Efek Indonesia
+
+
+def idx_tick_size(price: float) -> float:
+    """Tick size IDX berdasarkan fraksi harga (Peraturan BEI)."""
+    if price < 200:
+        return 1.0
+    elif price < 500:
+        return 2.0
+    elif price < 2000:
+        return 5.0
+    elif price < 5000:
+        return 10.0
+    else:
+        return 25.0
+
+
+def round_to_tick(price: float) -> float:
+    """Bulatkan harga ke tick size IDX terdekat."""
+    tick = idx_tick_size(price)
+    return round(price / tick) * tick
+
 # Satu sumber kebenaran untuk modal trading (§3.3 SARAN_PENGEMBANGAN.md).
 # Semua engine (risk, decision, execution, backtest CLI, API) HARUS membaca
 # nilai ini alih-alih hard-code angka modal sendiri-sendiri.

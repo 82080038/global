@@ -98,6 +98,7 @@ def main():
     p_backtest.add_argument("--walk-forward", action="store_true", help="Run walk-forward analysis")
     p_backtest.add_argument("--n-simulations", type=int, default=1000, help="Number of MC simulations")
     p_backtest.add_argument("--n-splits", type=int, default=5, help="Number of WF splits")
+    p_backtest.add_argument("--block-size", type=int, default=None, help="Block size for block-bootstrap MC (None=IID)")
 
     p_list = sub.add_parser("list", help="List tickers in DB")
 
@@ -167,7 +168,16 @@ def main():
     elif args.cmd == "backtest":
         from trading_system.backtest.metrics import monte_carlo_simulation, walk_forward_analysis
 
-        strategy = BuyAndHold() if args.strategy == "buy_and_hold" else MovingAverageCrossover()
+        if args.strategy == "buy_and_hold":
+            strategy = BuyAndHold()
+        elif args.strategy == "ma_crossover":
+            strategy = MovingAverageCrossover()
+        elif args.strategy == "conviction":
+            from trading_system.backtest.strategies import ConvictionStrategy
+            strategy = ConvictionStrategy(storage=engine.storage)
+        else:
+            print(f"Unknown strategy: {args.strategy}")
+            return
         engine = BacktestEngine()
         result = engine.run(args.ticker, strategy, initial_capital=args.capital)
 
@@ -197,7 +207,7 @@ def main():
             equity = result.get('equity_curve')
             if equity is not None and not equity.empty:
                 returns = equity.pct_change().dropna()
-                mc = monte_carlo_simulation(returns, n_simulations=args.n_simulations)
+                mc = monte_carlo_simulation(returns, n_simulations=args.n_simulations, block_size=args.block_size)
                 if mc.get('status') != 'insufficient_data':
                     print(f"Mean Final Equity: Rp {mc['mean_final_equity']:,.0f}")
                     print(f"Median Final Equity: Rp {mc['median_final_equity']:,.0f}")
