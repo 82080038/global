@@ -69,4 +69,5 @@ def mock_storage(mock_ohlcv_indexed_df):
     storage.audit = MagicMock()
     storage.get_ai_weights.return_value = None
     storage.list_tickers.return_value = []
+    storage.get_open_position.return_value = None
     return storage

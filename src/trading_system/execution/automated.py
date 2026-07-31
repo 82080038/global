@@ -19,7 +19,7 @@ from trading_system.data.storage import DataStorage
 from trading_system.decision.engine import DecisionEngine
 from trading_system.risk.engine import RiskEngine
 from trading_system.execution.engine import ExecutionEngine
-from trading_system.config import DEFAULT_BROKER_FEE_BUY, DEFAULT_BROKER_FEE_SELL, DEFAULT_LEVY
+from trading_system.config import DEFAULT_BROKER_FEE_BUY, DEFAULT_BROKER_FEE_SELL, DEFAULT_LEVY, TRADING_CAPITAL
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class AutomatedExecutionEngine:
         self.risk = RiskEngine(self.storage)
         self.execution = ExecutionEngine()
         self.auto_trade_enabled = os.getenv("AUTO_TRADE_ENABLED", "false").lower() == "true"
-        self.capital = float(os.getenv("TRADING_CAPITAL", "100000000"))
+        self.capital = TRADING_CAPITAL
         self.risk_per_trade = float(os.getenv("RISK_PER_TRADE", "0.01"))
         self.daily_loss_limit = float(os.getenv("DAILY_LOSS_LIMIT", "0"))
 
@@ -153,17 +153,23 @@ class AutomatedExecutionEngine:
         order_value = quantity * price
         fee = order_value * (DEFAULT_BROKER_FEE_SELL + DEFAULT_LEVY + 0.001)  # sell fee + levy + tax
 
-        # Save order
-        order_id = self.storage.save_order(
-            ticker=ticker, order_type="SELL", quantity=quantity, price=price,
-            fee=fee, trigger=trigger,
-        )
-
-        # Update position
+        # Compute realized PnL from the actual position entry price BEFORE saving
+        # the order, so it can be persisted directly on the order row instead of
+        # being re-estimated later from the average of all historical BUYs
+        # (§3.4 SARAN_PENGEMBANGAN.md).
         realized_pnl = 0.0
         if position:
             entry = position.get("avg_entry_price", 0)
             realized_pnl = (price - entry) * quantity
+
+        # Save order
+        order_id = self.storage.save_order(
+            ticker=ticker, order_type="SELL", quantity=quantity, price=price,
+            fee=fee, trigger=trigger, realized_pnl=realized_pnl,
+        )
+
+        # Update position
+        if position:
             remaining = position.get("quantity", 0) - quantity
 
             if remaining <= 0:
@@ -265,7 +271,7 @@ class AutomatedExecutionEngine:
         # 2. If auto-trade is disabled, just log
         if not self.auto_trade_enabled:
             # Still get recommendation for monitoring
-            rec = self.decision.recommend(ticker)
+            rec = self.decision.recommend(ticker, capital=self.capital)
             if rec.get("status") == "ok":
                 action = rec["recommendation"]["action"]
                 if action in ("BUY", "SELL"):
@@ -273,7 +279,7 @@ class AutomatedExecutionEngine:
             return {"status": "monitoring", "ticker": ticker, "auto_trade": False}
 
         # 3. Get recommendation from Decision Engine
-        rec = self.decision.recommend(ticker)
+        rec = self.decision.recommend(ticker, capital=self.capital)
         if rec.get("status") != "ok":
             return {"status": "skipped", "ticker": ticker, "reason": "no recommendation"}
 
@@ -303,15 +309,27 @@ class AutomatedExecutionEngine:
     def _check_daily_loss_limit(self) -> bool:
         """Check if daily loss exceeds limit. Returns True if trading should STOP.
 
-        Computes realized PnL from today's SELL orders and compares against
-        DAILY_LOSS_LIMIT env var. If loss exceeds limit, sends alert and
-        disables auto-trade for the rest of the day.
+        Sums the `realized_pnl` column persisted on today's SELL orders (recorded
+        at execution time from the actual position entry price — see
+        `_execute_sell`) instead of re-estimating PnL from the average of ALL
+        historical BUY prices for the ticker, which could be wildly inaccurate
+        (§3.4 SARAN_PENGEMBANGAN.md).
+
+        The halt flag is persisted in `system_state` so that once triggered, it
+        stays in effect for the rest of the day even across separate scheduler
+        cycles/process restarts — previously the circuit breaker only halted the
+        single cycle where the limit was crossed.
         """
         if self.daily_loss_limit <= 0:
             return False  # No limit set
 
         from datetime import datetime, timezone
         today = datetime.now(timezone.utc).date().isoformat()
+
+        # Already halted today? (persisted from a previous cycle)
+        halted_date = self.storage.get_state("execution_halted_date")
+        if halted_date == today:
+            return True
 
         orders = self.storage.get_orders(limit=10000)
         today_sells = [
@@ -323,22 +341,15 @@ class AutomatedExecutionEngine:
         if not today_sells:
             return False
 
-        # Compute realized PnL from today's sells
-        total_pnl_today = 0.0
-        for sell in today_sells:
-            ticker = sell.get("ticker", "")
-            # Find matching buy orders for this ticker (simple average)
-            ticker_buys = [o for o in orders if o.get("ticker") == ticker and o.get("order_type") == "BUY"]
-            if ticker_buys:
-                avg_buy_price = sum(float(o["price"]) for o in ticker_buys) / len(ticker_buys)
-                est_pnl = (float(sell["price"]) - avg_buy_price) * float(sell["quantity"])
-                total_pnl_today += est_pnl
+        total_pnl_today = sum(float(o.get("realized_pnl") or 0) for o in today_sells)
 
         if total_pnl_today < -self.daily_loss_limit:
             logger.warning(
                 f"DAILY LOSS LIMIT HIT! Loss: Rp {abs(total_pnl_today):,.2f} "
                 f"> Limit: Rp {self.daily_loss_limit:,.2f}"
             )
+            # Persist halt flag so the rest of TODAY's cycles stay halted too.
+            self.storage.set_state("execution_halted_date", today)
             # Send Telegram alert
             try:
                 from trading_system.utils.notifier import send_telegram

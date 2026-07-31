@@ -168,6 +168,7 @@ class AILearningEngine:
         Returns dict with trained weights, r2_score, and n_samples.
         """
         from sklearn.linear_model import LinearRegression
+        from sklearn.model_selection import TimeSeriesSplit
         from sklearn.preprocessing import StandardScaler
 
         # Gather tickers
@@ -216,23 +217,41 @@ class AILearningEngine:
         X = df[feature_cols].fillna(0).values
         y = df["forward_return"].values
 
-        if len(X) < 20:
-            return {"status": "insufficient_data", "message": f"Only {len(X)} samples, need >= 20"}
+        # Rule of thumb >= 10-20 sampel per fitur (6 fitur) -> minimal 60-120 sampel.
+        # Ambang lama (20) terlalu kecil dan menghasilkan bobot yang tidak stabil.
+        min_samples = 60
+        if len(X) < min_samples:
+            return {"status": "insufficient_data", "message": f"Only {len(X)} samples, need >= {min_samples}"}
 
         # Standardize features
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
 
-        # Fit regression
+        # Fit regression on full data (untuk bobot final)
         reg = LinearRegression()
         reg.fit(X_scaled, y)
-        r2 = reg.score(X_scaled, y)
+        r2_in_sample = reg.score(X_scaled, y)
 
-        # Convert coefficients to weights (absolute value, normalized)
-        coefs = np.abs(reg.coef_)
+        # Out-of-sample validation via TimeSeriesSplit — R^2 in-sample selalu
+        # optimis dan tidak mencerminkan kemampuan generalisasi ke data baru.
+        n_splits = min(5, len(X) // min_samples) or 1
+        oos_r2_scores = []
+        if n_splits >= 2:
+            tscv = TimeSeriesSplit(n_splits=n_splits)
+            for train_idx, test_idx in tscv.split(X_scaled):
+                fold_reg = LinearRegression()
+                fold_reg.fit(X_scaled[train_idx], y[train_idx])
+                oos_r2_scores.append(fold_reg.score(X_scaled[test_idx], y[test_idx]))
+        oos_r2 = float(np.mean(oos_r2_scores)) if oos_r2_scores else None
+
+        # Non-negative constraint: faktor yang berkorelasi negatif dengan forward
+        # return tidak boleh mendapat bobot positif (sebelumnya np.abs() membuang
+        # arah/tanda koefisien, sehingga faktor yang justru merugikan performa
+        # bisa mendapat bobot besar). Clip ke 0 alih-alih ambil nilai absolut.
+        coefs = np.clip(reg.coef_, 0, None)
         total = coefs.sum()
         if total == 0:
-            # Fallback to defaults if all coefs are zero
+            # Fallback to defaults if all coefs are non-positive
             weights = _get_default_weights()
         else:
             weights = {col: round(float(coefs[i] / total), 4) for i, col in enumerate(feature_cols)}
@@ -243,12 +262,14 @@ class AILearningEngine:
             weights = {k: round(v / weight_sum, 4) for k, v in weights.items()}
 
         # Save to DB
-        self.storage.save_ai_weights(weights, ticker=ticker, r2_score=r2, n_samples=len(X))
+        self.storage.save_ai_weights(weights, ticker=ticker, r2_score=r2_in_sample, n_samples=len(X))
 
         return {
             "status": "ok",
             "weights": weights,
-            "r2_score": round(float(r2), 4),
+            "r2_score": round(float(r2_in_sample), 4),
+            "oos_r2_score": round(oos_r2, 4) if oos_r2 is not None else None,
+            "n_splits": n_splits if oos_r2_scores else 0,
             "n_samples": len(X),
             "ticker": ticker or "all",
         }

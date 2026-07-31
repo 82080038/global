@@ -2,7 +2,23 @@
 
 > **Versi aplikasi:** 0.1.0  
 > **Update:** 31 Juli 2026  
-> **Total unit tests:** 154 (semua passing)
+> **Total unit tests:** 182 (semua passing)
+
+## Perbaikan Terbaru (implementasi `docs/SARAN_PENGEMBANGAN.md`)
+
+**P0 — Bug kritis (selesai):**
+- Lexicon sentimen: `"rugi"` dihapus dari `POSITIVE_WORDS`, kata netral/ambigu dibuang, negasi ("tidak untung") kini ditangani (`sentiment/engine.py`).
+- Dead code CLI backtest (blok `elif` duplikat) dihapus; `--monte-carlo`/`--walk-forward` kini berjalan (`cli.py`).
+- Sinyal SELL berbasis conviction diimplementasikan (`decision/engine.py::decide_action`, ambang `EXIT_CONVICTION_THRESHOLD` di `config.py`).
+- AI Learning: koefisien negatif di-clip ke 0 (bukan `np.abs`), validasi out-of-sample via `TimeSeriesSplit`, ambang minimal sampel dinaikkan 20→60 (`ai_learning/engine.py`).
+
+**P1 — Kebenaran kuantitatif & keamanan (selesai sebagian):**
+- `TRADING_CAPITAL` & `EXIT_CONVICTION_THRESHOLD` disatukan sebagai satu sumber kebenaran di `config.py`, dipakai konsisten di `risk/engine.py`, `decision/engine.py`, `execution/automated.py`, `cli.py`, `api/app.py`.
+- Daily loss limit kini dihitung dari kolom `orders.realized_pnl` yang dipersist saat SELL (bukan estimasi rata-rata BUY historis); flag halt dipersist di tabel `system_state` lintas siklus (`execution/automated.py`, `data/storage.py`).
+- Keamanan API: `secrets.compare_digest` (anti timing-attack), autentikasi WebSocket `/ws/live` via token, `API_KEY` wajib non-kosong saat `ENV=production` (fail-fast), endpoint sensitif (`/api/execution/toggle`, `/api/rebalance/toggle`) selalu wajib API key, rate-limiter membersihkan entri IP idle (`api/app.py`).
+- Historical VaR (percentile empiris) ditambahkan sebagai pembanding VaR parametrik (`risk/engine.py`).
+
+**Belum dikerjakan (lihat `docs/SARAN_PENGEMBANGAN.md` untuk detail):** look-ahead bias backtest (§3.1), `ConvictionStrategy` backtest (§3.2), block-bootstrap Monte Carlo, refresh data macro/global berbasis umur, konsolidasi ATR/fee, `DataSourceAdapter` multi-sumber, dan seluruh item P3.
 
 ## Legenda
 
@@ -19,7 +35,7 @@
 |-------|------|--------|---------|
 | Data Acquisition | `data/acquisition.py` | ✅ Done | Yahoo Finance via yfinance, multi-ticker, auto-retry |
 | Data Validation | `data/validation.py` | ✅ Done | Completeness, plausibility, cross-source (adj_close vs close), reconciliation (volume, OHLCV) |
-| Data Storage | `data/storage.py` | ✅ Done | SQLite, 12 tabel, raw/clean zone, Parquet export |
+| Data Storage | `data/storage.py` | ✅ Done | SQLite, 13 tabel (+`system_state` untuk flag persisten), raw/clean zone, Parquet export |
 | Data Contracts | `data/contracts.py` | ✅ Done | Pydantic models: OHLCVRecord, DataSourceHealth, DataQualityReport |
 | Database Seeder | `data/seeder.py` | ✅ Done | Seed data untuk testing |
 
@@ -176,5 +192,5 @@ Data Layer → Analysis Layer → Sentiment Layer → Risk Layer
 
 **Total engines:** 18 (lihat Lampiran C di buku-sistem-trading.md)  
 **Total API endpoints:** 30+ REST + 1 WebSocket  
-**Total database tables:** 12  
-**Total unit tests:** 117
+**Total database tables:** 13  
+**Total unit tests:** 182

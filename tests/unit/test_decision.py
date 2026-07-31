@@ -57,6 +57,42 @@ class TestDecisionEngine:
         engine = DecisionEngine(storage=mock_storage)
         assert engine.decide_action(75, ["HIGH_VOLATILITY"]) == "BUY"
 
+    def test_decide_action_sell_when_position_and_low_conviction(self, mock_storage):
+        """Posisi terbuka + konviksi di bawah EXIT_CONVICTION_THRESHOLD -> SELL."""
+        engine = DecisionEngine(storage=mock_storage)
+        assert engine.decide_action(30, [], has_position=True) == "SELL"
+
+    def test_decide_action_no_sell_without_position(self, mock_storage):
+        """Konviksi rendah tanpa posisi terbuka tetap AVOID, bukan SELL."""
+        engine = DecisionEngine(storage=mock_storage)
+        assert engine.decide_action(30, [], has_position=False) == "AVOID"
+
+    def test_decide_action_hold_when_position_but_conviction_above_exit_threshold(self, mock_storage):
+        """Posisi terbuka tapi konviksi masih di atas ambang exit -> tidak SELL."""
+        engine = DecisionEngine(storage=mock_storage)
+        assert engine.decide_action(45, [], has_position=True) == "HOLD"
+
+    def test_recommend_sell_signal_with_open_position(self, mock_storage):
+        """recommend() harus mengembalikan SELL saat ada posisi terbuka & skor rendah."""
+        scores_df = pd.DataFrame({
+            "engine": ["technical", "fundamental", "macro", "global", "relationship", "sentiment"],
+            "score": [20, 25, 30, 20, 25, 22],
+            "as_of": ["2024-01-01"] * 6,
+            "breakdown": ["{}"] * 6,
+        })
+        mock_storage.load_scores.return_value = scores_df
+        mock_storage.load_ohlcv.return_value = pd.DataFrame(
+            {"open": [100], "high": [105], "low": [95], "close": [102], "volume": [1000000]},
+            index=pd.date_range("2024-01-01", periods=1),
+        )
+        mock_storage.get_open_position.return_value = {"id": 1, "ticker": "TEST.JK", "quantity": 100, "avg_entry_price": 120}
+
+        engine = DecisionEngine(storage=mock_storage)
+        result = engine.recommend("TEST.JK")
+
+        assert result["status"] == "ok"
+        assert result["recommendation"]["action"] == "SELL"
+
     def test_apply_regime_filter_tightening(self, mock_storage):
         """Tightening regime should reduce macro and technical scores."""
         engine = DecisionEngine(storage=mock_storage)

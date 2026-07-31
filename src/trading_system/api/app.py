@@ -2,6 +2,7 @@
 
 import sys
 import os
+import secrets
 import time
 import logging
 import importlib
@@ -28,6 +29,7 @@ from trading_system.xai.engine import ExplainableAIEngine
 from trading_system.monitoring.engine import MonitoringEngine
 from trading_system.paper_trading.engine import PaperTradingEngine
 from trading_system.ai_learning.engine import AILearningEngine
+from trading_system.config import TRADING_CAPITAL
 
 app = FastAPI(title="Trading System API", version="0.1.0")
 
@@ -42,29 +44,79 @@ app.add_middleware(
 
 storage = DataStorage()
 
-# API Key authentication (optional — set API_KEY env var to enable)
+# API Key authentication (optional in dev — WAJIB non-kosong jika ENV=production).
 _API_KEY = os.getenv("API_KEY", "")
+_ENV = os.getenv("ENV", "development").lower()
+
+if _ENV == "production" and not _API_KEY:
+    # Fail-fast: jangan biarkan production berjalan tanpa autentikasi (§3.5).
+    raise RuntimeError(
+        "API_KEY wajib diisi saat ENV=production. Set variabel lingkungan API_KEY "
+        "sebelum menjalankan server di production."
+    )
+
+# Endpoint sensitif yang mengubah perilaku trading runtime — selalu wajib API key
+# (bukan opsional) meskipun ENV bukan production, karena dampaknya langsung ke
+# eksekusi order nyata (§3.5).
+_SENSITIVE_PATHS = {"/api/execution/toggle", "/api/rebalance/toggle"}
+
+
+def _valid_api_key(provided: str) -> bool:
+    """Bandingkan API key dengan constant-time comparison (anti timing-attack)."""
+    return bool(_API_KEY) and secrets.compare_digest(provided, _API_KEY)
+
 
 @app.middleware("http")
 async def api_key_auth(request: Request, call_next):
-    """Validate API key if API_KEY env var is set. Skip for health/root/ws."""
-    if _API_KEY and request.url.path not in ("/", "/api/health", "/ws/engines"):
-        if not request.url.path.startswith("/ws/"):
-            provided = request.headers.get("X-API-Key", "")
-            if provided != _API_KEY:
-                return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key"})
+    """Validate API key if API_KEY env var is set. Skip for health/root.
+
+    WebSocket handshake (`/ws/*`) divalidasi terpisah di dalam handler karena
+    header custom tidak selalu tersedia saat upgrade koneksi; lihat `ws_engines`.
+    """
+    path = request.url.path
+    if path in ("/", "/api/health") or path.startswith("/ws/"):
+        return await call_next(request)
+
+    if path in _SENSITIVE_PATHS and not _API_KEY:
+        # Endpoint sensitif tidak boleh berjalan tanpa proteksi API key sama sekali.
+        return JSONResponse(status_code=503, content={"detail": "API_KEY belum dikonfigurasi di server; endpoint ini dinonaktifkan demi keamanan."})
+
+    if _API_KEY:
+        provided = request.headers.get("X-API-Key", "")
+        if not _valid_api_key(provided):
+            return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key"})
     return await call_next(request)
 
-# Simple rate limiting (in-memory, per-IP)
+# Rate limiting (in-memory, per-IP). NOTE: tidak bekerja lintas proses untuk
+# multi-worker (uvicorn --workers > 1) karena state in-memory — gunakan Redis/
+# slowapi untuk deployment multi-worker (§3.5 P2 follow-up).
 _rate_limit_store: dict[str, list[float]] = {}
 _RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "60"))  # requests per window
 _RATE_LIMIT_WINDOW = 60  # seconds
+_rate_limit_last_cleanup = time.time()
+_RATE_LIMIT_CLEANUP_INTERVAL = 300  # seconds
+
+
+def _cleanup_idle_rate_limit_entries(now: float) -> None:
+    """Buang entri IP yang sudah tidak aktif agar dict tidak bocor memori."""
+    global _rate_limit_last_cleanup
+    if now - _rate_limit_last_cleanup < _RATE_LIMIT_CLEANUP_INTERVAL:
+        return
+    idle_ips = [
+        ip for ip, timestamps in _rate_limit_store.items()
+        if not timestamps or now - timestamps[-1] > _RATE_LIMIT_WINDOW
+    ]
+    for ip in idle_ips:
+        del _rate_limit_store[ip]
+    _rate_limit_last_cleanup = now
+
 
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
     """Simple in-memory rate limiting per client IP."""
     client_ip = request.client.host if request.client else "unknown"
     now = time.time()
+    _cleanup_idle_rate_limit_entries(now)
     if client_ip not in _rate_limit_store:
         _rate_limit_store[client_ip] = []
     # Remove old entries
@@ -240,7 +292,7 @@ def explain_recommendation(ticker: str):
 @app.post("/api/paper-trade")
 def paper_trade(payload: dict):
     ticker = payload.get("ticker")
-    cash = payload.get("capital", 1_000_000_000)
+    cash = payload.get("capital", TRADING_CAPITAL)
     if not ticker:
         raise HTTPException(status_code=400, detail="ticker required")
     engine = PaperTradingEngine(storage=storage, cash=cash)
@@ -264,7 +316,7 @@ def factor_weights(ticker: str, regime: str | None = None):
 def run_backtest(payload: dict):
     ticker = payload.get("ticker")
     strategy_name = payload.get("strategy", "buy_and_hold")
-    capital = payload.get("capital", 1_000_000_000)
+    capital = payload.get("capital", TRADING_CAPITAL)
     engine = BacktestEngine(storage=storage)
     if strategy_name == "buy_and_hold":
         strategy = BuyAndHold()
@@ -292,7 +344,7 @@ def run_monte_carlo(payload: dict):
     ticker = payload.get("ticker")
     n_simulations = payload.get("n_simulations", 1000)
     n_periods = payload.get("n_periods", 252)
-    capital = payload.get("capital", 1_000_000_000)
+    capital = payload.get("capital", TRADING_CAPITAL)
     if not ticker:
         raise HTTPException(status_code=400, detail="ticker required")
 
@@ -457,7 +509,7 @@ def get_auto_trade_toggle():
     """Get current auto-trade toggle status."""
     return {
         "auto_trade_enabled": _runtime_config["auto_trade_enabled"],
-        "capital": float(os.getenv("TRADING_CAPITAL", "100000000")),
+        "capital": TRADING_CAPITAL,
         "risk_per_trade": float(os.getenv("RISK_PER_TRADE", "0.01")),
         "daily_loss_limit": float(os.getenv("DAILY_LOSS_LIMIT", "0")),
     }
@@ -651,6 +703,16 @@ def get_engines():
 
 @app.websocket("/ws/live")
 async def ws_engines(websocket: WebSocket):
+    # Auth: jika API_KEY dikonfigurasi, wajibkan token yang cocok via query
+    # param `?token=` atau header `X-API-Key` pada handshake. Sebelumnya
+    # semua path /ws/* di-skip total dari pengecekan API key (§3.5), sehingga
+    # /ws/live mengekspos status seluruh engine ke siapa pun tanpa autentikasi.
+    if _API_KEY:
+        provided = websocket.query_params.get("token") or websocket.headers.get("x-api-key", "")
+        if not _valid_api_key(provided or ""):
+            await websocket.close(code=4401)
+            return
+
     await websocket.accept()
     try:
         while True:

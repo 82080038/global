@@ -3,7 +3,31 @@
 import pandas as pd
 from unittest.mock import MagicMock, patch
 
-from trading_system.sentiment.engine import SentimentEngine
+from trading_system.sentiment.engine import SentimentEngine, POSITIVE_WORDS, NEGATIVE_WORDS
+
+
+def test_lexicon_no_overlap():
+    """POSITIVE_WORDS dan NEGATIVE_WORDS tidak boleh berbagi kata (mis. 'rugi')."""
+    assert POSITIVE_WORDS & NEGATIVE_WORDS == set()
+
+
+def test_rugi_is_negative_only():
+    assert "rugi" in NEGATIVE_WORDS
+    assert "rugi" not in POSITIVE_WORDS
+
+
+def test_analyze_text_negative_word():
+    engine = SentimentEngine(storage=MagicMock())
+    score = engine._analyze_text("Perusahaan mengalami rugi besar tahun ini")
+    assert score < 0
+
+
+def test_analyze_text_negation_flips_polarity():
+    engine = SentimentEngine(storage=MagicMock())
+    positive = engine._analyze_text("Saham ini untung besar")
+    negated = engine._analyze_text("Saham ini tidak untung")
+    assert positive > 0
+    assert negated < 0
 
 
 def test_sentiment_engine_name():

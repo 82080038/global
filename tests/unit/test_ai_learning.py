@@ -112,3 +112,82 @@ class TestAILearningEngine:
         mock_storage.load_scores.return_value = scores_df
         engine = AILearningEngine(storage=mock_storage)
         assert engine.get_regime("TEST.JK") == "tightening"
+
+
+class TestTrainLinearRegression:
+    """Regression tests for §2.4 SARAN_PENGEMBANGAN.md: non-negative constraint,
+    TimeSeriesSplit OOS validation, dan ambang minimal sampel yang dinaikkan."""
+
+    def _build_scores_and_prices(self, n_days, feature_cols, coef_map, seed=0):
+        import numpy as np
+        rng = np.random.RandomState(seed)
+        dates = pd.date_range("2023-01-01", periods=n_days, freq="B")
+
+        scores = {col: rng.uniform(30, 70, n_days) for col in feature_cols}
+        forward_return = sum(coef_map.get(col, 0.0) * (scores[col] - 50) for col in feature_cols)
+        forward_return += rng.normal(0, 0.001, n_days)
+
+        rows = []
+        for col in feature_cols:
+            for i, d in enumerate(dates):
+                rows.append({"engine": col, "score": scores[col][i], "as_of": d.isoformat(), "breakdown": "{}"})
+        scores_df = pd.DataFrame(rows)
+        scores_df["timestamp"] = scores_df["as_of"]
+
+        close = 1000 * (1 + pd.Series(forward_return, index=dates)).cumprod().shift(1).fillna(1000)
+        price_df = pd.DataFrame({
+            "timestamp": dates,
+            "close": close.values,
+            "open": close.values, "high": close.values, "low": close.values,
+            "volume": 1_000_000,
+        })
+        return scores_df, price_df
+
+    def test_insufficient_data_below_min_samples(self, mock_storage):
+        """< 60 sampel harus ditolak (ambang lama 20 dinaikkan ke 60)."""
+        feature_cols = ["technical", "fundamental", "macro", "global", "relationship", "sentiment"]
+        scores_df, price_df = self._build_scores_and_prices(30, feature_cols, {})
+        mock_storage.list_tickers.return_value = ["TEST.JK"]
+        mock_storage.load_scores.return_value = scores_df
+        mock_storage.load_ohlcv.return_value = price_df
+
+        engine = AILearningEngine(storage=mock_storage)
+        result = engine.train_linear_regression()
+
+        assert result["status"] == "insufficient_data"
+
+    def test_negative_coefficient_is_clipped_to_zero(self, mock_storage):
+        """Faktor yang berkorelasi negatif dengan forward return tidak boleh
+        mendapat bobot positif (np.abs() sebelumnya membuang arah koefisien)."""
+        feature_cols = ["technical", "fundamental", "macro", "global", "relationship", "sentiment"]
+        # 'sentiment' sengaja dibuat berkorelasi NEGATIF kuat dengan forward return
+        coef_map = {"technical": 0.01, "sentiment": -0.02}
+        scores_df, price_df = self._build_scores_and_prices(120, feature_cols, coef_map)
+        mock_storage.list_tickers.return_value = ["TEST.JK"]
+        mock_storage.load_scores.return_value = scores_df
+        mock_storage.load_ohlcv.return_value = price_df
+        mock_storage.save_ai_weights = MagicMock()
+
+        engine = AILearningEngine(storage=mock_storage)
+        result = engine.train_linear_regression()
+
+        assert result["status"] == "ok"
+        assert result["weights"]["sentiment"] == 0.0
+        assert result["weights"]["technical"] > 0.0
+
+    def test_oos_r2_score_present_with_enough_samples(self, mock_storage):
+        """Dengan cukup sampel, hasil training harus menyertakan oos_r2_score (TimeSeriesSplit)."""
+        feature_cols = ["technical", "fundamental", "macro", "global", "relationship", "sentiment"]
+        coef_map = {"technical": 0.01}
+        scores_df, price_df = self._build_scores_and_prices(150, feature_cols, coef_map)
+        mock_storage.list_tickers.return_value = ["TEST.JK"]
+        mock_storage.load_scores.return_value = scores_df
+        mock_storage.load_ohlcv.return_value = price_df
+        mock_storage.save_ai_weights = MagicMock()
+
+        engine = AILearningEngine(storage=mock_storage)
+        result = engine.train_linear_regression()
+
+        assert result["status"] == "ok"
+        assert result["n_splits"] >= 2
+        assert "oos_r2_score" in result

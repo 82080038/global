@@ -81,3 +81,37 @@ def test_watchlist_endpoint(client):
         mock_storage.get_watchlist.return_value = []
         response = client.get("/api/watchlist")
         assert response.status_code == 200
+
+
+class TestApiKeySecurity:
+    """Regression tests for §3.5 SARAN_PENGEMBANGAN.md."""
+
+    def test_sensitive_endpoint_disabled_without_api_key(self, client):
+        """POST /api/execution/toggle harus 503 jika API_KEY tidak dikonfigurasi."""
+        response = client.post("/api/execution/toggle", json={"enabled": True})
+        assert response.status_code == 503
+
+    def test_wrong_api_key_rejected(self, client, monkeypatch):
+        import trading_system.api.app as app_module
+        monkeypatch.setattr(app_module, "_API_KEY", "secret123")
+        response = client.get("/api/tickers", headers={"X-API-Key": "wrong"})
+        assert response.status_code == 401
+
+    def test_correct_api_key_accepted(self, client, monkeypatch):
+        import trading_system.api.app as app_module
+        monkeypatch.setattr(app_module, "_API_KEY", "secret123")
+        response = client.get("/api/tickers", headers={"X-API-Key": "secret123"})
+        assert response.status_code == 200
+
+    def test_valid_api_key_uses_constant_time_compare(self, monkeypatch):
+        import trading_system.api.app as app_module
+        monkeypatch.setattr(app_module, "_API_KEY", "secret123")
+        assert app_module._valid_api_key("secret123") is True
+        assert app_module._valid_api_key("wrong") is False
+        assert app_module._valid_api_key("") is False
+
+    def test_health_endpoint_accessible_without_key(self, client, monkeypatch):
+        import trading_system.api.app as app_module
+        monkeypatch.setattr(app_module, "_API_KEY", "secret123")
+        response = client.get("/api/health")
+        assert response.status_code == 200

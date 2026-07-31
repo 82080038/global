@@ -19,6 +19,7 @@ from trading_system.decision.engine import DecisionEngine
 from trading_system.xai.engine import ExplainableAIEngine
 from trading_system.monitoring.engine import MonitoringEngine
 from trading_system.paper_trading.engine import PaperTradingEngine
+from trading_system.config import TRADING_CAPITAL
 
 
 def fetch_and_store(tickers, period="2y"):
@@ -42,33 +43,14 @@ def fetch_and_store(tickers, period="2y"):
             print(f"  Error: {result['message']}")
 
 
-def backtest(ticker, strategy_name, capital=1_000_000_000):
-    engine = BacktestEngine()
-    if strategy_name == "buy_and_hold":
-        strategy = BuyAndHold()
-    elif strategy_name == "ma_crossover":
-        strategy = MovingAverageCrossover(20, 50)
-    else:
-        print("Unknown strategy. Use buy_and_hold or ma_crossover")
-        return
-    result = engine.run(ticker, strategy, initial_capital=capital)
-    if result["status"] == "error":
-        print(f"Error: {result['message']}")
-        return
-    print(f"\nBacktest {ticker} with {strategy_name}")
-    print(f"Final Equity: {result['final_equity']:,.0f}")
-    for k, v in result["metrics"].items():
-        print(f"  {k}: {v}")
-
-
 def list_tickers():
     s = DataStorage()
     print(s.list_tickers())
 
 
-def recommend(ticker: str, capital: float = 1_000_000_000):
+def recommend(ticker: str, capital: float = TRADING_CAPITAL):
     engine = DecisionEngine()
-    result = engine.recommend(ticker)
+    result = engine.recommend(ticker, capital=capital)
     if result["status"] == "error":
         print(f"Error: {result['message']}")
         return
@@ -111,7 +93,7 @@ def main():
     p_backtest = sub.add_parser("backtest", help="Run backtest")
     p_backtest.add_argument("ticker", help="Ticker to backtest")
     p_backtest.add_argument("--strategy", default="buy_and_hold", help="buy_and_hold or ma_crossover")
-    p_backtest.add_argument("--capital", type=float, default=1_000_000_000)
+    p_backtest.add_argument("--capital", type=float, default=TRADING_CAPITAL)
     p_backtest.add_argument("--monte-carlo", action="store_true", help="Run Monte Carlo simulation")
     p_backtest.add_argument("--walk-forward", action="store_true", help="Run walk-forward analysis")
     p_backtest.add_argument("--n-simulations", type=int, default=1000, help="Number of MC simulations")
@@ -132,7 +114,7 @@ def main():
 
     p_rec = sub.add_parser("recommend", help="Generate BUY/HOLD/SELL recommendation")
     p_rec.add_argument("ticker", help="Ticker")
-    p_rec.add_argument("--capital", type=float, default=1_000_000_000)
+    p_rec.add_argument("--capital", type=float, default=TRADING_CAPITAL)
 
     p_exp = sub.add_parser("explain", help="Explain recommendation for a ticker")
     p_exp.add_argument("ticker", help="Ticker")
@@ -141,7 +123,7 @@ def main():
 
     p_paper = sub.add_parser("paper-trade", help="Simulate paper trade")
     p_paper.add_argument("ticker", help="Ticker")
-    p_paper.add_argument("--capital", type=float, default=1_000_000_000)
+    p_paper.add_argument("--capital", type=float, default=TRADING_CAPITAL)
 
     p_exec = sub.add_parser("execution", help="Run automated execution engine (robot trader)")
     p_exec.add_argument("--once", action="store_true", help="Run one cycle and exit")
@@ -154,8 +136,6 @@ def main():
     args = parser.parse_args()
     if args.cmd == "fetch":
         fetch_and_store(args.tickers, args.period)
-    elif args.cmd == "backtest":
-        backtest(args.ticker, args.strategy, args.capital)
     elif args.cmd == "list":
         list_tickers()
     elif args.cmd == "compute-scores":

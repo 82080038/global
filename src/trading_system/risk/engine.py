@@ -11,6 +11,7 @@ import pandas as pd
 from scipy import stats as sp_stats
 
 from trading_system.data.storage import DataStorage
+from trading_system.config import TRADING_CAPITAL
 
 
 class RiskEngine:
@@ -19,7 +20,7 @@ class RiskEngine:
     def __init__(self, storage: DataStorage | None = None):
         self.storage = storage or DataStorage()
 
-    def analyze(self, ticker: str, capital: float = 1_000_000_000, risk_per_trade: float = 0.01) -> dict:
+    def analyze(self, ticker: str, capital: float = TRADING_CAPITAL, risk_per_trade: float = 0.01) -> dict:
         df = self.storage.load_ohlcv(ticker)
         if df.empty:
             return {"status": "error", "message": f"No OHLCV for {ticker}"}
@@ -61,6 +62,9 @@ class RiskEngine:
         daily_returns = close.pct_change().dropna()
         var_95, var_99 = self._compute_var(daily_returns, last_price)
         cvar_95 = self._compute_cvar(daily_returns, 0.05)
+        # Historical VaR (empirical percentile) — pembanding VaR parametrik yang
+        # mengasumsikan distribusi normal (underestimate untuk return fat-tailed IDX).
+        hist_var_95, hist_var_99 = self._compute_historical_var(daily_returns, last_price)
 
         # Max Drawdown (rolling 252-day window)
         max_drawdown = self._compute_max_drawdown(close)
@@ -85,6 +89,8 @@ class RiskEngine:
             "avg_daily_volume": round(avg_volume, 0),
             "var_95_1d": round(var_95, 2),
             "var_99_1d": round(var_99, 2),
+            "historical_var_95_1d": round(hist_var_95, 2),
+            "historical_var_99_1d": round(hist_var_99, 2),
             "cvar_95_1d": round(cvar_95, 2),
             "max_drawdown": round(max_drawdown, 4),
             "daily_max_loss": round(daily_max_loss, 4),
@@ -100,6 +106,18 @@ class RiskEngine:
         var_95 = last_price * (mean - sp_stats.norm.ppf(0.95) * std)
         var_99 = last_price * (mean - sp_stats.norm.ppf(0.99) * std)
         # VaR is expressed as a positive loss amount
+        return abs(var_95), abs(var_99)
+
+    def _compute_historical_var(self, returns: pd.Series, last_price: float, confidence_levels: tuple = (0.95, 0.99)) -> tuple:
+        """Compute historical (empirical percentile) VaR — tidak mengasumsikan
+        distribusi normal, sehingga lebih robust terhadap fat-tail return saham IDX.
+        """
+        if returns.empty or len(returns) < 20:
+            return 0.0, 0.0
+        p95 = np.percentile(returns, (1 - confidence_levels[0]) * 100)
+        p99 = np.percentile(returns, (1 - confidence_levels[1]) * 100)
+        var_95 = last_price * abs(min(p95, 0.0))
+        var_99 = last_price * abs(min(p99, 0.0))
         return abs(var_95), abs(var_99)
 
     def _compute_cvar(self, returns: pd.Series, alpha: float = 0.05) -> float:

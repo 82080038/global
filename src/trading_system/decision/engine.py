@@ -13,6 +13,7 @@ from typing import Any
 from trading_system.data.storage import DataStorage
 from trading_system.risk.engine import RiskEngine
 from trading_system.ai_learning.engine import AILearningEngine
+from trading_system.config import TRADING_CAPITAL, EXIT_CONVICTION_THRESHOLD
 
 
 DEFAULT_WEIGHTS = {
@@ -116,7 +117,17 @@ class DecisionEngine:
             return 0.0
         return total / weight_sum
 
-    def decide_action(self, conviction: float, risk_flags: list) -> str:
+    def decide_action(self, conviction: float, risk_flags: list, has_position: bool = False) -> str:
+        """State machine sinyal: BUY -> HOLD -> SELL.
+
+        Jika ada posisi terbuka (`has_position=True`) dan konviksi merosot di
+        bawah `EXIT_CONVICTION_THRESHOLD`, kembalikan SELL sebagai mekanisme
+        exit eksplisit — sebelumnya satu-satunya jalur exit hanya SL/TP/trailing
+        stop, sehingga posisi dengan konviksi memburuk tidak pernah dijual
+        selama harga belum menyentuh SL (§2.3 SARAN_PENGEMBANGAN.md).
+        """
+        if has_position and conviction < EXIT_CONVICTION_THRESHOLD:
+            return "SELL"
         if "HIGH_VOLATILITY" in risk_flags or "LIQUIDITY_LOW" in risk_flags:
             if conviction < 60:
                 return "AVOID"
@@ -128,7 +139,7 @@ class DecisionEngine:
             return "HOLD"
         return "AVOID"
 
-    def recommend(self, ticker: str, weights: dict | None = None) -> dict[str, Any]:
+    def recommend(self, ticker: str, weights: dict | None = None, capital: float = TRADING_CAPITAL) -> dict[str, Any]:
         scores = self.load_latest_scores(ticker)
         if not scores:
             return {"status": "error", "message": f"No scores available for {ticker}. Run compute-scores first."}
@@ -155,11 +166,12 @@ class DecisionEngine:
 
         conviction = self.compute_conviction(adjusted, weights)
 
-        risk = self.risk.analyze(ticker)
+        risk = self.risk.analyze(ticker, capital=capital)
         if risk.get("status") == "error":
             return {"status": "error", "message": risk.get("message")}
 
-        action = self.decide_action(conviction, risk.get("risk_flags", []))
+        has_position = self.storage.get_open_position(ticker) is not None
+        action = self.decide_action(conviction, risk.get("risk_flags", []), has_position=has_position)
 
         recommendation = {
             "recommendation_id": f"{ticker}_{datetime.now(timezone.utc).isoformat()}",

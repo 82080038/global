@@ -157,9 +157,12 @@ class TestDailyLossLimit:
         """Large loss triggers circuit breaker."""
         os.environ["DAILY_LOSS_LIMIT"] = "99999"
         engine = AutomatedExecutionEngine(storage=temp_storage)
-        # Buy at 8000, sell at 7000 (loss = 100*1000 = 100,000)
+        # Buy at 8000, sell at 7000 (loss = 100*1000 = 100,000).
+        # realized_pnl diteruskan eksplisit (dihitung dari harga entry posisi
+        # sebenarnya oleh _execute_sell), bukan diestimasi ulang dari rata-rata
+        # semua BUY historis (§3.4 SARAN_PENGEMBANGAN.md).
         temp_storage.save_order("BBCA.JK", "BUY", 100, 8000)
-        temp_storage.save_order("BBCA.JK", "SELL", 100, 7000)
+        temp_storage.save_order("BBCA.JK", "SELL", 100, 7000, realized_pnl=-100_000)
         result = engine._check_daily_loss_limit()
         assert result is True
         os.environ.pop("DAILY_LOSS_LIMIT", None)
@@ -170,7 +173,7 @@ class TestDailyLossLimit:
         engine = AutomatedExecutionEngine(storage=temp_storage)
         # Buy at 8000, sell at 7900 (loss = 100*100 = 10,000)
         temp_storage.save_order("BBCA.JK", "BUY", 100, 8000)
-        temp_storage.save_order("BBCA.JK", "SELL", 100, 7900)
+        temp_storage.save_order("BBCA.JK", "SELL", 100, 7900, realized_pnl=-10_000)
         result = engine._check_daily_loss_limit()
         assert result is False
         os.environ.pop("DAILY_LOSS_LIMIT", None)
@@ -180,7 +183,7 @@ class TestDailyLossLimit:
         os.environ["DAILY_LOSS_LIMIT"] = "100"
         engine = AutomatedExecutionEngine(storage=temp_storage)
         temp_storage.save_order("BBCA.JK", "BUY", 100, 8000)
-        temp_storage.save_order("BBCA.JK", "SELL", 100, 7000)
+        temp_storage.save_order("BBCA.JK", "SELL", 100, 7000, realized_pnl=-100_000)
         results = engine.run_once(tickers=["BBCA.JK"])
         assert len(results) == 1
         assert results[0]["status"] == "circuit_breaker"

@@ -1,5 +1,6 @@
 """Konfigurasi global untuk sistem trading."""
 
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -14,6 +15,15 @@ DEFAULT_BROKER_FEE_SELL = 0.0025      # 0.15% broker + 0.1% PPh
 DEFAULT_LEVY = 0.0000043              # 0.00043% levy bursa
 DEFAULT_SLIPPAGE = 0.0005             # 0.05% slippage default
 DEFAULT_TIMEZONE = "Asia/Jakarta"
+
+# Satu sumber kebenaran untuk modal trading (§3.3 SARAN_PENGEMBANGAN.md).
+# Semua engine (risk, decision, execution, backtest CLI, API) HARUS membaca
+# nilai ini alih-alih hard-code angka modal sendiri-sendiri.
+TRADING_CAPITAL = float(os.getenv("TRADING_CAPITAL", "100000000"))
+
+# Ambang konviksi di bawah mana posisi terbuka harus di-exit (SELL), meskipun
+# harga belum menyentuh stop-loss/take-profit (§2.3 SARAN_PENGEMBANGAN.md).
+EXIT_CONVICTION_THRESHOLD = float(os.getenv("EXIT_CONVICTION_THRESHOLD", "40"))
 
 # YFinance rate limiting
 YFINANCE_RATE_LIMIT_CALLS = 1

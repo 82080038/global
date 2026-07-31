@@ -119,9 +119,16 @@ CREATE TABLE IF NOT EXISTS orders (
     total_value REAL NOT NULL,
     fee REAL DEFAULT 0,
     slippage REAL DEFAULT 0,
+    realized_pnl REAL DEFAULT 0,
     status TEXT DEFAULT 'FILLED',
     trigger TEXT DEFAULT 'MANUAL',
     created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS system_state (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS equity_snapshots (
@@ -152,6 +159,9 @@ CREATE TABLE IF NOT EXISTS ai_weights (
     n_samples INTEGER,
     created_at TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
 
 CREATE TABLE IF NOT EXISTS daily_risk_metrics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -436,18 +446,24 @@ class DataStorage:
     # ---------- Orders ----------
     def save_order(self, ticker: str, order_type: str, quantity: float, price: float,
                    fee: float = 0, slippage: float = 0, trigger: str = "MANUAL",
-                   order_style: str = "MARKET", status: str = "FILLED") -> int:
-        """Save an executed order. Returns order id."""
+                   order_style: str = "MARKET", status: str = "FILLED",
+                   realized_pnl: float = 0) -> int:
+        """Save an executed order. Returns order id.
+
+        `realized_pnl` disimpan langsung pada baris SELL agar perhitungan daily
+        loss limit tidak perlu mengestimasi harga beli dari rata-rata historis
+        (§3.4 SARAN_PENGEMBANGAN.md).
+        """
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc).isoformat()
         total_value = quantity * price
         with self._connect() as conn:
             cursor = conn.execute(
                 """INSERT INTO orders (ticker, order_type, order_style, quantity, price,
-                    total_value, fee, slippage, status, trigger, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    total_value, fee, slippage, realized_pnl, status, trigger, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (ticker, order_type, order_style, quantity, price,
-                 total_value, fee, slippage, status, trigger, now),
+                 total_value, fee, slippage, realized_pnl, status, trigger, now),
             )
             return cursor.lastrowid
 
@@ -465,6 +481,23 @@ class DataStorage:
             cols = [d[0] for d in cursor.description]
             rows = cursor.fetchall()
             return [dict(zip(cols, row)) for row in rows]
+
+    # ---------- System State (key-value, untuk flag persisten lintas siklus) ----------
+    def set_state(self, key: str, value: str) -> None:
+        """Simpan flag/state persisten (mis. circuit breaker halt-for-today)."""
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO system_state (key, value, updated_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                (key, value, now),
+            )
+
+    def get_state(self, key: str) -> str | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT value FROM system_state WHERE key = ?", (key,)).fetchone()
+            return row[0] if row else None
 
     # ---------- Equity Snapshots ----------
     def save_equity_snapshot(self, equity: float, cash: float = 0, positions_value: float = 0,

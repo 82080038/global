@@ -18,15 +18,19 @@ from trading_system.data.storage import DataStorage
 
 logger = logging.getLogger("sentiment")
 
-# Indonesian sentiment lexicon (positive & negative words)
+# Indonesian sentiment lexicon (positive & negative words).
+# NOTE: kata netral/ambigu ("volume", "transaksi", "target", "konsolidasi") sengaja
+# dihapus dari POSITIVE_WORDS karena tidak inheren positif dan membias skor ke atas.
+# "rugi" HANYA masuk NEGATIVE_WORDS (jelas kata negatif) — sebelumnya juga ada di
+# POSITIVE_WORDS sehingga saling menetralkan skor berita yang menyebut "rugi".
 POSITIVE_WORDS = {
-    "naik", "tinggi", "untung", "rugi", "positif", "bullish", "beli", "kuat",
+    "naik", "tinggi", "untung", "positif", "bullish", "beli", "kuat",
     "tumbuh", "unggul", "optimis", "rally", "gain", "profit", "dividen",
-    "akuisisi", "ekspansi", "investasi", "surplus", "rekomen", "target",
+    "akuisisi", "ekspansi", "investasi", "surplus", "rekomen",
     "mendukung", "meningkat", "melonjak", "menguat", "meroket", "rebound",
-    "penguatan", "peluang", "positif", "sukses", "transaksi", "volume",
-    "akumulasi", "beli", "hold", "outperform", "upgrade", "potensial",
-    "konsolidasi", "stabil", "recover", "pemulihan", "kontrak", "order",
+    "penguatan", "peluang", "sukses",
+    "akumulasi", "hold", "outperform", "upgrade", "potensial",
+    "stabil", "recover", "pemulihan", "kontrak", "order",
 }
 
 NEGATIVE_WORDS = {
@@ -35,9 +39,14 @@ NEGATIVE_WORDS = {
     "sell", "dump", "crash", "bocor", "fraud", "skandal", "gagal", "bangkrut",
     "pailit", "default", "risiko", "ancaman", "tekanan", "kelemahan", "merosot",
     "terpuruk", "pelemahan", "pelarian", "panik", "kapitulasi", "downgrade",
-    "kerugian", "utang", "macet", "npl", "suspensi", "delisting", "peringatan",
+    "utang", "macet", "npl", "suspensi", "delisting", "peringatan",
     "pelanggaran", "denda", "sanksi", "turunkan", "membenamkan", "terendah",
 }
+
+assert POSITIVE_WORDS & NEGATIVE_WORDS == set(), "Lexicon overlap: kata tidak boleh ada di kedua daftar"
+
+# Negation words: membalik polaritas kata sentimen berikutnya (mis. "tidak untung").
+NEGATION_WORDS = {"tidak", "bukan", "belum", "tanpa", "jangan", "kurang"}
 
 # RSS feeds for Indonesian financial news
 RSS_FEEDS = [
@@ -117,8 +126,21 @@ class SentimentEngine:
         if not tokens:
             return 0.0
 
-        pos_count = sum(1 for t in tokens if t in POSITIVE_WORDS)
-        neg_count = sum(1 for t in tokens if t in NEGATIVE_WORDS)
+        pos_count = 0
+        neg_count = 0
+        for i, t in enumerate(tokens):
+            # Negasi: kata negasi dalam jendela 2 token sebelumnya membalik polaritas
+            negated = any(tokens[j] in NEGATION_WORDS for j in range(max(0, i - 2), i))
+            if t in POSITIVE_WORDS:
+                if negated:
+                    neg_count += 1
+                else:
+                    pos_count += 1
+            elif t in NEGATIVE_WORDS:
+                if negated:
+                    pos_count += 1
+                else:
+                    neg_count += 1
 
         total = pos_count + neg_count
         if total == 0:

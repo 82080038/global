@@ -6,6 +6,32 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dan
 
 ---
 
+## [0.1.3] — 2026-07-31
+
+Implementasi temuan P0/P1 dari `docs/SARAN_PENGEMBANGAN.md`.
+
+### Fixed (P0 — bug kritis)
+
+- **Sentiment lexicon**: `"rugi"` dihapus dari `POSITIVE_WORDS` (sebelumnya ada di kedua daftar sehingga saling menetralkan skor), kata netral/ambigu (`volume`, `transaksi`, `target`, `konsolidasi`) dibuang, ditambah penanganan negasi ("tidak untung") — `sentiment/engine.py`.
+- **CLI dead code**: blok `elif args.cmd == "backtest"` duplikat dihapus; `--monte-carlo`/`--walk-forward` sekarang benar-benar berjalan — `cli.py`.
+- **Sinyal SELL**: `DecisionEngine.decide_action` kini mengembalikan `SELL` saat ada posisi terbuka dan konviksi turun di bawah `EXIT_CONVICTION_THRESHOLD` — sebelumnya satu-satunya exit adalah SL/TP/trailing-stop — `decision/engine.py`.
+- **AI Learning**: koefisien regresi negatif di-clip ke 0 (bukan `np.abs()`, yang membuang arah/tanda), ditambah validasi out-of-sample `TimeSeriesSplit`, ambang minimal sampel dinaikkan dari 20 ke 60 — `ai_learning/engine.py`.
+
+### Fixed (P1 — kebenaran kuantitatif & keamanan)
+
+- **Modal terpusat**: `TRADING_CAPITAL` dan `EXIT_CONVICTION_THRESHOLD` disatukan di `config.py`, dipakai konsisten di `risk/engine.py`, `decision/engine.py`, `execution/automated.py`, `cli.py`, `api/app.py` (sebelumnya `DecisionEngine.recommend` memanggil risk analyze tanpa capital sehingga posisi dihitung dengan modal 1 miliar meski robot beroperasi dengan `TRADING_CAPITAL`).
+- **Daily loss limit**: dihitung dari kolom baru `orders.realized_pnl` yang dipersist saat SELL dieksekusi, bukan estimasi dari rata-rata semua harga BUY historis; flag halt-for-today dipersist di tabel baru `system_state` agar tetap berlaku lintas siklus scheduler — `execution/automated.py`, `data/storage.py`.
+- **Keamanan API**: `secrets.compare_digest` untuk perbandingan API key (anti timing-attack), autentikasi token pada handshake WebSocket `/ws/live`, `API_KEY` wajib non-kosong saat `ENV=production` (fail-fast di startup), endpoint sensitif (`/api/execution/toggle`, `/api/rebalance/toggle`) selalu wajib API key meski di dev, rate-limiter membersihkan entri IP idle secara berkala — `api/app.py`.
+- **Historical VaR**: ditambahkan sebagai pembanding VaR parametrik yang mengasumsikan distribusi normal (underestimate untuk return fat-tailed IDX) — `risk/engine.py`.
+
+### Added
+
+- Index `orders(created_at)` dan `audit_log(timestamp)`.
+- Tabel `system_state` (key-value) untuk flag persisten lintas proses/siklus.
+- 65 unit test baru (total 117 → 182): `test_cli.py`, `test_automated_execution.py`, `test_storage.py`, plus regresi tambahan di `test_sentiment.py`, `test_decision.py`, `test_ai_learning.py`, `test_api.py`.
+
+---
+
 ## [0.1.2] — 2026-07-31
 
 ### Fixed — Remaining Gaps
