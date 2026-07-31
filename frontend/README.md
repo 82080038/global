@@ -4,16 +4,20 @@ Terminal-style dashboard untuk Sistem Trading Profesional (IDX).
 
 ## Tech Stack
 
-- **Next.js** (App Router) + TypeScript
-- **TailwindCSS** — terminal/zinc dark theme
+- **Next.js 16** (App Router) + TypeScript + React 19
+- **TailwindCSS 4** — terminal/zinc dark theme
 - **Recharts** — price charts & equity curves
+- **lightweight-charts** — candlestick price chart
 - **FastAPI backend** — http://localhost:8000
 
 ## Pages
 
-- `/` — Home / ticker selector
-- `/dashboard` — Main dashboard (charts, scores, recommendation, execution logs, rebalance panel, toggle switches)
-- `/engines` — Engine registry monitor
+- `/` — Home (redirect ke `/dashboard`)
+- `/dashboard` — Main dashboard (charts, scores, recommendation, execution logs, rebalance panel, toggle switches, performance analytics, watchlist)
+- `/engines` — Engine registry monitor (18 engines)
+- `/audit` — Audit log viewer (filter by event_type, actor)
+- `/backtest` — Backtest runner (POST, tampilkan metrics + equity curve)
+- `/portfolio` — Portfolio positions + exposure summary
 
 ## Dashboard Features
 
@@ -37,15 +41,26 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000)
 
-## API Proxy
+## API Configuration
 
-The frontend proxies `/api/*` requests to the FastAPI backend at `http://localhost:8000`.
+Frontend menggunakan environment variable `NEXT_PUBLIC_API_BASE` untuk koneksi ke backend:
 
-See `next.config.ts` for rewrite rules.
+```bash
+# frontend/.env.local
+NEXT_PUBLIC_API_BASE=http://localhost:8000
+```
+
+Semua fetch calls menggunakan `${API_BASE}/api/...` pattern.
 
 ## Build
 
 ```bash
 npm run build
 npm start
+```
+
+## Lint
+
+```bash
+npm run lint
 ```

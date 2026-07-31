@@ -14,7 +14,7 @@
 Status dan versi aplikasi.
 
 ```json
-{"status": "ok", "version": "0.1.0"}
+{"status": "ok", "version": "0.1.7"}
 ```
 
 ### GET `/api/health`

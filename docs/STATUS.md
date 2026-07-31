@@ -1,8 +1,8 @@
 # Status Implementasi Sistem Trading
 
-> **Versi aplikasi:** 0.1.0  
+> **Versi aplikasi:** 0.1.7  
 > **Update:** 1 Agustus 2026  
-> **Total unit tests:** 553 (semua passing, 0 warnings)
+> **Total unit tests:** 562 (semua passing, 0 warnings)
 
 ## Perbaikan Terbaru (implementasi `docs/SARAN_PENGEMBANGAN.md`)
 
@@ -133,7 +133,7 @@
 |-------|------|--------|---------|
 | Data Acquisition | `data/acquisition.py` | ✅ Done | Yahoo Finance via yfinance, multi-ticker, auto-retry |
 | Data Validation | `data/validation.py` | ✅ Done | Completeness, plausibility, cross-source (adj_close vs close), reconciliation (volume, OHLCV) |
-| Data Storage | `data/storage.py` | ✅ Done | SQLite, 13 tabel (+`system_state` untuk flag persisten), raw/clean zone, Parquet export |
+| Data Storage | `data/storage.py` | ✅ Done | SQLite, 32 tabel (full CRUD: Create, Read, Update, Delete), raw/clean zone, Parquet export |
 | Data Contracts | `data/contracts.py` | ✅ Done | Pydantic models: OHLCVRecord, DataSourceHealth, DataQualityReport |
 | Database Seeder | `data/seeder.py` | ✅ Done | Seed data untuk testing |
 
@@ -254,7 +254,7 @@
 
 | Layer | Status | Jumlah |
 |-------|--------|--------|
-| Unit Tests | ✅ Done | 553 tests (26 file) — includes 155 TIP + 20 CRUD + 16 API tests |
+| Unit Tests | ✅ Done | 562 tests (26 file) — includes 155 TIP + 20 CRUD + 39 API tests |
 | E2E Tests | ✅ Done | 4 browser tests (Playwright) |
 | Lint | ✅ Done | ruff clean, mypy non-blocking |
 

@@ -1,7 +1,7 @@
 # Saran Pengembangan Sistem Trading — Hasil Analisa Mendalam
 
 > **Tanggal analisa:** 31 Juli 2026
-> **Versi aplikasi:** 0.1.0
+> **Versi aplikasi:** 0.1.7
 > **Cakupan:** Seluruh codebase — `src/trading_system/` (18 engine), `frontend/`, `scripts/`, `tests/`, CI/CD, Docker, dokumentasi.
 
 ---
@@ -258,7 +258,7 @@ Seluruh sistem (OHLCV, fundamental, macro, global, corporate actions) bergantung
 
 ### Sprint 4 — Adopsi komponen dari repo lain ✅ SELESAI
 > Lihat §9.6 untuk detail Fase 1–4, dan §12.4 untuk strategi implementasi.
-> Semua komponen A–FF telah diimplementasi (517 unit tests passing).
+> Semua komponen A–FF telah diimplementasi (562 unit tests passing).
 
 ### Berkelanjutan
 - Observability (correlation id, Prometheus) — §5.3.
