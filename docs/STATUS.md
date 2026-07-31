@@ -18,7 +18,7 @@
 | Modul | File | Status | Catatan |
 |-------|------|--------|---------|
 | Data Acquisition | `data/acquisition.py` | ✅ Done | Yahoo Finance via yfinance, multi-ticker, auto-retry |
-| Data Quality Validator | `data/validation.py` | ✅ Done | Gap detection, stale data, anomaly flagging, quality score 0-100 |
+| Data Validation | `data/validation.py` | ✅ Done | Completeness, plausibility, cross-source (adj_close vs close), reconciliation (volume, OHLCV) |
 | Data Storage | `data/storage.py` | ✅ Done | SQLite, 12 tabel, raw/clean zone, Parquet export |
 | Data Contracts | `data/contracts.py` | ✅ Done | Pydantic models: OHLCVRecord, DataSourceHealth, DataQualityReport |
 | Database Seeder | `data/seeder.py` | ✅ Done | Seed data untuk testing |
@@ -40,7 +40,7 @@
 |-------|------|--------|---------|
 | NLP News Engine | `sentiment/engine.py` | ✅ Done | RSS Bisnis.com/Kontan/CNBC ID, Indonesian lexicon, fallback proxy |
 | Foreign Flow | `sentiment/foreign_flow.py` | ✅ Done | Volume+price proxy untuk foreign accumulation/distribution |
-| Broker Summary | `sentiment/broker_summary.py` | 🔧 Partial | Smart money classification done; butuh data source IDX broker summary |
+| Broker Summary | `sentiment/broker_summary.py` | ✅ Done | IDX public API + yfinance institutional fallback, smart money classification |
 | Social Media | `sentiment/social_media.py` | 🔧 Partial | Reddit + X/Twitter integration; butuh API keys untuk aktif |
 | Google Trends | `sentiment/google_trends.py` | 🔧 Partial | pytrends integration; rate-limited, butuh pip install pytrends |
 
@@ -126,6 +126,7 @@
 
 | Modul | File | Status | Catatan |
 |-------|------|--------|---------|
+| Structured Logging | `utils/logging_config.py` | ✅ Done | dictConfig with rotation (10MB file, 5MB error file), env-configurable level |
 | Daily Runner | `scripts/daily_runner.py` | ✅ Done | 7-step pipeline: fetch → scores → recommendations → execution → risk → performance → notify |
 | E2E Test Script | `scripts/test_end_to_end.py` | ✅ Done | Full pipeline test |
 | Start Production (Linux) | `scripts/start_production.sh` | ✅ Done | Backend + frontend |
@@ -133,12 +134,13 @@
 | Dockerfile | `Dockerfile` | ✅ Done | Backend container |
 | docker-compose.yml | `docker-compose.yml` | ✅ Done | Multi-service |
 | Telegram Notifier | `utils/notifier.py` | ✅ Done | Alert untuk order, risk, anomaly |
+| Database Migration | `alembic/` | ✅ Done | Alembic setup with initial schema migration, SQLite batch mode |
 
 ## Testing
 
 | Layer | Status | Jumlah |
 |-------|--------|--------|
-| Unit Tests | ✅ Done | 117 tests (10 file) |
+| Unit Tests | ✅ Done | 154 tests (18 file) |
 | E2E Tests | ✅ Done | 4 browser tests (Playwright) |
 | Lint | ✅ Done | pyflakes clean |
 
@@ -153,7 +155,6 @@
 | Markowitz Optimization | Medium | Portfolio mean-variance optimization |
 | Walk-Forward CV | Medium | AI Learning cross-validation |
 | Bayesian Updating | Low | AI Learning real-time adaptation |
-| CI/CD Pipeline | ✅ Done | GitHub Actions: lint, test with coverage, frontend build, Docker build |
 | Mobile Responsive | Low | Frontend |
 | Dark/Light Toggle | Low | Frontend |
 

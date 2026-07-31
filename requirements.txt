@@ -14,6 +14,9 @@ fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
 httpx>=0.24.0
 
+# Database migration
+alembic>=1.13.0
+
 # CLI helpers
 python-dateutil>=2.8.2
 

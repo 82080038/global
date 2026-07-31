@@ -19,10 +19,10 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
+# Configure structured logging
+from trading_system.utils.logging_config import setup_logging
+setup_logging()
+
 logger = logging.getLogger("daily_runner")
 
 

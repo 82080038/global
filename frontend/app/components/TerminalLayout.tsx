@@ -5,7 +5,7 @@ export default function TerminalLayout({
   children,
   ticker = "BBCA.JK",
 }: {
-  active: "dashboard" | "engines";
+  active: "dashboard" | "engines" | "backtest" | "portfolio" | "audit";
   children: React.ReactNode;
   ticker?: string;
 }) {
@@ -64,6 +64,36 @@ export default function TerminalLayout({
             }`}
           >
             Engine Monitor
+          </a>
+          <a
+            href="/backtest"
+            className={`block rounded px-2 py-1 ${
+              active === "backtest"
+                ? "bg-zinc-800 text-zinc-100"
+                : "text-zinc-300 hover:bg-zinc-800"
+            }`}
+          >
+            Backtest
+          </a>
+          <a
+            href="/portfolio"
+            className={`block rounded px-2 py-1 ${
+              active === "portfolio"
+                ? "bg-zinc-800 text-zinc-100"
+                : "text-zinc-300 hover:bg-zinc-800"
+            }`}
+          >
+            Portfolio
+          </a>
+          <a
+            href="/audit"
+            className={`block rounded px-2 py-1 ${
+              active === "audit"
+                ? "bg-zinc-800 text-zinc-100"
+                : "text-zinc-300 hover:bg-zinc-800"
+            }`}
+          >
+            Audit Log
           </a>
           <div className="mt-6 px-2 py-1 text-zinc-500">MARKET</div>
           <div className="px-2 py-1 text-zinc-400">BBCA.JK ▲ 1.2%</div>

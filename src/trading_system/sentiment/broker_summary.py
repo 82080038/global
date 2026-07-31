@@ -39,41 +39,85 @@ class BrokerSummarySentiment:
         self.storage = storage
 
     def _fetch_broker_summary(self, ticker: str) -> list[dict] | None:
-        """Fetch broker summary from IDX.
+        """Fetch broker summary from IDX public API.
+
+        IDX exposes broker summary at:
+        https://www.idx.co.id/primary/BrokerSummary/GetBrokers?ticker={code}&date={YYYYMMDD}
 
         Returns list of {broker, buy_volume, sell_volume, buy_value, sell_value}.
+        Falls back to yfinance institutional holders if IDX API unavailable.
         """
         try:
             import requests
-            # IDX broker summary API (public endpoint)
-            # This is a placeholder URL — real implementation needs IDX API or scraping
-            ticker_code = ticker.replace(".JK", "")
-            url = f"https://www.idx.co.id/primary/BrokerSummary/GetBrokers?ticker={ticker_code}"
+            from datetime import datetime
 
-            resp = requests.get(url, timeout=10, headers={
-                "User-Agent": "Mozilla/5.0",
-                "Accept": "application/json",
+            ticker_code = ticker.replace(".JK", "")
+            today = datetime.now().strftime("%Y%m%d")
+
+            # IDX public API — broker summary for latest trading day
+            url = f"https://www.idx.co.id/primary/BrokerSummary/GetBrokers"
+            params = {"ticker": ticker_code, "date": today}
+
+            resp = requests.get(url, params=params, timeout=10, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "X-Requested-With": "XMLHttpRequest",
+                "Referer": "https://www.idx.co.id/",
             })
             if resp.status_code != 200:
-                return None
+                logger.debug(f"IDX API returned {resp.status_code} for {ticker}")
+                return self._fetch_yfinance_institutional(ticker)
 
             data = resp.json()
             if not data:
-                return None
+                return self._fetch_yfinance_institutional(ticker)
 
+            # IDX API returns list of broker records
             brokers = []
             for item in data:
                 brokers.append({
-                    "broker": item.get("broker", ""),
-                    "buy_volume": float(item.get("buyVolume", 0)),
-                    "sell_volume": float(item.get("sellVolume", 0)),
+                    "broker": item.get("broker", item.get("code", "")),
+                    "buy_volume": float(item.get("buyVolume", item.get("buyVolume1Lot", 0))),
+                    "sell_volume": float(item.get("sellVolume", item.get("sellVolume1Lot", 0))),
                     "buy_value": float(item.get("buyValue", 0)),
                     "sell_value": float(item.get("sellValue", 0)),
                 })
-            return brokers
+            return brokers if brokers else None
 
         except Exception as e:
             logger.debug(f"Broker summary fetch error: {e}")
+            return self._fetch_yfinance_institutional(ticker)
+
+    def _fetch_yfinance_institutional(self, ticker: str) -> list[dict] | None:
+        """Fallback: use yfinance institutional holders as proxy for smart money.
+
+        This is less granular than broker summary but provides directional signal
+        from institutional ownership changes.
+        """
+        try:
+            import yfinance as yf
+            t = yf.Ticker(ticker)
+            holders = t.institutional_holders
+            if holders is None or holders.empty:
+                return None
+
+            # Treat top institutional holders as smart money proxy
+            brokers = []
+            for _, row in holders.head(10).iterrows():
+                broker_name = str(row.get("Holder", ""))
+                shares = float(row.get("Shares", 0))
+                pct = float(row.get("% Out", 0)) if "%" in row else 0
+                # Use shares as proxy for buy_value, 0 for sell
+                brokers.append({
+                    "broker": broker_name[:10].upper(),
+                    "buy_volume": shares,
+                    "sell_volume": 0,
+                    "buy_value": shares,
+                    "sell_value": 0,
+                })
+            return brokers if brokers else None
+        except Exception as e:
+            logger.debug(f"yfinance institutional fallback error: {e}")
             return None
 
     def compute(self, ticker: str) -> dict | None:

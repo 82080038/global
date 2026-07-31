@@ -244,6 +244,12 @@ class SentimentEngine:
         # If no real-time sources available, use proxy
         if not results:
             proxy = self._proxy_sentiment(df)
+            # Save proxy score to DB
+            if self.storage:
+                self.storage.save_score(ticker, "sentiment", proxy["score"], {
+                    "source": "price_volume_proxy",
+                    "sentiment": proxy["sentiment"],
+                })
             return {
                 "status": "ok",
                 "engine": self.name,
@@ -275,6 +281,24 @@ class SentimentEngine:
             signal = "bearish"
         else:
             signal = "neutral"
+
+        # Save aggregate sentiment score to DB
+        if self.storage:
+            self.storage.save_score(ticker, "sentiment", weighted_score, {
+                "signal": signal,
+                "sentiment": round(float(weighted_sentiment), 4),
+                "active_sources": list(results.keys()),
+                "weights": {k: round(float(v), 4) for k, v in normalized_weights.items()},
+            })
+            # Save each sub-source score to DB for granular tracking
+            for name in results:
+                sub_engine_name = f"sentiment_{name}"
+                self.storage.save_score(ticker, sub_engine_name, results[name]["score"], {
+                    "sentiment": results[name]["sentiment"],
+                    "signal": results[name].get("signal", "neutral"),
+                    "weight": round(float(normalized_weights[name]), 4),
+                    "detail": results[name].get("detail", {}),
+                })
 
         return {
             "status": "ok",

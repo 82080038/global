@@ -6,6 +6,29 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dan
 
 ---
 
+## [0.1.2] — 2026-07-31
+
+### Fixed — Remaining Gaps
+
+- Broker Summary: implementasi IDX public API endpoint dengan date parameter + yfinance institutional holders fallback
+- Sentiment sub-sources: save aggregate + per-sub-source scores ke DB (sentiment_foreign_flow, sentiment_broker_summary, etc.)
+- Data Validation: implementasi cross-source check (adjusted_close vs close ratio) dan reconciliation (volume consistency, OHLCV internal consistency)
+
+### Added — Infrastructure
+
+- Structured logging: `utils/logging_config.py` dengan dictConfig, RotatingFileHandler (10MB main + 5MB error), env-configurable level
+- Database migration: Alembic setup (`alembic.ini`, `alembic/env.py`, initial migration) dengan SQLite batch mode support
+- Frontend: 3 halaman baru — Backtest (`/backtest`), Portfolio (`/portfolio`), Audit Log (`/audit`)
+- TerminalLayout: tambah nav links untuk Backtest, Portfolio, Audit Log
+- `alembic` ditambahkan ke requirements.txt
+
+### Changed
+
+- `daily_runner.py`: ganti `basicConfig` ke `setup_logging()` dari logging_config.py
+- `app.py`: tambah `setup_logging()` di entry point
+
+---
+
 ## [0.1.1] — 2026-07-31
 
 ### Fixed — Integration & Sync

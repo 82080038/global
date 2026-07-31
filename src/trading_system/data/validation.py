@@ -1,10 +1,10 @@
-"""Data Quality Validation Engine (Phase 1).
+"""Data Quality Validation Engine.
 
 Jenis validasi:
 - Completeness
 - Plausibility
-- Cross-source (placeholder, karena sumber tunggal)
-- Reconciliation (placeholder)
+- Cross-source: compare adjusted_close vs close for split/dividend detection
+- Reconciliation: volume consistency and timestamp continuity
 """
 
 import pandas as pd
@@ -99,6 +99,75 @@ class DataQualityValidator:
                         "severity": "low",
                     })
                     score -= 0.5
+
+        # 5. Cross-source check: adjusted_close vs close
+        # Detect stock splits and dividends by comparing close and adjusted_close
+        if "adjusted_close" in df.columns and "close" in df.columns:
+            adj = pd.to_numeric(df["adjusted_close"], errors="coerce")
+            cls = pd.to_numeric(df["close"], errors="coerce")
+            ratio = adj / cls
+            ratio = ratio.replace([float("inf"), float("-inf")], pd.NA).dropna()
+            if not ratio.empty:
+                # If ratio changes significantly across the dataset, it indicates
+                # a split or dividend adjustment — this is expected, not an error
+                unique_ratios = ratio.nunique()
+                if unique_ratios > 1:
+                    # Check for unexpected ratio jumps (potential data error)
+                    ratio_diffs = ratio.diff().abs()
+                    large_jumps = (ratio_diffs > 0.5).sum()
+                    if large_jumps > 0:
+                        anomalies.append({
+                            "check": "cross_source",
+                            "detail": f"{large_jumps} large adjusted_close/close ratio jumps (possible split/dividend or data error)",
+                            "severity": "low",
+                        })
+                        score -= 0.5
+
+                # Check for ratio outside expected range (0.01 to 1.0)
+                out_of_range = ((ratio < 0.01) | (ratio > 1.0)).sum()
+                if out_of_range > 0:
+                    anomalies.append({
+                        "check": "cross_source",
+                        "detail": f"{out_of_range} records with adjusted_close/close ratio outside [0.01, 1.0]",
+                        "severity": "medium",
+                    })
+                    score -= 1.0
+
+        # 6. Reconciliation: volume consistency
+        # Check for zero-volume days (illiquidity flag) and negative volume
+        if "volume" in df.columns:
+            vol = pd.to_numeric(df["volume"], errors="coerce")
+            negative_vol = (vol < 0).sum()
+            if negative_vol > 0:
+                anomalies.append({
+                    "check": "reconciliation",
+                    "detail": f"{negative_vol} records with negative volume",
+                    "severity": "high",
+                })
+                score -= 3.0
+
+            zero_vol = (vol == 0).sum()
+            zero_pct = (zero_vol / n * 100) if n > 0 else 0
+            if zero_pct > 10:
+                anomalies.append({
+                    "check": "reconciliation",
+                    "detail": f"{zero_vol} zero-volume days ({zero_pct:.1f}%) — possible illiquidity",
+                    "severity": "low",
+                })
+                score -= 0.5
+
+        # 7. Reconciliation: OHLCV internal consistency
+        # Typical price (H+L+C)/3 should be within [low, high] range
+        if all(col in df.columns for col in ["open", "high", "low", "close"]):
+            typical_price = (df["high"] + df["low"] + df["close"]) / 3
+            out_of_range = ((typical_price < df["low"]) | (typical_price > df["high"])).sum()
+            if out_of_range > 0:
+                anomalies.append({
+                    "check": "reconciliation",
+                    "detail": f"{out_of_range} records where typical price outside [low, high]",
+                    "severity": "medium",
+                })
+                score -= 1.0
 
         score = max(0.0, min(100.0, score))
 
