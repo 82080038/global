@@ -21,6 +21,8 @@ def _get_default_weights():
 
 
 # Regime-specific weight presets
+# Keys match regimes from macro.py::classify_regime (easing, tightening, growth,
+# slowdown, neutral, unknown) plus risk_off for TIP compatibility (§13.4 #6).
 REGIME_WEIGHTS = {
     "easing": {
         "technical": 0.15,
@@ -38,7 +40,24 @@ REGIME_WEIGHTS = {
         "relationship": 0.10,
         "sentiment": 0.10,
     },
+    "growth": {
+        "technical": 0.20,
+        "fundamental": 0.25,
+        "macro": 0.15,
+        "global": 0.15,
+        "relationship": 0.10,
+        "sentiment": 0.15,
+    },
+    "slowdown": {
+        "technical": 0.25,
+        "fundamental": 0.20,
+        "macro": 0.25,
+        "global": 0.15,
+        "relationship": 0.10,
+        "sentiment": 0.05,
+    },
     "neutral": None,  # Will be set to DEFAULT_WEIGHTS at runtime
+    "unknown": None,  # Will be set to DEFAULT_WEIGHTS at runtime
     "risk_off": {
         "technical": 0.10,
         "fundamental": 0.20,
@@ -46,6 +65,14 @@ REGIME_WEIGHTS = {
         "global": 0.20,
         "relationship": 0.15,
         "sentiment": 0.10,
+    },
+    "risk_on": {
+        "technical": 0.15,
+        "fundamental": 0.30,
+        "macro": 0.20,
+        "global": 0.10,
+        "relationship": 0.10,
+        "sentiment": 0.15,
     },
 }
 

@@ -12,14 +12,14 @@ from __future__ import annotations
 import logging
 import os
 import time
+from datetime import UTC
 
-import pandas as pd
-
+from trading_system.config import TRADING_CAPITAL
 from trading_system.data.storage import DataStorage
 from trading_system.decision.engine import DecisionEngine
-from trading_system.risk.engine import RiskEngine
 from trading_system.execution.engine import ExecutionEngine
-from trading_system.config import DEFAULT_BROKER_FEE_BUY, DEFAULT_BROKER_FEE_SELL, DEFAULT_LEVY, TRADING_CAPITAL
+from trading_system.risk.costs import get_default_cost_model, get_latest_atr
+from trading_system.risk.engine import RiskEngine
 
 logger = logging.getLogger(__name__)
 
@@ -55,18 +55,9 @@ class AutomatedExecutionEngine:
         return float(df["close"].iloc[-1])
 
     def _get_atr(self, ticker: str) -> float:
-        """Get latest ATR(14) from OHLCV data."""
+        """Get latest ATR(14) via consolidated costs.py (P2-4)."""
         df = self.storage.load_ohlcv(ticker)
-        if df.empty or len(df) < 14:
-            return 0.0
-        high, low, close = df["high"], df["low"], df["close"]
-        tr1 = high - low
-        tr2 = (high - close.shift()).abs()
-        tr3 = (low - close.shift()).abs()
-        tr = tr1.combine(tr2, max).combine(tr3, max)
-        atr = tr.rolling(14).mean()
-        val = atr.iloc[-1]
-        return float(val) if not pd.isna(val) else 0.0
+        return get_latest_atr(df, 14)
 
     def _compute_position_size(self, ticker: str, price: float) -> int:
         """Compute position size based on ATR and risk per trade.
@@ -98,7 +89,8 @@ class AutomatedExecutionEngine:
             return {"status": "skipped", "reason": "quantity is 0"}
 
         order_value = quantity * price
-        fee = order_value * (DEFAULT_BROKER_FEE_BUY + DEFAULT_LEVY)
+        cost_model = get_default_cost_model()
+        fee = order_value * (cost_model.buy_fee + cost_model.levy)
 
         # Compute stop loss / take profit from risk engine
         risk_data = self.risk.analyze(ticker)
@@ -151,7 +143,8 @@ class AutomatedExecutionEngine:
             return {"status": "skipped", "reason": "quantity is 0"}
 
         order_value = quantity * price
-        fee = order_value * (DEFAULT_BROKER_FEE_SELL + DEFAULT_LEVY + 0.001)  # sell fee + levy + tax
+        cost_model = get_default_cost_model()
+        fee = order_value * (cost_model.sell_fee + cost_model.levy + 0.001)  # sell fee + levy + tax
 
         # Compute realized PnL from the actual position entry price BEFORE saving
         # the order, so it can be persisted directly on the order row instead of
@@ -323,8 +316,8 @@ class AutomatedExecutionEngine:
         if self.daily_loss_limit <= 0:
             return False  # No limit set
 
-        from datetime import datetime, timezone
-        today = datetime.now(timezone.utc).date().isoformat()
+        from datetime import datetime
+        today = datetime.now(UTC).date().isoformat()
 
         # Already halted today? (persisted from a previous cycle)
         halted_date = self.storage.get_state("execution_halted_date")

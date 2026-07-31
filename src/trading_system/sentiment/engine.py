@@ -8,8 +8,8 @@ Jika tidak ada berita tersedia, fallback ke proxy sentimen dari price & volume.
 
 from __future__ import annotations
 
-import re
 import logging
+import re
 
 import numpy as np
 import pandas as pd
@@ -43,7 +43,7 @@ NEGATIVE_WORDS = {
     "pelanggaran", "denda", "sanksi", "turunkan", "membenamkan", "terendah",
 }
 
-assert POSITIVE_WORDS & NEGATIVE_WORDS == set(), "Lexicon overlap: kata tidak boleh ada di kedua daftar"
+assert set() == POSITIVE_WORDS & NEGATIVE_WORDS, "Lexicon overlap: kata tidak boleh ada di kedua daftar"
 
 # Negation words: membalik polaritas kata sentimen berikutnya (mis. "tidak untung").
 NEGATION_WORDS = {"tidak", "bukan", "belum", "tanpa", "jangan", "kurang"}
@@ -219,10 +219,10 @@ class SentimentEngine:
             return {"status": "error", "message": "No OHLCV"}
 
         # Import sentiment sources
-        from trading_system.sentiment.foreign_flow import ForeignFlowSentiment
         from trading_system.sentiment.broker_summary import BrokerSummarySentiment
-        from trading_system.sentiment.social_media import SocialMediaSentiment
+        from trading_system.sentiment.foreign_flow import ForeignFlowSentiment
         from trading_system.sentiment.google_trends import GoogleTrendsSentiment
+        from trading_system.sentiment.social_media import SocialMediaSentiment
 
         # Initialize sources
         sources = {

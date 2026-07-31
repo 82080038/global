@@ -34,7 +34,10 @@ export default function AuditPage() {
   };
 
   useEffect(() => {
-    fetchAudit();
+    const init = async () => {
+      await fetchAudit();
+    };
+    init();
   }, []);
 
   const filtered = filter

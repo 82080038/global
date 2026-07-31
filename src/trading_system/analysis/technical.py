@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from trading_system.risk.costs import compute_atr
+
 
 class TechnicalAnalysisEngine:
     """Menganalisis perilaku harga & volume, menghasilkan technical_score (0-100)."""
@@ -34,11 +36,7 @@ class TechnicalAnalysisEngine:
         minus_dm = -low.diff()
         plus_dm[plus_dm < 0] = 0
         minus_dm[minus_dm < 0] = 0
-        tr1 = high - low
-        tr2 = abs(high - close.shift())
-        tr3 = abs(low - close.shift())
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        atr_14 = tr.rolling(14).mean()
+        atr_14 = compute_atr(df, 14)
         plus_di = 100 * plus_dm.rolling(14).mean() / atr_14
         minus_di = 100 * minus_dm.rolling(14).mean() / atr_14
         dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)

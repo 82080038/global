@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 
-from trading_system.sentiment.engine import POSITIVE_WORDS, NEGATIVE_WORDS
+from trading_system.sentiment.engine import NEGATIVE_WORDS, POSITIVE_WORDS
 
 logger = logging.getLogger("sentiment.social_media")
 
@@ -113,7 +113,7 @@ class SocialMediaSentiment:
                                 "text": submission.selftext[:500],
                                 "score": submission.score,
                                 "created": datetime.fromtimestamp(
-                                    submission.created_utc, tz=timezone.utc
+                                    submission.created_utc, tz=UTC
                                 ).isoformat(),
                                 "subreddit": subreddit_name,
                             })
@@ -151,7 +151,7 @@ class SocialMediaSentiment:
             client = tweepy.Client(bearer_token=bearer_token)
 
             # Search recent tweets (last 7 days)
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             start_time = now - timedelta(days=7)
 
             response = client.search_recent_tweets(

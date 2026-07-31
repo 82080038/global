@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from trading_system.data.storage import DataStorage
@@ -118,7 +118,7 @@ class PerformanceAnalytics:
 
         if snapshots:
             # Filter snapshots by date range
-            cutoff = datetime.now(timezone.utc).date()
+            cutoff = datetime.now(UTC).date()
             from datetime import timedelta
             cutoff = cutoff - timedelta(days=days)
             filtered = [
@@ -138,7 +138,7 @@ class PerformanceAnalytics:
             # No snapshots, compute from orders
             current_equity = self.compute_equity()
             start_equity = self.initial_capital
-            equity_curve = [{"date": datetime.now(timezone.utc).date().isoformat(),
+            equity_curve = [{"date": datetime.now(UTC).date().isoformat(),
                               "equity": current_equity}]
 
         # Total return

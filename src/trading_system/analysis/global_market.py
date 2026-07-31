@@ -6,6 +6,8 @@ Output: global_market_score dan global_risk_appetite.
 
 from __future__ import annotations
 
+from datetime import UTC
+
 import pandas as pd
 
 from trading_system.config import DEFAULT_GLOBAL_TICKERS
@@ -27,7 +29,7 @@ class GlobalMarketEngine:
 
         Refresh jika umur data > ``max_age_days`` hari bursa.
         """
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta
 
         for label, ticker in DEFAULT_GLOBAL_TICKERS.items():
             df = self.storage.load_ohlcv(ticker)
@@ -36,7 +38,7 @@ class GlobalMarketEngine:
                 last_ts = df.index[-1]
                 if hasattr(last_ts, "tzinfo") and last_ts.tzinfo is None:
                     last_ts = last_ts.tz_localize("UTC")
-                age = datetime.now(timezone.utc) - last_ts
+                age = datetime.now(UTC) - last_ts
                 if age > timedelta(days=max_age_days):
                     need_fetch = True
             if need_fetch:
@@ -81,7 +83,7 @@ class GlobalMarketEngine:
         score, breakdown = self.compute_score()
 
         # Data age tracking (§4.2)
-        from datetime import datetime, timezone
+        from datetime import datetime
         data_ages = {}
         for label, ticker in DEFAULT_GLOBAL_TICKERS.items():
             df = self.load_index_data(ticker)
@@ -89,7 +91,7 @@ class GlobalMarketEngine:
                 last_ts = df.index[-1]
                 if hasattr(last_ts, "tzinfo") and last_ts.tzinfo is None:
                     last_ts = last_ts.tz_localize("UTC")
-                age = (datetime.now(timezone.utc) - last_ts).days
+                age = (datetime.now(UTC) - last_ts).days
                 data_ages[label] = age
             else:
                 data_ages[label] = None

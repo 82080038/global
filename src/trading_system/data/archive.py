@@ -7,7 +7,7 @@ ke yfinance jika data belum ada di archive (incremental fetch).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -120,7 +120,7 @@ class ArchiveAdapter:
     def save_ohlcv(self, ticker: str, df: pd.DataFrame) -> Path:
         """Simpan DataFrame ke Parquet archive."""
         ohlcv_dir = self._ohlcv_dir()
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         out_file = ohlcv_dir / f"{ticker}_{timestamp}.parquet"
         df.to_parquet(out_file, index=False, compression="snappy")
         return out_file

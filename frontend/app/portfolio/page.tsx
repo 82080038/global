@@ -52,7 +52,10 @@ export default function PortfolioPage() {
   };
 
   useEffect(() => {
-    fetchPortfolio();
+    const init = async () => {
+      await fetchPortfolio();
+    };
+    init();
   }, []);
 
   return (

@@ -39,6 +39,69 @@ if _env_file.exists():
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+EMAIL_FROM = os.getenv("EMAIL_FROM", "")
+EMAIL_TO = os.getenv("EMAIL_TO", "")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
+
+
+def _email_configured() -> bool:
+    """Check if email credentials are set."""
+    return bool(EMAIL_FROM and EMAIL_TO and EMAIL_PASSWORD)
+
+
+def send_email(subject: str, body: str) -> bool:
+    """Send an email notification via SMTP.
+
+    Used as fallback when Telegram is unavailable (§5.3).
+
+    Returns:
+        True if sent successfully, False otherwise.
+    """
+    if not _email_configured():
+        logger.info("Email not configured (EMAIL_FROM/EMAIL_TO/EMAIL_PASSWORD not set)")
+        return False
+
+    try:
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+
+        msg = MIMEMultipart()
+        msg["From"] = EMAIL_FROM
+        msg["To"] = EMAIL_TO
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(EMAIL_FROM, EMAIL_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+
+        logger.info("Email notification sent successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send email: {e}")
+        return False
+
+
+def notify_with_fallback(message: str, subject: str = "Trading System Alert") -> bool:
+    """Send notification via Telegram, fallback to email if Telegram fails.
+
+    Args:
+        message: Message body text.
+        subject: Email subject line (only used for email fallback).
+
+    Returns:
+        True if sent via any channel, False if all fail.
+    """
+    if send_telegram(message):
+        return True
+    logger.info("Telegram failed or not configured, trying email fallback...")
+    return send_email(subject, message)
+
 
 def _is_configured() -> bool:
     """Check if Telegram credentials are set."""

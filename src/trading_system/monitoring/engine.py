@@ -5,7 +5,7 @@ Health check sederhana seluruh engine & sumber data.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from trading_system.data.storage import DataStorage
 
@@ -21,7 +21,7 @@ class MonitoringEngine:
         tickers = self.storage.list_tickers()
         scores_df = self.storage.load_scores()
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         alerts = []
         for _, row in source_df.iterrows():
             if row.get("status") != "ok":

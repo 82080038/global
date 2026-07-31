@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import pandas as pd
 
 from trading_system.config import EXIT_CONVICTION_THRESHOLD

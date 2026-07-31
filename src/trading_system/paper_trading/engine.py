@@ -6,12 +6,12 @@ menghitung fill price, biaya, dan PnL awal.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from trading_system.data.storage import DataStorage
 from trading_system.decision.engine import DecisionEngine
-from trading_system.portfolio.engine import PortfolioEngine
 from trading_system.execution.engine import ExecutionEngine
+from trading_system.portfolio.engine import PortfolioEngine
 
 
 class PaperTradingEngine:
@@ -53,5 +53,5 @@ class PaperTradingEngine:
             "order": order,
             "feasibility": feasible,
             "simulated_fill": fill,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }

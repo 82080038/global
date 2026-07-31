@@ -25,17 +25,22 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyflakes
+          pip install ruff mypy pytest-cov
 
-      - name: Lint with pyflakes
+      - name: Lint with ruff
         run: |
-          pyflakes src/trading_system/ || true
+          ruff check src/trading_system/
+
+      - name: Type check with mypy
+        continue-on-error: true
+        run: |
+          mypy src/trading_system/ --ignore-missing-imports
 
       - name: Run unit tests with coverage
         env:
           PYTHONPATH: src
         run: |
-          python -m pytest tests/unit/ -v --cov=trading_system --cov-report=term-missing --cov-report=xml
+          python -m pytest tests/unit/ -v --cov=trading_system --cov-report=term-missing --cov-report=xml --cov-fail-under=50
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4

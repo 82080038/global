@@ -128,7 +128,7 @@ Data persists in `./data/` volume mount.
 
 - [ ] Copy `.env.example` to `.env` and fill in API keys (Reddit, Twitter, Telegram, etc.)
 - [ ] Run `python -m trading_system.cli fetch BBCA.JK TLKM.JK ASII.JK` to seed data
-- [ ] Run `python -m pytest tests/unit/` to verify all 117 tests pass
+- [ ] Run `python -m pytest tests/unit/` to verify all 517 tests pass
 - [ ] Start API: `uvicorn src.trading_system.api.app:app --host 0.0.0.0 --port 8000`
 - [ ] Start Execution: `python -m trading_system.cli execution --interval 15`
 - [ ] Start Scheduler: `python -m trading_system.cli schedule`
@@ -139,14 +139,17 @@ Data persists in `./data/` volume mount.
 ## Testing
 
 ```bash
-# Unit tests (117 tests)
+# Unit tests (517 tests)
 python -m pytest tests/unit/ -v
 
-# With warnings capture
-python -W all -m pytest tests/unit/ -v -W default
+# With coverage
+python -m pytest tests/unit/ -v --cov=trading_system --cov-report=term-missing
 
 # Lint check
-python -m pyflakes src/trading_system/
+python -m ruff check src/trading_system/
+
+# Type check (non-blocking)
+python -m mypy src/trading_system/ --ignore-missing-imports
 
 # E2E tests (requires Playwright + running servers)
 python -m pytest tests/e2e/ -v

@@ -7,7 +7,6 @@ balance sheet health, dan corporate governance.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -17,28 +16,28 @@ class RedFlag:
     flag_type: str
     severity: str  # low, medium, high, critical
     description: str
-    value: Optional[float] = None
-    threshold: Optional[float] = None
+    value: float | None = None
+    threshold: float | None = None
 
 
 @dataclass
 class EarningsQualityMetrics:
     """Metrics untuk kualitas earnings."""
 
-    cash_conversion_ratio: Optional[float] = None
-    accrual_ratio: Optional[float] = None
-    days_sales_outstanding: Optional[float] = None
-    inventory_turnover: Optional[float] = None
+    cash_conversion_ratio: float | None = None
+    accrual_ratio: float | None = None
+    days_sales_outstanding: float | None = None
+    inventory_turnover: float | None = None
 
 
 @dataclass
 class BalanceSheetHealth:
     """Metrics untuk kesehatan neraca."""
 
-    current_ratio: Optional[float] = None
-    debt_to_equity: Optional[float] = None
-    goodwill_ratio: Optional[float] = None
-    short_term_debt_ratio: Optional[float] = None
+    current_ratio: float | None = None
+    debt_to_equity: float | None = None
+    goodwill_ratio: float | None = None
+    short_term_debt_ratio: float | None = None
 
 
 def calculate_earnings_quality_metrics(

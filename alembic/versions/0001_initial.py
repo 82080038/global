@@ -25,7 +25,10 @@ def upgrade() -> None:
     from trading_system.data.storage import SCHEMA
 
     op.execute("PRAGMA foreign_keys=ON")
-    op.executescript(SCHEMA)
+    for stmt in SCHEMA.split(";"):
+        stmt = stmt.strip()
+        if stmt:
+            op.execute(stmt)
 
 
 def downgrade() -> None:

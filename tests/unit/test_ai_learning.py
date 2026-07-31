@@ -113,6 +113,41 @@ class TestAILearningEngine:
         engine = AILearningEngine(storage=mock_storage)
         assert engine.get_regime("TEST.JK") == "tightening"
 
+    def test_regime_weights_cover_all_classify_regime_outputs(self):
+        """REGIME_WEIGHTS must cover all regimes that classify_regime can produce (§13.4 #6)."""
+        expected_regimes = {"easing", "tightening", "growth", "slowdown", "neutral", "unknown"}
+        assert expected_regimes.issubset(set(REGIME_WEIGHTS.keys())), (
+            f"Missing regimes in REGIME_WEIGHTS: {expected_regimes - set(REGIME_WEIGHTS.keys())}"
+        )
+
+    def test_regime_weights_cover_tip_compatible(self):
+        """REGIME_WEIGHTS must include risk_on/risk_off for TIP engine compatibility (§13.4 #6)."""
+        assert "risk_on" in REGIME_WEIGHTS
+        assert "risk_off" in REGIME_WEIGHTS
+        assert REGIME_WEIGHTS["risk_on"] is not None
+        assert REGIME_WEIGHTS["risk_off"] is not None
+
+    def test_regime_weights_sum_to_one(self):
+        """All non-None regime weights should sum to approximately 1.0."""
+        for regime, weights in REGIME_WEIGHTS.items():
+            if weights is None:
+                continue
+            total = sum(weights.values())
+            assert abs(total - 1.0) < 0.01, f"Regime '{regime}' weights sum to {total}, expected ~1.0"
+
+    def test_macro_regime_map_to_tip_compatible(self):
+        """MacroEconomicEngine.map_regime should map internal regimes to TIP-compatible (§13.4 #6)."""
+        from trading_system.analysis.macro import MacroEconomicEngine
+        engine = MacroEconomicEngine.__new__(MacroEconomicEngine)
+
+        assert engine.map_regime("easing") == "risk_on"
+        assert engine.map_regime("growth") == "risk_on"
+        assert engine.map_regime("tightening") == "risk_off"
+        assert engine.map_regime("slowdown") == "risk_off"
+        assert engine.map_regime("neutral") == "neutral"
+        assert engine.map_regime("unknown") == "neutral"
+        assert engine.map_regime("nonexistent") == "neutral"
+
 
 class TestTrainLinearRegression:
     """Regression tests for §2.4 SARAN_PENGEMBANGAN.md: non-negative constraint,

@@ -8,7 +8,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from trading_system.config import DEFAULT_GLOBAL_TICKERS, DEFAULT_MACRO_TICKERS, DEFAULT_BENCHMARK
+from trading_system.config import DEFAULT_BENCHMARK, DEFAULT_GLOBAL_TICKERS, DEFAULT_MACRO_TICKERS
 from trading_system.data.storage import DataStorage
 
 

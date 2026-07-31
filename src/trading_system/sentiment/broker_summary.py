@@ -48,14 +48,15 @@ class BrokerSummarySentiment:
         Falls back to yfinance institutional holders if IDX API unavailable.
         """
         try:
-            import requests
             from datetime import datetime
+
+            import requests
 
             ticker_code = ticker.replace(".JK", "")
             today = datetime.now().strftime("%Y%m%d")
 
             # IDX public API — broker summary for latest trading day
-            url = f"https://www.idx.co.id/primary/BrokerSummary/GetBrokers"
+            url = "https://www.idx.co.id/primary/BrokerSummary/GetBrokers"
             params = {"ticker": ticker_code, "date": today}
 
             resp = requests.get(url, params=params, timeout=10, headers={

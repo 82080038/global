@@ -1,35 +1,37 @@
 """FastAPI API dasar (Phase 1)."""
 
-import sys
+import asyncio
+import importlib
+import logging
 import os
 import secrets
+import sys
 import time
-import logging
-import importlib
-import asyncio
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
+from datetime import UTC
+
 import pandas as pd
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from trading_system.data.storage import DataStorage
-from trading_system.data.acquisition import YahooFinanceAdapter, normalize_ohlcv
-from trading_system.data.validation import DataQualityValidator
+from trading_system.ai_learning.engine import AILearningEngine
+from trading_system.analysis.pipeline import AnalysisPipeline
 from trading_system.backtest.engine import BacktestEngine
 from trading_system.backtest.strategies import BuyAndHold, MovingAverageCrossover
-from trading_system.analysis.pipeline import AnalysisPipeline
+from trading_system.config import TRADING_CAPITAL
 from trading_system.corporate.actions import CorporateActionEngine
+from trading_system.data.acquisition import YahooFinanceAdapter, normalize_ohlcv
+from trading_system.data.storage import DataStorage
+from trading_system.data.validation import DataQualityValidator
+from trading_system.decision.engine import DEFAULT_WEIGHTS, DecisionEngine
 from trading_system.intelligence.relationship import MarketRelationshipEngine
-from trading_system.decision.engine import DecisionEngine, DEFAULT_WEIGHTS
-from trading_system.xai.engine import ExplainableAIEngine
 from trading_system.monitoring.engine import MonitoringEngine
 from trading_system.paper_trading.engine import PaperTradingEngine
-from trading_system.ai_learning.engine import AILearningEngine
-from trading_system.config import TRADING_CAPITAL
+from trading_system.xai.engine import ExplainableAIEngine
 
 app = FastAPI(title="Trading System API", version="0.1.0")
 
@@ -138,13 +140,16 @@ def health():
 
 
 @app.get("/api/data/{category}")
-def get_data(category: str, ticker: str, start: str | None = None, end: str | None = None):
+def get_data(category: str, ticker: str, start: str | None = None, end: str | None = None, page: int = 1, limit: int = 500):
     if category != "ohlcv":
         raise HTTPException(status_code=400, detail="Only ohlcv supported in Phase 1")
     df = storage.load_ohlcv(ticker, start=start, end=end)
     if df.empty:
         raise HTTPException(status_code=404, detail="Data not found")
-    return {"ticker": ticker, "count": len(df), "data": df.reset_index().to_dict(orient="records")}
+    total = len(df)
+    offset = (page - 1) * limit
+    df_page = df.iloc[offset:offset + limit]
+    return {"ticker": ticker, "count": total, "page": page, "limit": limit, "pages": (total + limit - 1) // limit, "data": df_page.reset_index().to_dict(orient="records")}
 
 
 @app.get("/api/indicators/{ticker}")
@@ -464,6 +469,7 @@ def get_execution_logs(limit: int = 20):
 
     # Also get recent audit events for decision signals
     import sqlite3
+
     from trading_system.config import DB_PATH
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -601,10 +607,13 @@ def save_performance_snapshot():
 
 # ====================== WATCHLIST ======================
 @app.get("/api/tickers")
-def list_tickers():
-    """List all tickers in the database."""
+def list_tickers(page: int = 1, limit: int = 100):
+    """List all tickers in the database with pagination."""
     tickers = storage.list_tickers()
-    return {"tickers": tickers, "count": len(tickers)}
+    total = len(tickers)
+    offset = (page - 1) * limit
+    tickers_page = tickers[offset:offset + limit]
+    return {"tickers": tickers_page, "count": total, "page": page, "limit": limit, "pages": (total + limit - 1) // limit}
 
 
 @app.get("/api/watchlist")
@@ -622,10 +631,13 @@ def toggle_watchlist(ticker: str):
 
 
 @app.get("/api/watchlist/all")
-def get_full_watchlist():
-    """Get full watchlist with details."""
+def get_full_watchlist(page: int = 1, limit: int = 100):
+    """Get full watchlist with details and pagination."""
     items = storage.get_watchlist(favorites_only=False)
-    return {"items": items, "count": len(items)}
+    total = len(items)
+    offset = (page - 1) * limit
+    items_page = items[offset:offset + limit]
+    return {"items": items_page, "count": total, "page": page, "limit": limit, "pages": (total + limit - 1) // limit}
 
 
 ENGINE_REGISTRY = [
@@ -651,8 +663,8 @@ ENGINE_REGISTRY = [
 
 
 def _build_engines_status() -> dict:
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).isoformat()
+    from datetime import datetime
+    now = datetime.now(UTC).isoformat()
     results = []
     for meta in ENGINE_REGISTRY:
         t0 = time.time()
@@ -697,9 +709,26 @@ def _build_engines_status() -> dict:
     return {"timestamp": now, "engines": results}
 
 
+# Cache for engine status — avoids recomputing every WS tick (P2-5).
+_engines_status_cache: dict | None = None
+_engines_status_cache_ts: float = 0
+_ENGINES_STATUS_TTL = 3.0  # seconds
+
+
+def _get_engines_status() -> dict:
+    """Return cached engine status, recomputing if older than TTL."""
+    global _engines_status_cache, _engines_status_cache_ts
+    now = time.time()
+    if _engines_status_cache is not None and (now - _engines_status_cache_ts) < _ENGINES_STATUS_TTL:
+        return _engines_status_cache
+    _engines_status_cache = _build_engines_status()
+    _engines_status_cache_ts = now
+    return _engines_status_cache
+
+
 @app.get("/api/engines")
 def get_engines():
-    return _build_engines_status()
+    return _get_engines_status()
 
 
 @app.websocket("/ws/live")
@@ -717,7 +746,7 @@ async def ws_engines(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            data = _build_engines_status()
+            data = _get_engines_status()
             await websocket.send_json(data)
             await asyncio.sleep(5)
     except WebSocketDisconnect:

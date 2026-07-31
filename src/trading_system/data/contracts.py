@@ -1,7 +1,8 @@
 """Pydantic data contracts."""
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
+
 from pydantic import BaseModel
 
 
@@ -18,14 +19,14 @@ class OHLCVRecord(BaseModel):
     volume: float
     adjusted_close: float
     source: str
-    ingested_at: Optional[datetime] = None
-    data_quality_score: Optional[float] = None
+    ingested_at: datetime | None = None
+    data_quality_score: float | None = None
 
 
 class DataSourceHealth(BaseModel):
     source: str
-    last_success: Optional[datetime] = None
-    last_error: Optional[datetime] = None
+    last_success: datetime | None = None
+    last_error: datetime | None = None
     status: str = "unknown"  # ok, degraded, down
 
 

@@ -1,6 +1,6 @@
 """Backtesting Engine (Phase 1).
 
-Cost model sederhana:
+Cost model via consolidated risk/costs.py (P2-4):
 - buy fee: 0.15%
 - sell fee: 0.25% (broker 0.15% + PPh 0.1%)
 - levy: 0.00043%
@@ -13,44 +13,21 @@ from typing import Any
 
 import pandas as pd
 
+from trading_system.backtest.metrics import compute_metrics
 from trading_system.config import (
     DEFAULT_BENCHMARK,
-    DEFAULT_BROKER_FEE_BUY,
-    DEFAULT_BROKER_FEE_SELL,
-    DEFAULT_LEVY,
-    DEFAULT_SLIPPAGE,
     IDX_LOT_SIZE,
     TRADING_CAPITAL,
     round_to_tick,
 )
-from trading_system.backtest.metrics import compute_metrics
 from trading_system.data.storage import DataStorage
-
-
-class CostModel:
-    def __init__(
-        self,
-        buy_fee: float = DEFAULT_BROKER_FEE_BUY,
-        sell_fee: float = DEFAULT_BROKER_FEE_SELL,
-        levy: float = DEFAULT_LEVY,
-        slippage: float = DEFAULT_SLIPPAGE,
-    ):
-        self.buy_fee = buy_fee
-        self.sell_fee = sell_fee
-        self.levy = levy
-        self.slippage = slippage
-
-    def buy_cost_pct(self) -> float:
-        return self.buy_fee + self.levy + self.slippage
-
-    def sell_cost_pct(self) -> float:
-        return self.sell_fee + self.levy + self.slippage
+from trading_system.risk.costs import CostModel
 
 
 class BacktestEngine:
     def __init__(self, storage: DataStorage | None = None, cost_model: CostModel | None = None):
         self.storage = storage or DataStorage()
-        self.default_cost_model = cost_model
+        self.default_cost_model = cost_model or CostModel()
 
     def run(
         self,

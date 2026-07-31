@@ -7,14 +7,13 @@ dan konsistensi skor historis.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
+from trading_system.ai_learning.engine import AILearningEngine
+from trading_system.config import EXIT_CONVICTION_THRESHOLD, TRADING_CAPITAL
 from trading_system.data.storage import DataStorage
 from trading_system.risk.engine import RiskEngine
-from trading_system.ai_learning.engine import AILearningEngine
-from trading_system.config import TRADING_CAPITAL, EXIT_CONVICTION_THRESHOLD
-
 
 DEFAULT_WEIGHTS = {
     "technical": 0.20,
@@ -174,7 +173,7 @@ class DecisionEngine:
         action = self.decide_action(conviction, risk.get("risk_flags", []), has_position=has_position)
 
         recommendation = {
-            "recommendation_id": f"{ticker}_{datetime.now(timezone.utc).isoformat()}",
+            "recommendation_id": f"{ticker}_{datetime.now(UTC).isoformat()}",
             "ticker": ticker,
             "action": action,
             "conviction_score": round(conviction, 2),
@@ -189,7 +188,7 @@ class DecisionEngine:
             "regime": macro_regime,
             "var_95_1d": risk.get("var_95_1d"),
             "max_drawdown": risk.get("max_drawdown"),
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         }
 
         self.storage.audit(

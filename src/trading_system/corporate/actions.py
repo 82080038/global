@@ -63,16 +63,26 @@ class CorporateActionEngine:
         }
 
     def compute_adjustment_factor(self, ticker: str) -> pd.DataFrame:
-        """Hitung adjustment factor kumulatif (backward) untuk harga close."""
+        """Hitung adjustment factor kumulatif (backward) untuk harga close.
+
+        Backward adjustment: pre-event prices are scaled to be comparable
+        to post-event prices. For splits, pre-split prices are divided by
+        the split ratio. For dividends, pre-dividend prices are multiplied
+        by (close_before_ex - dividend) / close_before_ex.
+        """
         df = self.storage.load_ohlcv(ticker)
         actions = self.storage.load_corporate_actions(ticker)
-        if df.empty or actions.empty:
+        if df.empty:
             return pd.DataFrame()
 
         df = df.copy()
         df["adj_factor"] = 1.0
         df["adj_close"] = df["close"]
 
+        if actions.empty:
+            return df
+
+        actions = actions.sort_values("ex_date", ascending=False)
         for _, act in actions.iterrows():
             ex = pd.to_datetime(act.get("ex_date"))
             atype = act.get("action_type")
@@ -80,14 +90,19 @@ class CorporateActionEngine:
             if ex > df.index[-1]:
                 continue
             if atype == "split" and value > 0:
+                # Split ratio from yfinance is new:old (e.g., 2:1 = 2.0).
+                # Backward-adjust: pre-split prices *= 1/ratio
                 mask = df.index < ex
-                df.loc[mask, "adj_factor"] *= value
+                df.loc[mask, "adj_factor"] *= 1.0 / value
             elif atype == "dividend" and value > 0:
-                # Dividen adjustment sederhana: tambahkan kembali ke harga sebelum ex-date
-                pre_prices = df.loc[df.index < ex, "close"]
+                # Dividend adjustment: pre-dividend prices *= (close_before_ex - dividend) / close_before_ex
+                pre_mask = df.index < ex
+                pre_prices = df.loc[pre_mask, "close"]
                 if not pre_prices.empty:
-                    adj = pre_prices / (pre_prices - value)
-                    df.loc[df.index < ex, "adj_factor"] *= adj.values
+                    last_close_before_ex = float(pre_prices.iloc[-1])
+                    if last_close_before_ex > value:
+                        ratio = (last_close_before_ex - value) / last_close_before_ex
+                        df.loc[pre_mask, "adj_factor"] *= ratio
 
         df["adj_close"] = df["close"] * df["adj_factor"]
         return df

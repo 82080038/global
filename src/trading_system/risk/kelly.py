@@ -6,7 +6,6 @@ Reference: PASAR_MODAL_KNOWLEDGE_BASE.md Section 9.5
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
@@ -65,7 +64,7 @@ def calculate_position_size_kelly(
     capital: float,
     kelly_fraction: float,
     entry_price: float,
-    stop_loss: Optional[float] = None,
+    stop_loss: float | None = None,
     max_position_pct: float = 0.25,
 ) -> dict:
     """Hitung position size berdasarkan Kelly Criterion.

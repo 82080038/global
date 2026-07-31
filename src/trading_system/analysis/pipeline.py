@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from trading_system.analysis.technical import TechnicalAnalysisEngine
 from trading_system.analysis.fundamental import FundamentalAnalysisEngine
-from trading_system.analysis.macro import MacroEconomicEngine
 from trading_system.analysis.global_market import GlobalMarketEngine
-from trading_system.intelligence.relationship import MarketRelationshipEngine
+from trading_system.analysis.macro import MacroEconomicEngine
+from trading_system.analysis.technical import TechnicalAnalysisEngine
 from trading_system.corporate.actions import CorporateActionEngine
-from trading_system.sentiment.engine import SentimentEngine
-from trading_system.data.storage import DataStorage
 from trading_system.data.acquisition import YahooFinanceAdapter, normalize_ohlcv
+from trading_system.data.storage import DataStorage
 from trading_system.data.validation import DataQualityValidator
+from trading_system.intelligence.relationship import MarketRelationshipEngine
+from trading_system.sentiment.engine import SentimentEngine
 
 
 class AnalysisPipeline:
@@ -30,6 +30,16 @@ class AnalysisPipeline:
     def ensure_ohlcv(self, ticker: str, period: str = "2y") -> bool:
         df = self.storage.load_ohlcv(ticker)
         if not df.empty:
+            # Incremental fetch: only get data newer than last timestamp (§4.1)
+            last_ts = str(df.index[-1])
+            adapter = YahooFinanceAdapter()
+            result = adapter.fetch_incremental(ticker, last_timestamp=last_ts)
+            if result["status"] == "ok":
+                validator = DataQualityValidator()
+                raw = normalize_ohlcv(result["records"])
+                clean, report = validator.validate(raw)
+                if report.action != "pause":
+                    self.storage.save_ohlcv(clean)
             return True
         adapter = YahooFinanceAdapter()
         result = adapter.fetch(ticker, period=period)
@@ -65,6 +75,7 @@ class AnalysisPipeline:
 
         # Corporate actions
         self.corporate.fetch(ticker)
+        self.storage.update_adjusted_close(ticker)
 
         # Sentiment
         sent = self.sentiment.compute(ticker)
@@ -78,7 +89,7 @@ class AnalysisPipeline:
             "sentiment": sent,
         }
 
-        as_of = datetime.now(timezone.utc).isoformat()
+        as_of = datetime.now(UTC).isoformat()
         for engine, res in results.items():
             if res.get("status") in ("ok", "warning", "degraded", "failed") and res.get("score") is not None:
                 self.storage.save_score(

@@ -10,7 +10,7 @@ Usage:
 from __future__ import annotations
 
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 import pandas as pd
@@ -22,7 +22,6 @@ from trading_system.config import (
     ensure_dirs,
 )
 from trading_system.data.storage import DataStorage
-
 
 SEED_TICKERS = {
     "BBCA.JK": {"base_price": 8000, "drift": 0.0004, "vol": 0.015, "exchange": "IDX"},
@@ -50,7 +49,7 @@ def _generate_ohlcv(ticker: str, config: dict, days: int = 500) -> pd.DataFrame:
     drift = config["drift"]
     vol = config["vol"]
 
-    dates = pd.bdate_range(end=datetime.now(timezone.utc).date(), periods=days)
+    dates = pd.bdate_range(end=datetime.now(UTC).date(), periods=days)
     returns = np.random.normal(drift, vol, size=days)
     prices = base * np.exp(np.cumsum(returns))
 
@@ -75,7 +74,7 @@ def _generate_ohlcv(ticker: str, config: dict, days: int = 500) -> pd.DataFrame:
             "volume": volume,
             "adjusted_close": close,
             "source": "seeder",
-            "ingested_at": datetime.now(timezone.utc).isoformat(),
+            "ingested_at": datetime.now(UTC).isoformat(),
             "data_quality_score": 100.0,
         })
     return pd.DataFrame(records)
@@ -119,7 +118,7 @@ def seed_database(db_path=None):
         print(f"  {ticker}: 6 engine scores")
 
     print("Seeding audit log...")
-    storage.audit("seeder.run", {"timestamp": datetime.now(timezone.utc).isoformat(), "action": "seed"})
+    storage.audit("seeder.run", {"timestamp": datetime.now(UTC).isoformat(), "action": "seed"})
 
     print(f"\nDatabase seeded successfully: {storage.db_path}")
     print(f"  Tickers: {len(storage.list_tickers())}")

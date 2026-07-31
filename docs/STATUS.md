@@ -2,7 +2,7 @@
 
 > **Versi aplikasi:** 0.1.0  
 > **Update:** 1 Agustus 2026  
-> **Total unit tests:** 235 (semua passing)
+> **Total unit tests:** 517 (semua passing, 0 warnings)
 
 ## Perbaikan Terbaru (implementasi `docs/SARAN_PENGEMBANGAN.md`)
 
@@ -39,7 +39,84 @@
   - `analysis/screener.py` — stock screener (technical, momentum, value templates).
   - `data/idx_scraper.py` — IDX.co.id scraper untuk foreign flow data.
 
-**Belum dikerjakan (lihat `docs/SARAN_PENGEMBANGAN.md` untuk detail):** integrasi corporate action → `adjusted_close` (§4.3), konsolidasi ATR/fee, `DataSourceAdapter` multi-sumber, dan seluruh item P3.
+**Sprint 4 — TIP Component Adoption (selesai):**
+- Layer 1: CC (Data Quality Engine) + DD (Rate Limiter with circuit breaker) — `data/quality.py`, `data/rate_limit.py` ✅
+- Layer 2: K (Advanced Technical: Ichimoku, Williams %R, OBV, Stoch RSI) + F (Enhanced Regime) + X (Factor Engine: momentum, low_vol, quality, beta, size, value) — `analysis/advanced_technical.py`, `analysis/enhanced_regime.py`, `analysis/factor_engine.py` ✅
+- Layer 3: Y (Alpha Composer) + Z (No-Trade Engine: 9 gates) — `analysis/alpha_composer.py`, `analysis/no_trade.py` ✅
+- Layer 4: FF (Enhanced Risk Engine: vol-targeting, sector caps, drawdown/beta guards, stop-loss/trailing) + EE (Alpha Validation Lab: VALID/WATCH/REJECT) — `risk/enhanced_risk.py`, `analysis/alpha_validation.py` ✅
+- Layer 5: N (Labeling: forward return, triple barrier, alpha-adjusted) + S (Deep Learning: LSTM/MLP) + T (Ensemble: voting/weighted/stacking) + L (Model Registry: versioned storage) — `ai_learning/labeling.py`, `ai_learning/deep_learning.py`, `ai_learning/ensemble.py`, `ai_learning/model_registry.py` ✅
+- Layer 6: C (Purged TSS) + D (Walk-Forward) + V (Trading Expectancy) + H (Performance Attribution) + I (Correlation Sizing) + AA (Cross-Asset) + BB (Lead-Lag) + M (Manipulation Detector) + Q (Factor Screener) — `ai_learning/purged_tss.py`, `ai_learning/walk_forward.py`, `risk/expectancy.py`, `analysis/attribution.py`, `risk/corr_sizing.py`, `analysis/cross_asset.py`, `analysis/lead_lag.py`, `analysis/manipulation.py`, `analysis/factor_screener.py` ✅
+- Test plan: `docs/TEST_PLAN.md` ✅
+- Blueprint extraction: `docs/TIP_BLUEPRINT_EXTRACTION.md` ✅
+- Total TIP component tests: 155 new tests across 6 test files ✅
+
+**Belum dikerjakan:** Seluruh item P3 (lihat `docs/SARAN_PENGEMBANGAN.md`).
+
+**§13.5 #5 — Import Parquet/MySQL → SQLite (selesai):**
+- `LegacyDataImporter` di `data/import_legacy.py` — import dari `saham.db` ke global DB
+- 47,694 rows imported: OHLCV (23,851), global_market_data (15,046), macro_data (8,776), instruments (21)
+- CLI command `import-legacy --source <path>`
+- 6 unit tests
+
+**P2-6 — Ruff + mypy + coverage gate di CI (selesai):**
+- Ruff: 192 errors → 0 (247 auto-fixed), config di `pyproject.toml`
+- mypy: non-blocking mode, `ignore_missing_imports=true`
+- Coverage gate: 50% minimum (actual 69%), `--cov-fail-under=50`
+- CI workflow updated: pyflakes → ruff + mypy + pytest-cov
+- Bug fix: `cli.py` F821 undefined name `engine` (moved before use)
+
+**P2-5 — WS broadcast cache + pagination (selesai):**
+- Engine status cache (3s TTL) untuk WS `/ws/live` — tidak recompute setiap 5 detik
+- Pagination di `/api/tickers`, `/api/data/ohlcv`, `/api/watchlist/all`
+- 7 unit tests
+
+**Komponen U — Order Book Analyzer (selesai):**
+- `analysis/order_book.py` — gap detection, support/resistance, market efficiency, gap fill predictions
+- Raw copy dari `trading-otomatis-indonesia/python/ai_components/order_book_analyzer.py`
+- 17 unit tests
+
+**Komponen P — Email Notification (selesai):**
+- `utils/notifier.py` — `send_email()` SMTP dengan starttls, `notify_with_fallback()` Telegram→email
+- Extract dari `swing/modules/alert_notifier.py`, adaptasi ke `global` conventions
+- 8 unit tests
+
+**Komponen W — World Monitor patterns (selesai):**
+- `analysis/world_monitor.py` — 7-signal market composite + CII (Country Instability Index) scoring
+- Reverse-engineered dari `worldmonitor` (TypeScript) docs/methodology/cii-risk-scores.mdx
+- CII: 4 components (Unrest, Conflict, Security, Information), 20 country weights, boost caps
+- 7-signal: convergence, velocity_spike, silent_divergence, sector_cascade, dll.
+- 27 unit tests
+
+**P2-2 — DataSourceAdapter multi-sumber + incremental fetch (selesai):**
+- `SQLiteAdapter` — import dari legacy SQLite DB (saham.db) dengan column mapping
+- `CSVAdapter` — import dari CSV files dengan `kode`/`date` column mapping
+- `DataSourceManager` — multi-source routing dengan priority fallback + auto last_timestamp lookup
+- `fetch_incremental()` — otomatis query last timestamp dari storage, hanya fetch data baru
+- 18 unit tests
+
+**P2-1 — Integrasi corporate action → adjusted_close (selesai):**
+- Formula split diperbaiki: `*= 1/ratio` (sebelumnya `*= ratio` — terbalik)
+- Formula dividend diperbaiki: `*= (close-d)/close` (sebelumnya `*= close/(close-d)` — terbalik)
+- `acquisition.py` auto-fetch corporate actions + `update_adjusted_close` setelah OHLCV save
+- Column mapping `Adj Close` → `adjusted_close` (sebelumnya `adj_close` — tidak tersimpan)
+- CLI command `update-adjusted-close <ticker>`
+- Bug fix: `storage.py::update_adjusted_close` referenced `self.storage` → `self`
+- 9 unit tests
+
+**P2-3 — WAL + executemany + Alembic (selesai):**
+- WAL journal mode set persistent di `_init_db()` + `synchronous=NORMAL` + 64MB cache
+- `executemany_batch()` helper untuk large imports dengan chunking (default 5000 rows/batch)
+- 18 tabel D1–D31 ditambahkan ke SCHEMA + Alembic migration `0002_d1_d31_tables.py`
+- `_migrate_legacy_tables()` — rename legacy tables dengan schema tidak kompatibel (kode→ticker, tanggal→date, dll)
+- 10 unit tests
+
+**P2-4 — Konsolidasi ATR/fee/slippage (selesai):**
+- `risk/costs.py` sebagai single source of truth: `compute_atr()`, `get_latest_atr()`, `CostModel` (buy/sell fee, levy, slippage, simulate_fill, check_feasibility)
+- `risk/engine.py` — `_atr()` dan slippage kini delegasi ke `costs.py`
+- `execution/engine.py` — semua fee/slippage/fill delegasi ke `CostModel`
+- `execution/automated.py` — ATR dan fee kini dari `costs.py` (fix broken import)
+- `backtest/engine.py` — `CostModel` dihapus, import dari `risk/costs.py`
+- `analysis/technical.py` — ATR kini dari `costs.py::compute_atr()`
 
 ## Legenda
 
@@ -177,9 +254,9 @@
 
 | Layer | Status | Jumlah |
 |-------|--------|--------|
-| Unit Tests | ✅ Done | 154 tests (18 file) |
+| Unit Tests | ✅ Done | 517 tests (24 file) — includes 155 TIP component tests |
 | E2E Tests | ✅ Done | 4 browser tests (Playwright) |
-| Lint | ✅ Done | pyflakes clean |
+| Lint | ✅ Done | ruff clean, mypy non-blocking |
 
 ## Roadmap (Belum Implemented)
 
@@ -188,9 +265,9 @@
 | DCF Valuation | Medium | Fundamental analysis enhancement |
 | Altman Z-Score | Medium | Fundamental analysis enhancement |
 | Piotroski F-Score | Medium | Fundamental analysis enhancement |
-| Ichimoku / Stochastic | Low | Additional technical indicators |
+| Ichimoku / Stochastic | ✅ Done | `analysis/advanced_technical.py` — Ichimoku, Williams %R, OBV, Stoch RSI |
 | Markowitz Optimization | Medium | Portfolio mean-variance optimization |
-| Walk-Forward CV | Medium | AI Learning cross-validation |
+| Walk-Forward CV | ✅ Done | `ai_learning/walk_forward.py` + `ai_learning/purged_tss.py` |
 | Bayesian Updating | Low | AI Learning real-time adaptation |
 | Mobile Responsive | Low | Frontend |
 | Dark/Light Toggle | Low | Frontend |
@@ -211,7 +288,7 @@ Data Layer → Analysis Layer → Sentiment Layer → Risk Layer
          Monitoring Engine → Telegram Notifier
 ```
 
-**Total engines:** 18 (lihat Lampiran C di buku-sistem-trading.md)  
-**Total API endpoints:** 30+ REST + 1 WebSocket  
+**Total engines:** 18 base + 18 TIP-adopted = 36 (lihat Lampiran C di buku-sistem-trading.md)  
+**Total API endpoints:** 45 REST + 1 WebSocket  
 **Total database tables:** 13  
-**Total unit tests:** 182
+**Total unit tests:** 517

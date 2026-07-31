@@ -5,6 +5,7 @@ Nantinya dapat diganti TimescaleDB/InfluxDB tanpa mengubah kontrak fungsi.
 
 import sqlite3
 from contextlib import contextmanager
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -175,6 +176,105 @@ CREATE TABLE IF NOT EXISTS daily_risk_metrics (
     portfolio_value REAL,
     created_at TEXT NOT NULL
 );
+
+-- D1-D31 tables for legacy data import (§13.4 #3, P2-3)
+CREATE TABLE IF NOT EXISTS instrument_master (
+    ticker TEXT PRIMARY KEY, name TEXT, sector TEXT, subsector TEXT,
+    exchange TEXT, listing_date TEXT, delisting_date TEXT,
+    is_active INTEGER DEFAULT 1, board TEXT, market_cap REAL,
+    free_float REAL, updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS fundamental_data (
+    ticker TEXT, date TEXT, pe_ratio REAL, pb_ratio REAL, roe REAL,
+    debt_to_equity REAL, dividend_yield REAL, earnings_per_share REAL,
+    book_value_per_share REAL, net_profit REAL, revenue REAL,
+    total_assets REAL, total_liabilities REAL, cash_flow REAL,
+    fiscal_year INTEGER, quarter INTEGER, source TEXT,
+    PRIMARY KEY (ticker, date, source)
+);
+CREATE TABLE IF NOT EXISTS macro_data (
+    series_name TEXT, date TEXT, value REAL, unit TEXT,
+    source TEXT, frequency TEXT, PRIMARY KEY (series_name, date, source)
+);
+CREATE TABLE IF NOT EXISTS foreign_flow (
+    ticker TEXT, date TEXT, foreign_buy REAL, foreign_sell REAL,
+    foreign_net REAL, domestic_buy REAL, domestic_sell REAL,
+    domestic_net REAL, source TEXT, PRIMARY KEY (ticker, date, source)
+);
+CREATE TABLE IF NOT EXISTS broker_flow (
+    ticker TEXT, date TEXT, broker TEXT, buy_volume REAL, buy_value REAL,
+    sell_volume REAL, sell_value REAL, net_volume REAL, net_value REAL,
+    source TEXT, PRIMARY KEY (ticker, date, broker, source)
+);
+CREATE TABLE IF NOT EXISTS policy_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, event_type TEXT,
+    description TEXT, impact TEXT, source TEXT, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS dividends (
+    ticker TEXT, ex_date TEXT, record_date TEXT, payment_date TEXT,
+    amount REAL, currency TEXT, frequency TEXT, source TEXT,
+    PRIMARY KEY (ticker, ex_date, source)
+);
+CREATE TABLE IF NOT EXISTS sector_master (
+    sector_code TEXT PRIMARY KEY, sector_name TEXT, parent_sector TEXT,
+    description TEXT, updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS market_calendar (
+    date TEXT PRIMARY KEY, exchange TEXT, is_trading_day INTEGER DEFAULT 1,
+    holiday_name TEXT, half_day INTEGER DEFAULT 0, updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS fear_greed (
+    date TEXT PRIMARY KEY, value REAL, classification TEXT,
+    source TEXT, updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS external_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, event_type TEXT,
+    description TEXT, region TEXT, impact_level TEXT, source TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS esg_scores (
+    ticker TEXT, date TEXT, e_score REAL, s_score REAL, g_score REAL,
+    esg_score REAL, source TEXT, PRIMARY KEY (ticker, date, source)
+);
+CREATE TABLE IF NOT EXISTS corporate_governance (
+    ticker TEXT, date TEXT, board_size INTEGER, independent_directors INTEGER,
+    audit_committee_quality TEXT, ownership_concentration REAL, source TEXT,
+    PRIMARY KEY (ticker, date, source)
+);
+CREATE TABLE IF NOT EXISTS stock_personality (
+    ticker TEXT PRIMARY KEY, personality_type TEXT, volatility_profile TEXT,
+    liquidity_profile TEXT, beta REAL, correlation_to_ihsg REAL, updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS trade_journal (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, entry_date TEXT,
+    exit_date TEXT, entry_price REAL, exit_price REAL, quantity REAL,
+    side TEXT, pnl REAL, return_pct REAL, strategy TEXT, notes TEXT,
+    tags TEXT, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS pattern_analysis (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, date TEXT,
+    pattern_type TEXT, confidence REAL, direction TEXT, details TEXT,
+    source TEXT, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS valuation_cache (
+    ticker TEXT, date TEXT, method TEXT, intrinsic_value REAL,
+    market_price REAL, upside_pct REAL, assumptions TEXT, source TEXT,
+    PRIMARY KEY (ticker, date, method, source)
+);
+CREATE TABLE IF NOT EXISTS technical_indicators (
+    ticker TEXT, date TEXT, indicator TEXT, value REAL, timeframe TEXT,
+    source TEXT, PRIMARY KEY (ticker, date, indicator, timeframe, source)
+);
+CREATE INDEX IF NOT EXISTS idx_fundamental_ticker ON fundamental_data(ticker);
+CREATE INDEX IF NOT EXISTS idx_fundamental_date ON fundamental_data(date);
+CREATE INDEX IF NOT EXISTS idx_macro_series ON macro_data(series_name);
+CREATE INDEX IF NOT EXISTS idx_macro_date ON macro_data(date);
+CREATE INDEX IF NOT EXISTS idx_foreign_flow_ticker ON foreign_flow(ticker);
+CREATE INDEX IF NOT EXISTS idx_foreign_flow_date ON foreign_flow(date);
+CREATE INDEX IF NOT EXISTS idx_dividends_ticker ON dividends(ticker);
+CREATE INDEX IF NOT EXISTS idx_trade_journal_ticker ON trade_journal(ticker);
+CREATE INDEX IF NOT EXISTS idx_technical_indicators_ticker ON technical_indicators(ticker);
+CREATE INDEX IF NOT EXISTS idx_technical_indicators_date ON technical_indicators(date);
 """
 
 
@@ -189,6 +289,8 @@ class DataStorage:
     @contextmanager
     def _connect(self):
         conn = sqlite3.connect(self.db_path)
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA busy_timeout = 5000")
         conn.execute("PRAGMA foreign_keys = ON")
         try:
             yield conn
@@ -200,16 +302,71 @@ class DataStorage:
             conn.close()
 
     def _init_db(self):
+        self._migrate_legacy_tables()
         with self._connect() as conn:
             conn.executescript(SCHEMA)
+        # Set WAL as persistent journal mode (database-level, not per-connection)
+        # WAL allows concurrent reads during writes — critical for large imports (P2-3).
+        with self._connect() as conn:
+            mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+            if mode.lower() != "wal":
+                conn.execute("PRAGMA journal_mode = WAL")
+            # Set synchronous=NORMAL for WAL (safe + faster than FULL)
+            conn.execute("PRAGMA synchronous = NORMAL")
+            # Cache size 64MB for better import performance
+            conn.execute("PRAGMA cache_size = -65536")
+
+    def _migrate_legacy_tables(self):
+        """Rename legacy tables with incompatible schemas to _legacy_backup.
+
+        Tables imported from pasar_modal had different column names (e.g.,
+        trade_journal used 'kode' instead of 'ticker'). CREATE TABLE IF NOT EXISTS
+        won't fix them, so we rename them to preserve data while allowing new
+        schema tables to be created.
+        """
+        # Map: new_table_name -> list of old column names that indicate legacy schema
+        legacy_indicators = {
+            "trade_journal": ["kode", "trader_id"],
+            "pattern_analysis": ["kode", "personality_label"],
+            "technical_indicators": ["kode", "tanggal"],
+            "fundamental_data": ["kode", "periode"],
+            "foreign_flow": ["tanggal", "beli"],
+            "broker_flow": ["tanggal", "kode"],
+            "macro_data": ["periode", "suku_bunga"],
+            "instrument_master": ["kode", "nama"],
+        }
+        with self._connect() as conn:
+            for table, old_cols in legacy_indicators.items():
+                # Check if table exists
+                exists = conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                    (table,),
+                ).fetchone()
+                if not exists:
+                    continue
+                # Check if it has legacy columns
+                cols = conn.execute(f"PRAGMA table_info({table})").fetchall()
+                col_names = {c[1] for c in cols}
+                if any(c in col_names for c in old_cols):
+                    backup_name = f"{table}_legacy_backup"
+                    # Check if backup already exists
+                    backup_exists = conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                        (backup_name,),
+                    ).fetchone()
+                    if backup_exists:
+                        # Backup already exists from previous run — just drop the old table
+                        conn.execute(f"DROP TABLE {table}")
+                    else:
+                        conn.execute(f"ALTER TABLE {table} RENAME TO {backup_name}")
 
     # ---------- Scores ----------
     def save_score(self, ticker: str, engine: str, score: float, breakdown: dict, as_of: str | None = None):
         import json
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         if as_of is None:
-            as_of = datetime.now(timezone.utc).isoformat()
+            as_of = datetime.now(UTC).isoformat()
         with self._connect() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO scores (ticker, engine, score, breakdown, as_of) VALUES (?, ?, ?, ?, ?)",
@@ -234,10 +391,10 @@ class DataStorage:
 
     # ---------- Relationship ----------
     def save_relationship(self, asset_a: str, asset_b: str, window: int, correlation: float, lag: int, updated_at: str | None = None):
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         if updated_at is None:
-            updated_at = datetime.now(timezone.utc).isoformat()
+            updated_at = datetime.now(UTC).isoformat()
         with self._connect() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO relationship_matrix (asset_a, asset_b, window, correlation, lag, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -293,31 +450,84 @@ class DataStorage:
         required = {"ticker", "timestamp", "open", "high", "low", "close", "volume", "source"}
         if not required.issubset(df.columns):
             raise ValueError(f"DataFrame OHLCV wajib memiliki kolom: {required}")
+        df = df.copy()
+        if "ingested_at" not in df.columns:
+            df["ingested_at"] = None
+        if "adjusted_close" not in df.columns:
+            df["adjusted_close"] = df["close"]
+        rows = [
+            (
+                row.get("ticker"), row.get("asset_class", "equity"),
+                row.get("exchange", "IDX"), row.get("timestamp"),
+                row.get("timeframe", "1d"), float(row.get("open")),
+                float(row.get("high")), float(row.get("low")),
+                float(row.get("close")), float(row.get("volume")),
+                float(row.get("adjusted_close")),
+                row.get("source"), row.get("ingested_at"),
+                row.get("data_quality_score"),
+            )
+            for _, row in df.iterrows()
+        ]
         with self._connect() as conn:
-            df = df.copy()
-            for col in ["ingested_at"]:
-                if col not in df.columns:
-                    df[col] = None
-            for _, row in df.iterrows():
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO ohlcv
-                    (ticker, asset_class, exchange, timestamp, timeframe, open, high, low,
-                     close, volume, adjusted_close, source, ingested_at, data_quality_score)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        row.get("ticker"), row.get("asset_class", "equity"),
-                        row.get("exchange", "IDX"), row.get("timestamp"),
-                        row.get("timeframe", "1d"), float(row.get("open")),
-                        float(row.get("high")), float(row.get("low")),
-                        float(row.get("close")), float(row.get("volume")),
-                        float(row.get("close")),  # adjusted_close sementara sama close (belum aksi korporasi)
-                        row.get("source"), row.get("ingested_at"),
-                        row.get("data_quality_score"),
-                    ),
-                )
+            conn.executemany(
+                """
+                INSERT OR REPLACE INTO ohlcv
+                (ticker, asset_class, exchange, timestamp, timeframe, open, high, low,
+                 close, volume, adjusted_close, source, ingested_at, data_quality_score)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
         return len(df)
+
+    def update_adjusted_close(self, ticker: str) -> int:
+        """Recompute and persist adjusted_close for a ticker using corporate actions.
+
+        Uses CorporateActionEngine.compute_adjustment_factor to calculate the
+        cumulative adjustment factor (split + dividend), then updates the
+        adjusted_close column in the ohlcv table (§4.3 SARAN_PENGEMBANGAN.md).
+
+        Returns the number of rows updated.
+        """
+        from trading_system.corporate.actions import CorporateActionEngine
+
+        engine = CorporateActionEngine(self)
+        df = engine.compute_adjustment_factor(ticker)
+        if df.empty:
+            return 0
+
+        rows = []
+        for ts, row in df.iterrows():
+            ts_str = ts.strftime("%Y-%m-%d %H:%M:%S") if hasattr(ts, "strftime") else str(ts)
+            rows.append((float(row["adj_close"]), ts_str, ticker))
+
+        with self._connect() as conn:
+            conn.executemany(
+                "UPDATE ohlcv SET adjusted_close = ? WHERE timestamp = ? AND ticker = ?",
+                rows,
+            )
+        return len(rows)
+
+    def executemany_batch(
+        self,
+        sql: str,
+        rows: list[tuple],
+        batch_size: int = 5000,
+    ) -> int:
+        """Execute executemany in batches to avoid SQLite "too many SQL variables" error.
+
+        Also wraps each batch in a single transaction for performance.
+        Returns total number of rows affected.
+        """
+        if not rows:
+            return 0
+        total = 0
+        with self._connect() as conn:
+            for i in range(0, len(rows), batch_size):
+                batch = rows[i : i + batch_size]
+                conn.executemany(sql, batch)
+                total += len(batch)
+        return total
 
     def load_ohlcv(
         self,
@@ -350,9 +560,9 @@ class DataStorage:
 
     # ---------- Source Health ----------
     def update_source_health(self, source: str, status: str, success: bool):
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         with self._connect() as conn:
             if status == "ok":
                 conn.execute(
@@ -384,12 +594,12 @@ class DataStorage:
     # ---------- Audit ----------
     def audit(self, event_type: str, payload: Any, actor: str = "system"):
         import json
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO audit_log (event_type, payload, timestamp, actor) VALUES (?, ?, ?, ?)",
-                (event_type, json.dumps(payload, default=str), datetime.now(timezone.utc).isoformat(), actor),
+                (event_type, json.dumps(payload, default=str), datetime.now(UTC).isoformat(), actor),
             )
 
     # ---------- Positions ----------
@@ -397,8 +607,8 @@ class DataStorage:
                       stop_loss: float | None = None, take_profit: float | None = None,
                       trailing_stop_pct: float = 0.05) -> int:
         """Create a new position. Returns position id."""
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc).isoformat()
+        from datetime import datetime
+        now = datetime.now(UTC).isoformat()
         with self._connect() as conn:
             cursor = conn.execute(
                 """INSERT INTO positions (ticker, quantity, avg_entry_price, current_price,
@@ -435,9 +645,9 @@ class DataStorage:
 
     def update_position(self, position_id: int, **kwargs):
         """Update position fields."""
-        from datetime import datetime, timezone
+        from datetime import datetime
         if "closed_at" not in kwargs and kwargs.get("status") == "CLOSED":
-            kwargs["closed_at"] = datetime.now(timezone.utc).isoformat()
+            kwargs["closed_at"] = datetime.now(UTC).isoformat()
         sets = ", ".join(f"{k} = ?" for k in kwargs)
         vals = list(kwargs.values()) + [position_id]
         with self._connect() as conn:
@@ -454,8 +664,8 @@ class DataStorage:
         loss limit tidak perlu mengestimasi harga beli dari rata-rata historis
         (§3.4 SARAN_PENGEMBANGAN.md).
         """
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc).isoformat()
+        from datetime import datetime
+        now = datetime.now(UTC).isoformat()
         total_value = quantity * price
         with self._connect() as conn:
             cursor = conn.execute(
@@ -485,8 +695,8 @@ class DataStorage:
     # ---------- System State (key-value, untuk flag persisten lintas siklus) ----------
     def set_state(self, key: str, value: str) -> None:
         """Simpan flag/state persisten (mis. circuit breaker halt-for-today)."""
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc).isoformat()
+        from datetime import datetime
+        now = datetime.now(UTC).isoformat()
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO system_state (key, value, updated_at) VALUES (?, ?, ?) "
@@ -504,9 +714,9 @@ class DataStorage:
                              realized_pnl: float = 0, unrealized_pnl: float = 0,
                              total_return_pct: float = 0) -> int:
         """Save a daily equity snapshot for performance tracking."""
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc).isoformat()
-        today = datetime.now(timezone.utc).date().isoformat()
+        from datetime import datetime
+        now = datetime.now(UTC).isoformat()
+        today = datetime.now(UTC).date().isoformat()
         with self._connect() as conn:
             conn.execute("DELETE FROM equity_snapshots WHERE date = ?", (today,))
             cursor = conn.execute(
@@ -534,8 +744,8 @@ class DataStorage:
     # ---------- Watchlist ----------
     def add_to_watchlist(self, ticker: str, notes: str | None = None) -> int:
         """Add a ticker to the watchlist."""
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc).isoformat()
+        from datetime import datetime
+        now = datetime.now(UTC).isoformat()
         with self._connect() as conn:
             cursor = conn.execute(
                 """INSERT INTO watchlist (ticker, is_favorite, notes, created_at)
@@ -560,8 +770,8 @@ class DataStorage:
                 "SELECT is_favorite FROM watchlist WHERE ticker = ?", (ticker,)
             ).fetchone()
             if row is None:
-                from datetime import datetime, timezone
-                now = datetime.now(timezone.utc).isoformat()
+                from datetime import datetime
+                now = datetime.now(UTC).isoformat()
                 conn.execute(
                     "INSERT INTO watchlist (ticker, is_favorite, created_at) VALUES (?, 1, ?)",
                     (ticker, now),
@@ -590,8 +800,8 @@ class DataStorage:
                         r2_score: float = 0.0, n_samples: int = 0) -> int:
         """Save AI-optimized weights to DB."""
         import json
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc).isoformat()
+        from datetime import datetime
+        now = datetime.now(UTC).isoformat()
         weights_json = json.dumps(weights)
         with self._connect() as conn:
             cursor = conn.execute(
@@ -604,8 +814,8 @@ class DataStorage:
     def get_ai_weights(self, ticker: str | None = None, max_age_days: int = 7) -> dict | None:
         """Get most recent AI weights younger than max_age_days. Returns None if stale or missing."""
         import json
-        from datetime import datetime, timezone, timedelta
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+        from datetime import datetime, timedelta
+        cutoff = (datetime.now(UTC) - timedelta(days=max_age_days)).isoformat()
         with self._connect() as conn:
             if ticker:
                 row = conn.execute(
@@ -627,9 +837,9 @@ class DataStorage:
                                 max_drawdown: float, annualized_volatility: float,
                                 portfolio_value: float = 0.0) -> int:
         """Save daily portfolio risk metrics."""
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc).isoformat()
-        today = datetime.now(timezone.utc).date().isoformat()
+        from datetime import datetime
+        now = datetime.now(UTC).isoformat()
+        today = datetime.now(UTC).date().isoformat()
         with self._connect() as conn:
             cursor = conn.execute(
                 """INSERT INTO daily_risk_metrics

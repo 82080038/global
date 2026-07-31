@@ -127,11 +127,6 @@ interface PerformanceData {
   equity_curve: { date: string; equity: number }[];
 }
 
-interface WatchlistItem {
-  ticker: string;
-  is_favorite: boolean;
-};
-
 export default function Dashboard() {
   const [ticker, setTicker] = useState("BBCA.JK");
   const [input, setInput] = useState("BBCA.JK");
@@ -177,15 +172,6 @@ export default function Dashboard() {
       // silent
     }
   }, []);
-
-  const toggleFavorite = async (symbol: string) => {
-    try {
-      await fetch(`/api/watchlist/${symbol}`, { method: "POST" });
-      fetchWatchlist();
-    } catch {
-      // silent
-    }
-  };
 
   const fetchExecutionLogs = useCallback(async () => {
     try {
@@ -288,12 +274,17 @@ export default function Dashboard() {
 
   // Auto-refresh execution logs every 15s, performance every 60s
   useEffect(() => {
-    fetchExecutionLogs();
-    fetchRebalanceStatus();
-    fetchAutoTradeToggle();
-    fetchRebalanceToggle();
-    fetchPerformance(performancePeriod);
-    fetchWatchlist();
+    const init = async () => {
+      await Promise.all([
+        fetchExecutionLogs(),
+        fetchRebalanceStatus(),
+        fetchAutoTradeToggle(),
+        fetchRebalanceToggle(),
+        fetchPerformance(performancePeriod),
+        fetchWatchlist(),
+      ]);
+    };
+    init();
     if (!autoRefresh) return;
     const logInterval = setInterval(() => {
       fetchExecutionLogs();
@@ -697,7 +688,7 @@ export default function Dashboard() {
                 <XAxis dataKey="date" stroke="#666" fontSize={9} tickFormatter={(d: string) => d.slice(5)} />
                 <YAxis stroke="#666" fontSize={9} domain={["auto", "auto"]} />
                 <Tooltip
-                  formatter={(value: any) => `Rp ${Number(value).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`}
+                  formatter={(value: unknown) => `Rp ${Number(value).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`}
                   contentStyle={{ background: "#18181b", border: "1px solid #27272a" }}
                   itemStyle={{ color: "#e4e4e7" }}
                 />

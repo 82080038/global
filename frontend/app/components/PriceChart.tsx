@@ -8,6 +8,9 @@ import {
   LineSeries,
   ColorType,
   CrosshairMode,
+  type Time,
+  type SeriesMarker,
+  createSeriesMarkers,
 } from "lightweight-charts";
 
 interface Candle {
@@ -89,7 +92,7 @@ export default function PriceChart({
 
     candleSeries.setData(
       sorted.map((d) => ({
-        time: d.time as any,
+        time: d.time as Time,
         open: d.open,
         high: d.high,
         low: d.low,
@@ -108,7 +111,7 @@ export default function PriceChart({
       ma20Series.setData(
         sorted
           .filter((d) => d.ma_20 !== undefined)
-          .map((d) => ({ time: d.time as any, value: d.ma_20! }))
+          .map((d) => ({ time: d.time as Time, value: d.ma_20! }))
       );
     }
 
@@ -123,7 +126,7 @@ export default function PriceChart({
       ma50Series.setData(
         sorted
           .filter((d) => d.ma_50 !== undefined)
-          .map((d) => ({ time: d.time as any, value: d.ma_50! }))
+          .map((d) => ({ time: d.time as Time, value: d.ma_50! }))
       );
     }
 
@@ -139,7 +142,7 @@ export default function PriceChart({
       bbUpperSeries.setData(
         sorted
           .filter((d) => d.bb_upper !== undefined)
-          .map((d) => ({ time: d.time as any, value: d.bb_upper! }))
+          .map((d) => ({ time: d.time as Time, value: d.bb_upper! }))
       );
     }
     if (sorted.some((d) => d.bb_lower !== undefined)) {
@@ -153,7 +156,7 @@ export default function PriceChart({
       bbLowerSeries.setData(
         sorted
           .filter((d) => d.bb_lower !== undefined)
-          .map((d) => ({ time: d.time as any, value: d.bb_lower! }))
+          .map((d) => ({ time: d.time as Time, value: d.bb_lower! }))
       );
     }
 
@@ -168,7 +171,7 @@ export default function PriceChart({
     });
     volumeSeries.setData(
       sorted.map((d) => ({
-        time: d.time as any,
+        time: d.time as Time,
         value: d.volume ?? 0,
         color: d.close >= d.open ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)",
       }))
@@ -176,14 +179,14 @@ export default function PriceChart({
 
     // Signal markers (BUY/SELL arrows on candlestick)
     if (signals.length > 0) {
-      const markers = signals.map((s) => ({
-        time: s.time as any,
+      const markers: SeriesMarker<Time>[] = signals.map((s) => ({
+        time: s.time as Time,
         position: s.action === "BUY" ? "belowBar" : "aboveBar",
         color: s.action === "BUY" ? "#22c55e" : "#ef4444",
         shape: s.action === "BUY" ? "arrowUp" : "arrowDown",
         text: s.text || s.action,
       }));
-      (candleSeries as any).setMarkers(markers);
+      createSeriesMarkers(candleSeries, markers);
     }
 
     chart.timeScale().fitContent();
@@ -220,7 +223,7 @@ export default function PriceChart({
       rsiSeries.setData(
         sorted
           .filter((d) => d.rsi !== undefined)
-          .map((d) => ({ time: d.time as any, value: d.rsi! }))
+          .map((d) => ({ time: d.time as Time, value: d.rsi! }))
       );
 
       // Overbought/Oversold lines
@@ -278,7 +281,7 @@ export default function PriceChart({
           .map((d) => {
             const hist = d.macd! - d.macd_signal!;
             return {
-              time: d.time as any,
+              time: d.time as Time,
               value: hist,
               color: hist >= 0 ? "rgba(34,197,94,0.5)" : "rgba(239,68,68,0.5)",
             };
@@ -295,7 +298,7 @@ export default function PriceChart({
       macdLineSeries.setData(
         sorted
           .filter((d) => d.macd !== undefined)
-          .map((d) => ({ time: d.time as any, value: d.macd! }))
+          .map((d) => ({ time: d.time as Time, value: d.macd! }))
       );
 
       // Signal line
@@ -308,21 +311,12 @@ export default function PriceChart({
       signalLineSeries.setData(
         sorted
           .filter((d) => d.macd_signal !== undefined)
-          .map((d) => ({ time: d.time as any, value: d.macd_signal! }))
+          .map((d) => ({ time: d.time as Time, value: d.macd_signal! }))
       );
 
       macdChart.timeScale().fitContent();
     }
 
-    // Sync time scales across all panes
-    const syncCharts = (source: any) => {
-      const range = source.timeScale().getVisibleRange();
-      if (range) {
-        chart.timeScale().setVisibleRange(range);
-        if (rsiChart) rsiChart.timeScale().setVisibleRange(range);
-        if (macdChart) macdChart.timeScale().setVisibleRange(range);
-      }
-    };
     chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
       const range = chart.timeScale().getVisibleLogicalRange();
       if (range) {

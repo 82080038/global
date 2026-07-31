@@ -10,8 +10,9 @@ import numpy as np
 import pandas as pd
 from scipy import stats as sp_stats
 
-from trading_system.data.storage import DataStorage
 from trading_system.config import TRADING_CAPITAL
+from trading_system.data.storage import DataStorage
+from trading_system.risk.costs import compute_atr, get_default_cost_model
 
 
 class RiskEngine:
@@ -48,9 +49,9 @@ class RiskEngine:
         # Liquidity: target position must be < 1% of avg daily volume value
         adv_value = avg_volume * last_price
         target_value = position_size * capital
-        slippage = 0.0005  # 5 bps default
+        cost_model = get_default_cost_model()
+        slippage = cost_model.estimate_slippage(target_value, adv_value)
         if adv_value > 0 and target_value > adv_value * 0.01:
-            slippage = 0.002  # 20 bps if too big
             flags = ["LIQUIDITY_LOW"]
         else:
             flags = []
@@ -139,15 +140,9 @@ class RiskEngine:
         return float(drawdown.min())
 
     def _atr(self, df: pd.DataFrame, window: int = 14) -> float:
-        high = df["high"]
-        low = df["low"]
-        close = df["close"]
-        tr1 = high - low
-        tr2 = abs(high - close.shift())
-        tr3 = abs(low - close.shift())
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        atr = tr.rolling(window).mean()
-        return float(atr.iloc[-1]) if not atr.empty else np.nan
+        """ATR via consolidated costs.py (P2-4)."""
+        atr_series = compute_atr(df, window)
+        return float(atr_series.iloc[-1]) if not atr_series.empty else np.nan
 
     def calculate_portfolio_var(self, confidence: float = 0.95) -> dict:
         """Calculate portfolio-level VaR and CVaR from all open positions.

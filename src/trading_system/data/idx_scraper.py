@@ -9,7 +9,6 @@ Data disimpan ke Parquet archive dan opsional ke SQLite.
 
 from __future__ import annotations
 
-import json
 import time
 from datetime import datetime, timedelta
 from pathlib import Path

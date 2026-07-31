@@ -6,7 +6,6 @@ Reference: PASAR_MODAL_KNOWLEDGE_BASE.md Section 11.13
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -61,7 +60,7 @@ class TradeResult:
 def calculate_buy_costs(
     price: float,
     position_size: int,
-    rates: Optional[TaxRates] = None,
+    rates: TaxRates | None = None,
 ) -> TransactionCostBreakdown:
     """Hitung biaya pembelian saham."""
     if rates is None:
@@ -90,7 +89,7 @@ def calculate_buy_costs(
 def calculate_sell_costs(
     price: float,
     position_size: int,
-    rates: Optional[TaxRates] = None,
+    rates: TaxRates | None = None,
 ) -> TransactionCostBreakdown:
     """Hitung biaya penjualan saham."""
     if rates is None:
@@ -119,7 +118,7 @@ def calculate_sell_costs(
 def calculate_dividend_tax(
     dividend_per_share: float,
     position_size: int,
-    rates: Optional[TaxRates] = None,
+    rates: TaxRates | None = None,
 ) -> DividendTaxResult:
     """Hitung pajak dividen."""
     if rates is None:
@@ -141,7 +140,7 @@ def calculate_trade_result(
     entry_price: float,
     exit_price: float,
     position_size: int,
-    rates: Optional[TaxRates] = None,
+    rates: TaxRates | None = None,
 ) -> TradeResult:
     """Hitung hasil trade lengkap dengan pajak dan biaya."""
     if rates is None:
@@ -172,7 +171,7 @@ def calculate_effective_rate(
     entry_price: float,
     exit_price: float,
     position_size: int,
-    rates: Optional[TaxRates] = None,
+    rates: TaxRates | None = None,
 ) -> dict[str, float]:
     """Hitung effective rate (biaya total sebagai persentase dari nilai transaksi)."""
     if rates is None:

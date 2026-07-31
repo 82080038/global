@@ -6,6 +6,8 @@ Output: macro_score dan macro_regime (easing, tightening, growth, slowdown).
 
 from __future__ import annotations
 
+from datetime import UTC
+
 from trading_system.config import DEFAULT_MACRO_TICKERS
 from trading_system.data.acquisition import YahooFinanceAdapter, normalize_ohlcv
 from trading_system.data.storage import DataStorage
@@ -25,7 +27,7 @@ class MacroEconomicEngine:
 
         Refresh jika umur data > ``max_age_days`` hari bursa.
         """
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta
 
         for label, ticker in DEFAULT_MACRO_TICKERS.items():
             df = self.storage.load_ohlcv(ticker)
@@ -34,7 +36,7 @@ class MacroEconomicEngine:
                 last_ts = df.index[-1]
                 if hasattr(last_ts, "tzinfo") and last_ts.tzinfo is None:
                     last_ts = last_ts.tz_localize("UTC")
-                age = datetime.now(timezone.utc) - last_ts
+                age = datetime.now(UTC) - last_ts
                 if age > timedelta(days=max_age_days):
                     need_fetch = True
             if need_fetch:
@@ -75,6 +77,23 @@ class MacroEconomicEngine:
             return "neutral"
         except Exception:
             return "unknown"
+
+    # Mapping dari regime internal ke TIP-compatible taxonomy (§13.4 #6)
+    REGIME_MAP = {
+        "easing": "risk_on",
+        "growth": "risk_on",
+        "tightening": "risk_off",
+        "slowdown": "risk_off",
+        "neutral": "neutral",
+        "unknown": "neutral",
+    }
+
+    def map_regime(self, regime: str) -> str:
+        """Map internal regime to TIP-compatible regime (risk_on/risk_off/neutral).
+
+        Used by Alpha Composer (Y) and No-Trade Engine (Z) from TIP.
+        """
+        return self.REGIME_MAP.get(regime, "neutral")
 
     def compute_score(self, rates: dict, regime: str) -> tuple[float, dict]:
         breakdown = {}
@@ -124,7 +143,7 @@ class MacroEconomicEngine:
         breakdown["regime"] = regime
 
         # Data age tracking (§4.2)
-        from datetime import datetime, timezone
+        from datetime import datetime
         data_ages = {}
         for label, ticker in DEFAULT_MACRO_TICKERS.items():
             df = self.storage.load_ohlcv(ticker)
@@ -132,7 +151,7 @@ class MacroEconomicEngine:
                 last_ts = df.index[-1]
                 if hasattr(last_ts, "tzinfo") and last_ts.tzinfo is None:
                     last_ts = last_ts.tz_localize("UTC")
-                age = (datetime.now(timezone.utc) - last_ts).days
+                age = (datetime.now(UTC) - last_ts).days
                 data_ages[label] = age
             else:
                 data_ages[label] = None

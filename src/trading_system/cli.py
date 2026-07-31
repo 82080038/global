@@ -7,19 +7,19 @@ from pathlib import Path
 # Add src to path when running as script
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from trading_system.analysis.pipeline import AnalysisPipeline
+from trading_system.backtest.engine import BacktestEngine
+from trading_system.backtest.strategies import BuyAndHold, MovingAverageCrossover
+from trading_system.config import TRADING_CAPITAL
+from trading_system.corporate.actions import CorporateActionEngine
 from trading_system.data.acquisition import YahooFinanceAdapter, normalize_ohlcv
 from trading_system.data.storage import DataStorage
 from trading_system.data.validation import DataQualityValidator
-from trading_system.backtest.engine import BacktestEngine
-from trading_system.backtest.strategies import BuyAndHold, MovingAverageCrossover
-from trading_system.analysis.pipeline import AnalysisPipeline
-from trading_system.corporate.actions import CorporateActionEngine
-from trading_system.intelligence.relationship import MarketRelationshipEngine
 from trading_system.decision.engine import DecisionEngine
-from trading_system.xai.engine import ExplainableAIEngine
+from trading_system.intelligence.relationship import MarketRelationshipEngine
 from trading_system.monitoring.engine import MonitoringEngine
 from trading_system.paper_trading.engine import PaperTradingEngine
-from trading_system.config import TRADING_CAPITAL
+from trading_system.xai.engine import ExplainableAIEngine
 
 
 def fetch_and_store(tickers, period="2y"):
@@ -109,6 +109,12 @@ def main():
     p_corp = sub.add_parser("corporate-actions", help="Fetch and list corporate actions")
     p_corp.add_argument("ticker", help="Ticker")
 
+    p_adj = sub.add_parser("update-adjusted-close", help="Recompute adjusted_close from corporate actions")
+    p_adj.add_argument("ticker", help="Ticker")
+
+    p_imp = sub.add_parser("import-legacy", help="Import data from legacy saham.db")
+    p_imp.add_argument("--source", default="C:/xampp/htdocs/pasar_modal/data/saham.db", help="Source SQLite DB path")
+
     p_rel = sub.add_parser("relationship", help="Compute rolling correlation with global/macro assets")
     p_rel.add_argument("ticker", help="Ticker")
     p_rel.add_argument("--window", type=int, default=60, help="Rolling window")
@@ -145,6 +151,13 @@ def main():
         corp = CorporateActionEngine()
         result = corp.fetch(args.ticker)
         print(result)
+    elif args.cmd == "update-adjusted-close":
+        storage = DataStorage()
+        n = storage.update_adjusted_close(args.ticker)
+        print(f"Updated adjusted_close for {n} rows of {args.ticker}")
+    elif args.cmd == "import-legacy":
+        from trading_system.data.import_legacy import run_import
+        run_import(source_db=args.source)
     elif args.cmd == "relationship":
         rel = MarketRelationshipEngine(window=args.window)
         result = rel.compute(args.ticker)
@@ -168,6 +181,8 @@ def main():
     elif args.cmd == "backtest":
         from trading_system.backtest.metrics import monte_carlo_simulation, walk_forward_analysis
 
+        engine = BacktestEngine()
+
         if args.strategy == "buy_and_hold":
             strategy = BuyAndHold()
         elif args.strategy == "ma_crossover":
@@ -178,7 +193,6 @@ def main():
         else:
             print(f"Unknown strategy: {args.strategy}")
             return
-        engine = BacktestEngine()
         result = engine.run(args.ticker, strategy, initial_capital=args.capital)
 
         if result.get("status") != "ok":
