@@ -152,7 +152,10 @@ global/
 ├── README.md
 ├── pyproject.toml
 ├── requirements.txt
-├── run_all.sh
+├── .env.example                  # Template environment variables
+├── .gitignore
+├── Dockerfile                    # Backend container
+├── docker-compose.yml            # Multi-service orchestration
 ├── data/
 │   ├── raw/                       # Raw zone: file Parquet mentah
 │   ├── clean/                     # Clean zone: data tervalidasi
@@ -160,6 +163,12 @@ global/
 ├── docs/
 │   ├── arsitektur-sistem-trading.md
 │   └── buku-sistem-trading.md     # Dokumen ini
+├── scripts/
+│   ├── __init__.py
+│   ├── daily_runner.py            # Scheduler harian (fetch + compute + notify)
+│   ├── test_end_to_end.py         # E2E pipeline test
+│   ├── start_production.sh        # Start all services (Linux)
+│   └── start_production.bat       # Start all services (Windows)
 ├── src/
 │   └── trading_system/
 │       ├── __init__.py
@@ -169,7 +178,8 @@ global/
 │       │   ├── acquisition.py
 │       │   ├── contracts.py
 │       │   ├── storage.py
-│       │   └── validation.py
+│       │   ├── validation.py
+│       │   └── seeder.py          # Database seeder untuk testing
 │       ├── analysis/              # Analysis Layer
 │       │   ├── pipeline.py
 │       │   ├── technical.py
@@ -178,22 +188,29 @@ global/
 │       │   └── global_market.py
 │       ├── intelligence/
 │       │   └── relationship.py
-│       ├── sentiment/
-│       │   └── engine.py
+│       ├── sentiment/             # Sentiment Layer (modular sources)
+│       │   ├── engine.py          # NLP engine (Indonesian RSS feeds)
+│       │   ├── foreign_flow.py    # Foreign net flow sentiment
+│       │   ├── broker_summary.py  # Broker summary (smart money)
+│       │   ├── social_media.py    # Reddit + X/Twitter sentiment
+│       │   └── google_trends.py   # Google Trends sentiment
 │       ├── corporate/
 │       │   └── actions.py
 │       ├── risk/
 │       │   └── engine.py
 │       ├── portfolio/
-│       │   └── engine.py
+│       │   ├── engine.py          # Portfolio engine
+│       │   ├── performance.py     # Performance analytics (Sharpe, drawdown, win rate)
+│       │   └── rebalancer.py      # Portfolio rebalancer (target weights, drift)
 │       ├── execution/
-│       │   └── engine.py
+│       │   ├── engine.py          # Manual execution engine
+│       │   └── automated.py       # Automated execution (robot trader, stop-loss, trailing)
 │       ├── decision/
 │       │   └── engine.py
 │       ├── xai/
 │       │   └── engine.py
 │       ├── ai_learning/
-│       │   └── engine.py
+│       │   └── engine.py          # Linear Regression weight optimization
 │       ├── paper_trading/
 │       │   └── engine.py
 │       ├── monitoring/
@@ -201,24 +218,44 @@ global/
 │       ├── backtest/
 │       │   ├── engine.py
 │       │   ├── strategies.py
-│       │   └── metrics.py
+│       │   └── metrics.py         # Monte Carlo, Walk-Forward
+│       ├── utils/
+│       │   ├── __init__.py
+│       │   └── notifier.py        # Telegram notifier
 │       └── api/
-│           └── app.py
+│           ├── __init__.py
+│           └── app.py             # FastAPI REST + WebSocket
 ├── frontend/                      # Next.js frontend
 │   ├── package.json
 │   ├── next.config.ts
+│   ├── Dockerfile                 # Frontend container
 │   ├── app/
 │   │   ├── layout.tsx
 │   │   ├── page.tsx
 │   │   ├── globals.css
-│   │   ├── dashboard/page.tsx
+│   │   ├── dashboard/page.tsx     # Main dashboard with toggles
 │   │   ├── engines/page.tsx
 │   │   └── components/
 │   │       ├── TerminalLayout.tsx
 │   │       └── PriceChart.tsx
 │   └── public/
 └── tests/
+    ├── __init__.py
+    ├── unit/                      # 117 unit tests
+    │   ├── __init__.py
+    │   ├── conftest.py
+    │   ├── test_ai_learning.py
+    │   ├── test_backtest.py
+    │   ├── test_decision.py
+    │   ├── test_execution.py
+    │   ├── test_fundamental.py
+    │   ├── test_performance_watchlist.py
+    │   ├── test_rebalancer.py
+    │   ├── test_risk.py
+    │   ├── test_technical.py
+    │   └── test_validation.py
     └── e2e/
+        ├── __init__.py
         ├── test_dashboard.py
         └── record_demo.py
 ```
@@ -236,7 +273,8 @@ global/
 | fastapi | >= 0.100.0 | REST API framework |
 | uvicorn[standard] | >= 0.23.0 | ASGI server |
 | httpx | >= 0.24.0 | HTTP client |
-| plotly | >= 5.15.0 | Plotting |
+| feedparser | >= 6.0.0 | RSS feed parser untuk sentiment NLP |
+| scikit-learn | >= 1.3.0 | Linear Regression untuk AI Learning |
 | python-dateutil | >= 2.8.2 | Utilitas tanggal |
 | pytest | >= 7.4.0 | Testing framework |
 | playwright | >= 1.40.0 | E2E browser testing |
@@ -617,43 +655,136 @@ Hasil: DataFrame dengan `adj_factor` dan `adj_close` untuk analisis historis aku
 
 # Bab 8: Sentiment Engine
 
+Sentiment Layer bersifat modular dengan 5 sumber sentimen yang berbeda. Setiap sumber dapat beroperasi secara independen dan digabungkan oleh `SentimentEngine` sebagai skor akhir.
+
+## 8.1 SentimentEngine (NLP — Indonesian News)
+
 **File:** `src/trading_system/sentiment/engine.py`
 
-## 8.1 Tujuan
+### Tujuan
 
-Mengukur sentimen pasar. Saat ini placeholder yang menggunakan perubahan harga dan volume sebagai proxy sentimen.
+Menganalisis berita keuangan Indonesia menggunakan NLP lexicon-based approach. Mengambil RSS feed dari Bisnis.com, Kontan, dan CNBC Indonesia, lalu melakukan tokenisasi dan scoring berdasarkan Indonesian sentiment lexicon.
 
-## 8.2 Metodologi Proxy
+### Indonesian Sentiment Lexicon
 
-**Price Score (0–25):** Rata-rata return 5 hari terakhir:
+- **Positive words**: naik, tinggi, untung, positif, bullish, beli, kuat, tumbuh, optimis, rally, gain, profit, dividen, ekspansi, investasi, surplus, rebound, pemulihan, dll. (40+ kata)
+- **Negative words**: turun, rugi, negatif, bearish, jual, lemah, jatuh, anjlok, melemah, tertekan, koreksi, penurunan, crash, fraud, skandal, gagal, bangkrut, pailit, default, risiko, dll. (40+ kata)
 
+### RSS Feeds
+
+```python
+RSS_FEEDS = [
+    "https://www.bisnis.com/rss/markets",
+    "https://www.kontan.co.id/rss/investasi",
+    "https://www.cnbcindonesia.com/market/rss",
+]
 ```
-price_score = max(0, min(25, 12.5 + avg_return * 500))
-```
 
-**Volume Score (0–25):** Rasio volume 5 hari vs 20 hari:
+### Method `compute(ticker)`
 
-```
-vol_ratio = avg_volume_5d / avg_volume_20d
-volume_score = min(25, vol_ratio * 12.5)
-```
+1. Fetch berita dari RSS feeds, filter berdasarkan keyword ticker.
+2. Tokenisasi headline + body menggunakan regex.
+3. Hitung sentiment score: `(positive_count - negative_count) / total_words`.
+4. Jika tidak ada berita, fallback ke proxy method (price & volume momentum).
+5. Skor akhir = `(sentiment + 1) * 50` (range 0–100).
 
-## 8.3 Output
+### Fallback: Price & Volume Proxy
+
+Jika RSS feed tidak tersedia atau tidak ada berita untuk ticker:
+
+- **Price Score (0–25):** Rata-rata return 5 hari terakhir.
+- **Volume Score (0–25):** Rasio volume 5 hari vs 20 hari.
+
+## 8.2 ForeignFlowSentiment
+
+**File:** `src/trading_system/sentiment/foreign_flow.py`
+
+### Tujuan
+
+Menganalisis pola aliran modal asing. Foreign investor adalah driver utama di BEI. Net buy = bullish, net sell = bearish.
+
+### Metodologi
+
+Proxy: large volume bars dengan harga naik = akumulasi asing, large volume bars dengan harga turun = distribusi asing. (True foreign flow data membutuhkan IDX broker summary — lihat BrokerSummarySentiment.)
+
+### Output
 
 ```json
 {
   "status": "ok",
-  "engine": "sentiment",
-  "score": 62.50,
-  "sentiment": 0.25,
+  "engine": "foreign_flow",
+  "score": 65.0,
+  "label": "accumulation",
+  "net_flow_proxy": 0.15,
   "breakdown": {
-    "price_score": 18.75,
-    "volume_score": 15.00
+    "accumulation_days": 8,
+    "distribution_days": 3,
+    "avg_volume_ratio": 1.25
   }
 }
 ```
 
-`sentiment` berkisar -1 (bearish) hingga +1 (bullish). `score` = (sentiment + 1) * 50.
+## 8.3 BrokerSummarySentiment
+
+**File:** `src/trading_system/sentiment/broker_summary.py`
+
+### Tujuan
+
+Track smart money dari IDX broker summary harian. Broker asing besar (CLSA, Credit Suisse, JP Morgan, UBS, Morgan Stanley, Goldman Sachs) diklasifikasikan sebagai "smart money".
+
+### Klasifikasi Broker
+
+- **Smart Money (foreign + institutional):** CLSA, CS, JPM, UBS, MS, GS, DB, CITI, BNP, BARCAP, MACQ, NOMURA, dll.
+- **Retail Brokers:** POIN, IPOT, STOCK, MINNA, MULIA, PHILLIP.
+
+### Metodologi
+
+Jika smart money net buy = bullish signal. Jika smart money net sell = bearish signal. Retail net buy dengan smart money sell = contrarian bearish signal.
+
+## 8.4 SocialMediaSentiment
+
+**File:** `src/trading_system/sentiment/social_media.py`
+
+### Tujuan
+
+Deteksi sentiment real-time dari social media sebelum price action terjadi.
+
+### Sumber Data
+
+- **Reddit:** r/IndonesiaInvesting, r/saham, r/IndonesiaInvestments (gratis via PRAW)
+- **X/Twitter:** Search by ticker hashtag (butuh API key)
+
+### Metodologi
+
+1. Fetch post/comment dari Reddit dan X/Twitter.
+2. Tokenisasi menggunakan Indonesian lexicon (dari SentimentEngine) + emoji detection.
+3. Hitung sentiment score per post, lalu aggregate.
+4. Detect volume spike (jumlah post meningkat = increasing attention).
+
+### Ticker Keywords
+
+Setiap ticker memiliki mapping keyword untuk search, misalnya:
+- BBCA.JK → `$BBCA`, `BBCA`, `saham BCA`, `#BBCA`
+- TLKM.JK → `$TLKM`, `TLKM`, `saham Telkom`, `#TLKM`
+
+## 8.5 GoogleTrendsSentiment
+
+**File:** `src/trading_system/sentiment/google_trends.py`
+
+### Tujuan
+
+Search interest sebagai leading indicator. Search volume naik 1-3 hari sebelum retail investor beli.
+
+### Metodologi
+
+1. Fetch Google Trends data via pytrends API (gratis).
+2. Map ticker ke search keywords (misal: BBCA.JK → "saham BCA", "BBCA", "bank bca saham").
+3. Hitung trend direction: rising = bullish (momentum), falling = bearish (waning interest).
+4. Detect breakout: search volume > 2x average = viral attention.
+
+## 8.6 Integrasi Pipeline
+
+`AnalysisPipeline` memanggil `SentimentEngine.compute(ticker)` yang menggabungkan NLP news sentiment sebagai skor utama. Sumber sentiment lainnya (foreign flow, broker summary, social media, google trends) dapat diakses secara independen via API endpoint `/api/sentiment/{ticker}` atau diintegrasikan ke pipeline di masa depan.
 
 ---
 
@@ -724,17 +855,17 @@ Jika volatilitas annualized > 50%:
 
 # Bab 10: Portfolio Engine
 
+Portfolio Layer terdiri dari tiga komponen: Portfolio Engine (manajemen posisi), Performance Analytics (metrik kinerja), dan Rebalancer (penyeimbangan berkala).
+
+## 10.1 Portfolio Engine
+
 **File:** `src/trading_system/portfolio/engine.py`
 
-## 10.1 Tujuan
+### Tujuan
 
-Mengelola alokasi modal berdasarkan rekomendasi BUY/HOLD/SELL. Saat ini implementasi minimal: hanya memproses rekomendasi BUY.
+Mengelola alokasi modal berdasarkan rekomendasi BUY/HOLD/SELL. Memproses rekomendasi BUY menjadi order yang siap dieksekusi.
 
-## 10.2 Method `current_positions()`
-
-Mengembalikan DataFrame posisi saat ini. Sementara hardcoded sebagai cash only. Nantinya akan mengambil dari tabel `positions` di database.
-
-## 10.3 Method `generate_orders(recommendation)`
+### Method `generate_orders(recommendation)`
 
 Hanya memproses rekomendasi dengan `action == "BUY"`:
 
@@ -744,6 +875,102 @@ Hanya memproses rekomendasi dengan `action == "BUY"`:
 4. Menghitung `shares = int(capital_alloc // mid_price)`.
 5. Jika shares <= 0, tidak ada order.
 6. Mengembalikan list berisi satu order dict dengan `ticker`, `action`, `shares`, `target_price`, `order_value`.
+
+## 10.2 Performance Analytics
+
+**File:** `src/trading_system/portfolio/performance.py`
+
+### Tujuan
+
+Menghitung metrik kinerja portofolio dari order history dan equity snapshots. Memberikan gambaran return, risk-adjusted return, drawdown, dan win rate.
+
+### Method `compute_equity()`
+
+Menghitung total equity saat ini = cash + nilai pasar posisi:
+1. Ambil semua posisi terbuka dari `storage.get_all_open_positions()`.
+2. Hitung nilai pasar: `price * quantity` per posisi.
+3. Hitung cash: `initial_capital - total_bought + total_sold`.
+4. Return `cash + positions_value`.
+
+### Method `save_daily_snapshot()`
+
+Menyimpan snapshot equity harian ke tabel `portfolio_performance` untuk tracking historis.
+
+### Method `compute_metrics(period_days)`
+
+Menghitung metrik kinerja untuk periode tertentu:
+
+| Metrik | Deskripsi |
+|--------|-----------|
+| Total Return | Return total periode |
+| Sharpe Ratio | Risk-adjusted return |
+| Max Drawdown | Penurunan terbesar dari puncak equity |
+| Win Rate | Persentase trade profit |
+| Profit Factor | Total profit / total loss |
+| Average Win | Rata-rata profit per trade |
+| Average Loss | Rata-rata loss per trade |
+| Total Trades | Jumlah trade dalam periode |
+| Equity Curve | Time series nilai equity |
+
+### Output
+
+```json
+{
+  "status": "ok",
+  "period_days": 30,
+  "total_return": 0.045,
+  "sharpe_ratio": 1.25,
+  "max_drawdown": -0.032,
+  "win_rate": 0.60,
+  "profit_factor": 1.8,
+  "total_trades": 15,
+  "equity_curve": [["2026-07-01", 100000000], ["2026-07-02", 100500000], ...]
+}
+```
+
+## 10.3 Portfolio Rebalancer
+
+**File:** `src/trading_system/portfolio/rebalancer.py`
+
+### Tujuan
+
+Menyeimbangkan portofolio ke bobot target secara berkala. Membaca target bobot dari env var `REBALANCE_TARGET_WEIGHTS` (JSON), menghitung drift, dan mengeksekusi order untuk menyeimbangkan.
+
+### Konfigurasi Environment
+
+```bash
+REBALANCE_ENABLED=true
+REBALANCE_FREQUENCY=monthly
+REBALANCE_TARGET_WEIGHTS={"BBCA.JK": 0.4, "TLKM.JK": 0.3, "ASII.JK": 0.3}
+```
+
+### Method `get_current_portfolio_value()`
+
+Menghitung total nilai portofolio dari semua posisi terbuka + harga terakhir.
+
+### Method `compute_drift()`
+
+Menghitung selisih (drift) antara bobot aktual dan bobot target:
+
+1. Ambil semua posisi terbuka.
+2. Hitung bobot aktual: `position_value / total_portfolio_value`.
+3. Bandingkan dengan `target_weights`.
+4. Return dict drift per ticker.
+
+### Method `rebalance()`
+
+Mengeksekusi rebalancing:
+
+1. Hitung drift.
+2. Untuk setiap ticker dengan drift > threshold (default 5%):
+   - Jika overweight: generate SELL order untuk kelebihan.
+   - Jika underweight: generate BUY order untuk kekurangan.
+3. Hitung biaya transaksi.
+4. Jika `rebalance_enabled = false`, hanya log tanpa eksekusi.
+
+### Runtime Toggle
+
+Rebalancer dapat di-toggle on/off saat runtime via API endpoint `POST /api/rebalance/toggle` tanpa restart server. Status toggle dapat diambil via `GET /api/rebalance/toggle`.
 
 ---
 
@@ -803,6 +1030,82 @@ Memeriksa apakah modal cukup untuk eksekusi order:
 total_cost = order_value * (1 + buy_fee + levy + slippage)
 feasible = cash >= total_cost
 ```
+
+## 11.7 Automated Execution Engine (Robot Trader)
+
+**File:** `src/trading_system/execution/automated.py`
+
+### Tujuan
+
+Robot trader yang membaca sinyal dari Decision Engine, menghitung position sizing dari Risk Engine, mengeksekusi order otomatis, dan memantau Stop-Loss / Take-Profit / Trailing Stop secara real-time.
+
+### Mode Operasi
+
+- `AUTO_TRADE_ENABLED=false` (default): Mode monitoring — hanya log sinyal, tidak eksekusi.
+- `AUTO_TRADE_ENABLED=true`: Mode eksekusi — eksekusi BUY/SELL order otomatis.
+
+### Konfigurasi Environment
+
+```bash
+AUTO_TRADE_ENABLED=true
+TRADING_CAPITAL=100000000
+RISK_PER_TRADE=0.01
+DAILY_LOSS_LIMIT=0
+```
+
+### Method `process_signal(ticker)`
+
+Alur eksekusi otomatis untuk satu ticker:
+
+1. Panggil `DecisionEngine.recommend(ticker)` untuk dapatkan sinyal.
+2. Jika action == BUY dan tidak ada posisi terbuka:
+   - Panggil `RiskEngine.analyze(ticker)` untuk position sizing.
+   - Hitung shares berdasarkan `position_size * capital / price`.
+   - Eksekusi BUY order via `ExecutionEngine.simulate_fill()`.
+   - Simpan order ke database.
+   - Simpan posisi ke tabel `positions` dengan stop-loss dan take-profit.
+3. Jika action == AVOID/SELL dan ada posisi terbuka:
+   - Eksekusi SELL order.
+   - Tutup posisi di database.
+
+### Method `monitor_positions()`
+
+Memantau semua posisi terbuka untuk Stop-Loss / Take-Profit / Trailing Stop:
+
+1. Ambil semua posisi terbuka dari database.
+2. Untuk setiap posisi:
+   - Ambil harga terakhir.
+   - Cek Stop-Loss: jika `price <= stop_loss`, eksekusi SELL.
+   - Cek Take-Profit: jika `price >= take_profit`, eksekusi SELL.
+   - Cek Trailing Stop: update `stop_loss` jika harga naik (trailing).
+   - Cek Daily Loss Limit: jika total loss hari ini > `daily_loss_limit`, halt trading.
+3. Return list of actions taken.
+
+### Method `run_once(tickers)`
+
+Menjalankan satu siklus lengkap untuk list ticker:
+
+1. Panggil `process_signal(ticker)` untuk setiap ticker.
+2. Panggil `monitor_positions()` untuk semua posisi.
+3. Return summary dict.
+
+### Method `run_loop(tickers, interval)`
+
+Loop berkelanjutan dengan interval tertentu (detik):
+
+```python
+while True:
+    self.run_once(tickers)
+    time.sleep(interval)
+```
+
+### Runtime Toggle
+
+Auto-trade dapat di-toggle on/off saat runtime via API endpoint `POST /api/execution/toggle` tanpa restart server. Status toggle dapat diambil via `GET /api/execution/toggle`. Toggle mengupdate `os.environ["AUTO_TRADE_ENABLED"]` dan instance engine.
+
+### Telegram Notification
+
+Setiap eksekusi order (BUY/SELL) dan trigger Stop-Loss/Take-Profit dapat mengirim notifikasi Telegram via `utils/notifier.py` jika `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID` dikonfigurasi.
 
 ---
 
@@ -940,13 +1243,48 @@ Menerima dictionary rekomendasi dari Decision Engine dan menghasilkan:
 
 ## 14.1 Tujuan
 
-Saat ini merupakan placeholder yang mengembalikan default factor weights dan statistik sederhana. Nantinya akan melakukan retraining bobot faktor berdasarkan forward return data.
+Mengoptimasi factor weights secara dinamis berdasarkan:
+1. Market regime (easing/tightening/neutral/risk_off) dari macro engine
+2. Historical score performance — engine yang konsisten tinggi dapat bobot lebih
+3. Data coverage — engine dengan data terbatas (e.g. fundamental .JK) diturunkan bobotnya
+4. Linear Regression training — optimasi bobot dari forward return data
 
-## 14.2 Method `get_factor_weights(ticker, regime)`
+## 14.2 Regime-Specific Weights
 
-Mengembalikan `DEFAULT_WEIGHTS` dari Decision Engine. Nantinya akan mengembalikan bobot yang dioptimalkan berdasarkan histori performa per rezim pasar.
+```python
+REGIME_WEIGHTS = {
+    "easing": {"technical": 0.15, "fundamental": 0.30, "macro": 0.20, ...},
+    "tightening": {"technical": 0.25, "fundamental": 0.15, "macro": 0.25, ...},
+    "risk_off": {"technical": 0.10, "fundamental": 0.20, "macro": 0.25, ...},
+    "neutral": None,  # Uses DEFAULT_WEIGHTS
+}
+```
 
-## 14.3 Method `feature_importance(scores)`
+## 14.3 Method `get_factor_weights(ticker, regime)`
+
+Priority:
+1. AI-trained weights from DB (jika fresh, <7 hari)
+2. Regime-based + consistency-adjusted weights
+3. DEFAULT_WEIGHTS
+
+### Consistency Adjustment
+
+Untuk setiap engine, hitung mean score dan std dev dari histori:
+- Mean >= 60 + std < 15 → weight × 1.15 (reliable)
+- Mean >= 50 + std < 20 → weight × 1.05
+- Mean < 40 atau std > 25 → weight × 0.80 (unreliable)
+- No data → weight × 0.85
+
+### Data Coverage Adjustment
+
+Untuk fundamental engine, cek `_data_coverage` dari breakdown:
+- Coverage < 0.4 → weight × 0.5
+- Coverage < 0.6 → weight × 0.7
+- `_weight_multiplier == 0` → weight = 0 (data tidak tersedia)
+
+Setelah adjustment, weights dinormalisasi sehingga total = 1.0.
+
+## 14.4 Method `feature_importance(scores)`
 
 Menghitung importance relatif setiap faktor:
 
@@ -956,10 +1294,47 @@ importance[factor] = score[factor] / sum(all scores)
 
 Mengembalikan list dict `{"factor": k, "importance": v}`.
 
-## 14.4 Roadmap AI Learning
+## 14.5 Method `train_linear_regression(ticker)`
 
-- **Tahap 1 (saat ini):** Default weights, feature importance sederhana
-- **Tahap 2:** Rolling regression untuk optimasi bobot per rezim
+Training Linear Regression untuk optimasi bobot dari historical data:
+
+1. Untuk setiap ticker, ambil historical scores dan OHLCV.
+2. Compute forward return: `next_close / close - 1`.
+3. Pivot scores: satu row per date, kolom = engine scores.
+4. Merge scores dengan forward returns.
+5. Standardize features dengan `StandardScaler`.
+6. Train `LinearRegression` dengan X = engine scores, y = forward return.
+7. Normalize coefficients menjadi weights (semua positif, total = 1).
+8. Simpan trained weights ke database via `storage.save_ai_weights()`.
+9. Return dict dengan trained weights, r2_score, dan n_samples.
+
+### Output
+
+```json
+{
+  "status": "ok",
+  "ticker": "BBCA.JK",
+  "n_samples": 150,
+  "r2_score": 0.085,
+  "trained_weights": {
+    "technical": 0.22,
+    "fundamental": 0.28,
+    "macro": 0.12,
+    "global": 0.13,
+    "relationship": 0.08,
+    "sentiment": 0.17
+  }
+}
+```
+
+## 14.6 Method `get_regime(ticker)`
+
+Deteksi macro regime dari stored macro scores. Membaca breakdown JSON dari skor macro terakhir dan mengembalikan label regime (easing/tightening/neutral/risk_off).
+
+## 14.7 Roadmap AI Learning
+
+- **Tahap 1 (selesai):** Default weights, feature importance, regime-specific weights, consistency adjustment
+- **Tahap 2 (selesai):** Linear Regression training untuk optimasi bobot dari forward returns
 - **Tahap 3:** Walk-forward optimization dengan cross-validation
 - **Tahap 4:** Bayesian updating untuk adaptasi real-time
 
@@ -1212,32 +1587,92 @@ FastAPI menyediakan REST API dan WebSocket untuk komunikasi antara backend dan f
 
 ## 19.2 Endpoint REST
 
+### System & Data
+
 | Method | Path | Fungsi |
 |--------|------|--------|
 | GET | `/` | Status dan versi |
 | GET | `/api/health` | Health check sumber data |
+| GET | `/api/tickers` | Daftar semua ticker di database |
 | GET | `/api/data/{category}` | Ambil data OHLCV per ticker |
+| GET | `/api/indicators/{ticker}` | OHLCV + indikator teknikal (RSI, MACD, MA, Bollinger) |
 | POST | `/api/fetch` | Fetch dan simpan data dari Yahoo Finance |
+| GET | `/api/sentiment/{ticker}` | Sentiment analysis (NLP berita Indonesia) |
+
+### Analysis & Decision
+
+| Method | Path | Fungsi |
+|--------|------|--------|
 | GET | `/api/scores/{ticker}` | Ambil skor tersimpan per ticker |
 | POST | `/api/scores/compute` | Hitung skor semua engine untuk ticker |
 | GET | `/api/corporate/{ticker}` | Fetch aksi korporasi |
 | GET | `/api/relationship/{ticker}` | Hitung relationship dengan aset global |
-| GET | `/api/recommend/{ticker}` | Rekomendasi BUY/HOLD/AVOID |
+| GET | `/api/recommend/{ticker}` | Rekomendasi BUY/HOLD/WATCHLIST/AVOID |
 | POST | `/api/recommend` | Rekomendasi dengan custom weights |
 | GET | `/api/explain/{ticker}` | Penjelasan rekomendasi (XAI) |
+| GET | `/api/factor-weights/{ticker}` | Factor weights dari AI Learning |
+| GET | `/api/risk/{ticker}` | Risk analysis (VaR, position sizing, stop-loss) |
+| POST | `/api/risk/refresh` | Recalculate & save daily portfolio risk |
+
+### Execution & Orders
+
+| Method | Path | Fungsi |
+|--------|------|--------|
+| GET | `/api/positions` | Semua posisi terbuka |
+| GET | `/api/positions/{ticker}` | Posisi untuk ticker spesifik |
+| GET | `/api/orders` | Riwayat order |
+| POST | `/api/execution/run` | Jalankan satu siklus execution manual |
+| GET | `/api/execution/logs` | Log execution (orders + audit events) |
+| GET | `/api/execution/toggle` | Status toggle auto-trade |
+| POST | `/api/execution/toggle` | Toggle auto-trade on/off (runtime) |
+
+### Portfolio & Rebalance
+
+| Method | Path | Fungsi |
+|--------|------|--------|
+| POST | `/api/rebalance` | Trigger manual rebalance |
+| GET | `/api/rebalance/status` | Status rebalance (weights, drift, config) |
+| GET | `/api/rebalance/toggle` | Status toggle rebalance |
+| POST | `/api/rebalance/toggle` | Toggle rebalance on/off (runtime) |
+
+### Performance Analytics
+
+| Method | Path | Fungsi |
+|--------|------|--------|
+| GET | `/api/performance` | Metrik kinerja (return, Sharpe, drawdown, win rate, equity curve) |
+| POST | `/api/performance/snapshot` | Simpan equity snapshot harian manual |
+
+### Watchlist
+
+| Method | Path | Fungsi |
+|--------|------|--------|
+| GET | `/api/watchlist` | Daftar ticker favorit |
+| POST | `/api/watchlist/{ticker}` | Toggle status favorit ticker |
+| GET | `/api/watchlist/all` | Full watchlist dengan metadata |
+
+### Backtest
+
+| Method | Path | Fungsi |
+|--------|------|--------|
+| POST | `/api/backtest` | Jalankan backtest |
+| POST | `/api/backtest/monte-carlo` | Simulasi Monte Carlo |
+| POST | `/api/backtest/walk-forward` | Walk-forward analysis |
+
+### Simulation & Monitoring
+
+| Method | Path | Fungsi |
+|--------|------|--------|
 | POST | `/api/paper-trade` | Simulasi paper trade |
 | GET | `/api/monitor` | Status sistem lengkap |
-| GET | `/api/factor-weights/{ticker}` | Factor weights dari AI Learning |
-| POST | `/api/backtest` | Jalankan backtest |
 | GET | `/api/engines` | Status semua engine terdaftar |
 
 ## 19.3 WebSocket
 
 | Path | Fungsi |
 |------|--------|
-| `ws://host:8000/ws/engines` | Real-time engine status, update setiap 5 detik |
+| `ws://host:8000/ws/live` | Real-time engine status + system updates |
 
-WebSocket mengirimkan `_build_engines_status()` setiap 5 detik. Frontend Engine Monitor menggunakan WebSocket ini untuk menampilkan status real-time.
+WebSocket mengirimkan `_build_engines_status()` secara berkala. Frontend Engine Monitor menggunakan WebSocket ini untuk menampilkan status real-time.
 
 ## 19.4 Engine Registry
 
@@ -1260,6 +1695,9 @@ ENGINE_REGISTRY = [
     {"name": "ai_learning", "module": "trading_system.ai_learning.engine", "cls": "AILearningEngine"},
     {"name": "risk", "module": "trading_system.risk.engine", "cls": "RiskEngine"},
     {"name": "execution", "module": "trading_system.execution.engine", "cls": "ExecutionEngine"},
+    {"name": "automated_execution", "module": "trading_system.execution.automated", "cls": "AutomatedExecutionEngine"},
+    {"name": "rebalancer", "module": "trading_system.portfolio.rebalancer", "cls": "PortfolioRebalancer"},
+    {"name": "performance_analytics", "module": "trading_system.portfolio.performance", "cls": "PerformanceAnalytics"},
 ]
 ```
 
@@ -1331,20 +1769,30 @@ Halaman utama yang menampilkan:
 
 1. **Input ticker** — Text input dengan tombol ANALYZE
 2. **Stat cards** — 8 kartu: Ticker, Last Price, Daily Change, Change %, Today's Range, 52W Range, Action, Conviction
-3. **Price chart** — Candlestick chart (2/3 lebar)
-4. **Factor scores** — Horizontal bar chart dengan warna: hijah (>=70), kuning (40-69), merah (<40)
+3. **Price chart** — Candlestick chart (2/3 lebar) dengan RSI, MACD, MA, Bollinger Bands
+4. **Factor scores** — Horizontal bar chart dengan warna: hijau (>=70), kuning (40-69), merah (<40)
 5. **Recommendation panel** — Position size, entry range, stop loss, take profit, risk flags
 6. **Explanation panel** — Narasi XAI, top factors, confidence interval
-7. **System health** — API status, tickers in DB, scores computed, active alerts
-8. **Ticker chips** — Klik untuk switch ticker
-9. **Footer** — Status ringkas dan render timestamp
+7. **Execution Log** — Riwayat order + audit events dengan auto-refresh, header berisi **Auto-Trade toggle switch** (hijau=ON, merah=OFF)
+8. **Rebalancing Panel** — Status rebalance, target weights, drift, **Rebalance toggle switch** (ungu=ON, abu-abu=OFF)
+9. **Performance Analytics** — Equity curve, total return, Sharpe ratio, max drawdown, win rate, profit factor
+10. **Watchlist** — Daftar ticker favorit dengan toggle bintang
+11. **System health** — API status, tickers in DB, scores computed, active alerts
+12. **Ticker chips** — Klik untuk switch ticker
+13. **Footer** — Status ringkas dan render timestamp
 
-Dashboard melakukan 5 API call paralel saat ticker berubah:
+Dashboard melakukan 10+ API call paralel saat ticker berubah:
 - `/api/data/ohlcv?ticker=...`
+- `/api/indicators/...`
 - `/api/scores/...`
 - `/api/recommend/...`
 - `/api/explain/...`
 - `/api/monitor`
+- `/api/execution/logs`
+- `/api/execution/toggle`
+- `/api/rebalance/toggle`
+- `/api/performance`
+- `/api/watchlist`
 
 ## 20.5 Engine Monitor Page
 
@@ -1352,7 +1800,7 @@ Dashboard melakukan 5 API call paralel saat ticker berubah:
 
 Monitor real-time dengan WebSocket:
 
-1. **Koneksi WebSocket** ke `ws://host:8000/ws/engines` dengan auto-reconnect setiap 3 detik.
+1. **Koneksi WebSocket** ke `ws://host:8000/ws/live` dengan auto-reconnect setiap 3 detik.
 2. **Grid engine tiles** — Setiap engine ditampilkan sebagai kartu dengan:
    - Status dot (hijau=healthy, kuning=idle, oranye=warning, merah=error)
    - Latency dalam ms
@@ -1383,15 +1831,17 @@ CLI menyediakan akses ke semua fungsi sistem dari terminal. Menggunakan `argpars
 | Perintah | Argumen | Fungsi |
 |----------|---------|--------|
 | `fetch` | `tickers...`, `--period` | Fetch dan simpan data OHLCV |
-| `backtest` | `ticker`, `--strategy`, `--capital` | Jalankan backtest |
+| `backtest` | `ticker`, `--strategy`, `--capital`, `--n-simulations`, `--n-splits` | Jalankan backtest + Monte Carlo + Walk-Forward |
 | `list` | — | Daftar ticker di database |
 | `compute-scores` | `ticker`, `--period` | Hitung skor semua engine |
 | `corporate-actions` | `ticker` | Fetch aksi korporasi |
 | `relationship` | `ticker`, `--window` | Hitung relationship |
-| `recommend` | `ticker`, `--capital` | Rekomendasi BUY/HOLD/AVOID |
+| `recommend` | `ticker`, `--capital` | Rekomendasi BUY/HOLD/WATCHLIST/AVOID |
 | `explain` | `ticker` | Penjelasan rekomendasi |
 | `monitor` | — | Health check sistem |
 | `paper-trade` | `ticker`, `--capital` | Simulasi paper trade |
+| `execution` | `--once`, `--interval`, `--tickers` | Jalankan automated execution engine (robot trader) |
+| `test-e2e` | `--tickers` | End-to-end pipeline test |
 
 ## 21.3 Contoh Penggunaan
 
@@ -1422,6 +1872,15 @@ python -m trading_system.cli corporate-actions BBCA.JK
 
 # Relationship
 python -m trading_system.cli relationship BBCA.JK --window 90
+
+# Automated execution (one cycle)
+python -m trading_system.cli execution --once --tickers BBCA.JK TLKM.JK
+
+# Automated execution (continuous, every 15 minutes)
+python -m trading_system.cli execution --interval 15
+
+# End-to-end test
+python -m trading_system.cli test-e2e --tickers BBCA.JK TLKM.JK ASII.JK
 ```
 
 ---
@@ -1430,9 +1889,32 @@ python -m trading_system.cli relationship BBCA.JK --window 90
 
 ## 22.1 Ikhtisar
 
-Testing menggunakan Pytest dengan Playwright untuk end-to-end testing. Test berada di `tests/e2e/`.
+Testing menggunakan dua layer:
+1. **Unit Tests** — Pytest, 117 test case di `tests/unit/`
+2. **E2E Tests** — Playwright untuk browser testing di `tests/e2e/`
 
-## 22.2 Test Dashboard
+## 22.2 Unit Tests
+
+**Direktori:** `tests/unit/`
+
+117 test case yang mencakup semua engine:
+
+| File Test | Engine/Modul | Jumlah Test |
+|-----------|-------------|-------------|
+| `test_technical.py` | Technical Analysis | ~20 |
+| `test_fundamental.py` | Fundamental Analysis | ~15 |
+| `test_decision.py` | Decision Engine | ~12 |
+| `test_risk.py` | Risk Engine | ~15 |
+| `test_execution.py` | Execution + Automated | ~15 |
+| `test_rebalancer.py` | Portfolio Rebalancer | ~10 |
+| `test_backtest.py` | Backtest + Monte Carlo + Walk-Forward | ~15 |
+| `test_ai_learning.py` | AI Learning Engine | ~10 |
+| `test_validation.py` | Data Quality Validation | ~10 |
+| `test_performance_watchlist.py` | Performance + Watchlist | ~5 |
+
+Menggunakan `conftest.py` untuk shared fixtures (in-memory SQLite, seeded data).
+
+## 22.3 E2E Test Dashboard
 
 **File:** `tests/e2e/test_dashboard.py`
 
@@ -1445,7 +1927,7 @@ Empat test case:
 
 Setiap test mengambil screenshot untuk dokumentasi visual di `tests/e2e/screenshots/`.
 
-## 22.3 Record Demo
+## 22.4 Record Demo
 
 **File:** `tests/e2e/record_demo.py`
 
@@ -1455,16 +1937,17 @@ Script Playwright untuk merekam sesi demo sebagai video:
 3. Switch ke TLKM.JK
 4. Simpan video di `tests/e2e/demo_gif/`
 
-## 22.4 Menjalankan Test
+## 22.5 Menjalankan Test
 
 ```bash
-# Pastikan backend dan frontend berjalan
-./run_all.sh
+# Unit tests (117 tests)
+python -m pytest tests/unit/ -v
 
-# Jalankan test E2E
-cd /opt/lampp/htdocs/global
-source venv/bin/activate
-pytest tests/e2e/test_dashboard.py -v
+# Lint check
+python -m pyflakes src/trading_system/
+
+# E2E tests (pastikan backend dan frontend berjalan)
+python -m pytest tests/e2e/test_dashboard.py -v
 
 # Rekam demo
 python tests/e2e/record_demo.py
@@ -1474,56 +1957,98 @@ python tests/e2e/record_demo.py
 
 # Bab 23: Deployment dan Operasional
 
-## 23.1 Script `run_all.sh`
+## 23.1 Script `scripts/start_production.sh` (Linux)
 
-**File:** `run_all.sh`
+**File:** `scripts/start_production.sh`
 
-Script untuk menjalankan backend dan frontend sekaligus:
+Script untuk menjalankan backend dan frontend sekaligus di Linux:
 
-1. **Stop server lama** — `pkill` untuk next-server, api/app.py, uvicorn; `fuser -k` untuk port 8000
-2. **Build frontend** — `npm run build` di direktori frontend
-3. **Start backend** — `nohup venv/bin/python src/trading_system/api/app.py` ke `/tmp/backend.log`
-4. **Start frontend** — `nohup npm start` ke `/tmp/frontend.log`
-5. **Tampilkan log** — Cetak backend dan frontend log
+1. **Aktivasi virtualenv** — `.venv`
+2. **Start backend** — `uvicorn` di port 8000
+3. **Start frontend** — `npm run build && npm start`
+4. **Start scheduler** (opsional)
 
-## 23.2 Menjalankan Manual
+## 23.2 Script `scripts/start_production.bat` (Windows)
+
+**File:** `scripts/start_production.bat`
+
+Script equivalent untuk Windows:
+
+1. **Aktivasi virtualenv** — `.venv\Scripts\activate`
+2. **Start backend** — `uvicorn` di port 8000
+3. **Start frontend** — `npm run build && npm start`
+
+## 23.3 Docker Deployment
+
+**File:** `Dockerfile`, `docker-compose.yml`
+
+```bash
+# Build dan jalankan semua service
+docker-compose up -d --build
+```
+
+Services:
+- Backend API: http://localhost:8000
+- Frontend Dashboard: http://localhost:3000
+
+Data persists in `./data/` volume mount.
+
+## 23.4 Menjalankan Manual
 
 ### Backend saja
 
 ```bash
-cd /opt/lampp/htdocs/global
-source venv/bin/activate
-python -m trading_system.api.app
-# atau
-uvicorn trading_system.api.app:app --reload --host 0.0.0.0 --port 8000
+# Linux
+source .venv/bin/activate
+uvicorn src.trading_system.api.app:app --host 0.0.0.0 --port 8000
+
+# Windows
+.venv\Scripts\activate
+uvicorn src.trading_system.api.app:app --host 0.0.0.0 --port 8000
 ```
 
 ### Frontend saja
 
 ```bash
-cd /opt/lampp/htdocs/global/frontend
-npm run dev    # development mode
+cd frontend
+npm run dev    # development mode (port 3000)
 # atau
 npm run build && npm start    # production mode
 ```
 
-## 23.3 Konfigurasi Port
+## 23.5 Konfigurasi Port
 
 | Komponen | Port Default |
 |----------|-------------|
 | Backend (FastAPI/Uvicorn) | 8000 |
-| Frontend (Next.js) | 3000 (dev) / 45469 (prod) |
+| Frontend (Next.js dev) | 3000 |
 
 Frontend memproxy `/api/*` ke `http://127.0.0.1:8000/api/*` melalui Next.js rewrites.
 
-## 23.4 Database
+## 23.6 Database
 
 Database SQLite berada di `data/trading_system.db`. Tidak memerlukan server database terpisah. Untuk produksi skala besar, dapat dimigrasi ke TimescaleDB atau PostgreSQL dengan mengganti implementasi `DataStorage`.
 
-## 23.5 Logging
+## 23.7 Environment Variables
 
-- Backend: `nohup` output ke `/tmp/backend.log`
-- Frontend: `nohup` output ke `/tmp/frontend.log`
+**File:** `.env.example` — template konfigurasi.
+
+| Variable | Default | Fungsi |
+|----------|---------|--------|
+| `AUTO_TRADE_ENABLED` | false | Enable/disable auto-trade |
+| `REBALANCE_ENABLED` | false | Enable/disable rebalancer |
+| `REBALANCE_TARGET_WEIGHTS` | {} | Target bobot JSON |
+| `REBALANCE_FREQUENCY` | monthly | Frekuensi rebalance |
+| `TRADING_CAPITAL` | 100000000 | Modal trading |
+| `RISK_PER_TRADE` | 0.01 | Risk per trade (1%) |
+| `DAILY_LOSS_LIMIT` | 0 | Batas loss harian |
+| `TELEGRAM_BOT_TOKEN` | — | Telegram bot token |
+| `TELEGRAM_CHAT_ID` | — | Telegram chat ID |
+
+## 23.8 Logging
+
+- Backend: stdout / `nohup` output
+- Frontend: stdout / `nohup` output
 - Audit log: Tabel `audit_log` di SQLite dengan timestamp UTC
 
 ---
@@ -1532,46 +2057,54 @@ Database SQLite berada di `data/trading_system.db`. Tidak memerlukan server data
 
 ## 24.1 Peningkatan Data Source
 
-- Integrasi dengan API Bursa Efek Indonesia (IDX) untuk data real-time
-- Penambahan sumber data fundamental: Emiten, BEI, third-party data provider
-- Kalender ekonomi dari ForexFactory/TradingEconomics
-- Berita dan sentimen dari NewsAPI, Google News, RSS, X/Twitter
+- ~~Integrasi dengan API Bursa Efek Indonesia (IDX) untuk data real-time~~ (roadmap)
+- ~~Penambahan sumber data fundamental: Emiten, BEI, third-party data provider~~ (roadmap)
+- ~~Kalender ekonomi dari ForexFactory/TradingEconomics~~ (roadmap)
+- ✅ Berita dan sentimen dari RSS (Bisnis.com, Kontan, CNBC ID), X/Twitter, Reddit, Google Trends
 
 ## 24.2 Peningkatan Analysis
 
-- Indikator teknikal tambahan: Ichimoku, Williams %R, Stochastic
-- Fundamental: DCF valuation, Altman Z-Score, Piotroski F-Score
-- Macro: Inflasi, GDP, pengangguran dari BPS/BI
-- Sentiment: NLP pada headline berita, social media sentiment
+- Indikator teknikal tambahan: Ichimoku, Williams %R, Stochastic (roadmap)
+- Fundamental: DCF valuation, Altman Z-Score, Piotroski F-Score (roadmap)
+- ✅ Macro: proxy via Yahoo Finance (US10Y, GOLD, OIL, USD/IDR, DXY)
+- ✅ Sentiment: NLP Indonesian lexicon, Foreign Flow, Broker Summary, Social Media, Google Trends
 
 ## 24.3 Peningkatan Risk & Portfolio
 
-- Portfolio optimization (Markowitz mean-variance)
-- Correlation-based position sizing
-- Dynamic stop loss berdasarkan volatilitas regime
-- Maximum portfolio drawdown limit
+- Portfolio optimization (Markowitz mean-variance) (roadmap)
+- Correlation-based position sizing (roadmap)
+- ✅ Dynamic stop loss berdasarkan ATR
+- ✅ Maximum portfolio drawdown limit (daily loss limit circuit breaker)
+- ✅ Portfolio rebalancer dengan target weights dan drift detection
+- ✅ Performance analytics (Sharpe, drawdown, win rate, equity curve)
 
 ## 24.4 Peningkatan AI Learning
 
-- Rolling regression untuk optimasi bobot per rezim
-- Walk-forward optimization dengan cross-validation
-- Bayesian updating untuk adaptasi real-time
-- Feature engineering otomatis
+- ✅ Regime-specific weights (easing/tightening/neutral/risk_off)
+- ✅ Consistency-based weight adjustment
+- ✅ Linear Regression training dari forward returns
+- Walk-forward optimization dengan cross-validation (roadmap)
+- Bayesian updating untuk adaptasi real-time (roadmap)
+- Feature engineering otomatis (roadmap)
 
 ## 24.5 Peningkatan Infrastructure
 
-- Scheduler otomatis (cron/APS) untuk fetch data berkala
-- Docker containerization untuk deployment
-- CI/CD pipeline
-- Alerting via email/Telegram untuk risk flags dan anomali
+- ✅ Scheduler otomatis (`scripts/daily_runner.py`, CLI `execution --interval`)
+- ✅ Docker containerization (`Dockerfile`, `docker-compose.yml`)
+- CI/CD pipeline (roadmap)
+- ✅ Alerting via Telegram untuk risk flags dan eksekusi order
 
 ## 24.6 Peningkatan Frontend
 
-- Halaman backtest dengan visualisasi equity curve
-- Halaman portfolio dengan alokasi visual
-- Halaman audit log untuk traceability
-- Mobile-responsive design
-- Dark/light theme toggle
+- ✅ Execution log dengan auto-refresh
+- ✅ Auto-Trade dan Rebalance toggle switches
+- ✅ Performance analytics (equity curve, Sharpe, drawdown, win rate)
+- ✅ Watchlist dengan favorite toggle
+- Halaman backtest dengan visualisasi equity curve (roadmap)
+- Halaman portfolio dengan alokasi visual (roadmap)
+- Halaman audit log untuk traceability (roadmap)
+- Mobile-responsive design (roadmap)
+- Dark/light theme toggle (roadmap)
 
 ---
 
@@ -1674,6 +2207,83 @@ Primary key: `(ticker, action_type, ex_date)`
 | sentiment | REAL | Skor sentimen |
 | impact | REAL | Skor dampak |
 
+## Tabel `positions`
+
+| Kolom | Tipe | Keterangan |
+|-------|------|------------|
+| id | INTEGER | Auto-increment PK |
+| ticker | TEXT | Kode saham |
+| quantity | REAL | Jumlah lembar |
+| entry_price | REAL | Harga beli rata-rata |
+| stop_loss | REAL | Stop loss price |
+| take_profit | REAL | Take profit price |
+| trailing_stop | REAL | Trailing stop price |
+| status | TEXT | open / closed |
+| opened_at | TEXT | Waktu buka posisi |
+| closed_at | TEXT | Waktu tutup posisi |
+| created_at | TEXT | Waktu record dibuat |
+
+## Tabel `orders`
+
+| Kolom | Tipe | Keterangan |
+|-------|------|------------|
+| id | INTEGER | Auto-increment PK |
+| ticker | TEXT | Kode saham |
+| order_type | TEXT | BUY / SELL |
+| shares | REAL | Jumlah lembar |
+| price | REAL | Harga eksekusi |
+| total_value | REAL | Nilai total order |
+| fee | REAL | Biaya transaksi |
+| status | TEXT | filled / pending / cancelled |
+| created_at | TEXT | Waktu order |
+
+## Tabel `equity_snapshots`
+
+| Kolom | Tipe | Keterangan |
+|-------|------|------------|
+| id | INTEGER | Auto-increment PK |
+| date | TEXT | Tanggal snapshot |
+| equity | REAL | Nilai equity saat itu |
+| cash | REAL | Nilai cash |
+| positions_value | REAL | Nilai pasar posisi |
+| created_at | TEXT | Waktu record dibuat |
+
+## Tabel `watchlist`
+
+| Kolom | Tipe | Keterangan |
+|-------|------|------------|
+| id | INTEGER | Auto-increment PK |
+| ticker | TEXT | Kode saham (UNIQUE) |
+| is_favorite | INTEGER | 0 = tidak, 1 = favorit |
+| notes | TEXT | Catatan user |
+| created_at | TEXT | Waktu ditambahkan |
+
+## Tabel `ai_weights`
+
+| Kolom | Tipe | Keterangan |
+|-------|------|------------|
+| id | INTEGER | Auto-increment PK |
+| ticker | TEXT | Ticker (NULL = global) |
+| weights_json | TEXT | JSON trained weights |
+| r2_score | REAL | R² score dari training |
+| n_samples | INTEGER | Jumlah sample training |
+| created_at | TEXT | Waktu training |
+
+## Tabel `daily_risk_metrics`
+
+| Kolom | Tipe | Keterangan |
+|-------|------|------------|
+| id | INTEGER | Auto-increment PK |
+| date | TEXT | Tanggal (UNIQUE) |
+| var_95 | REAL | Value at Risk 95% |
+| var_99 | REAL | Value at Risk 99% |
+| cvar_95 | REAL | Conditional VaR 95% |
+| cvar_99 | REAL | Conditional VaR 99% |
+| max_drawdown | REAL | Max drawdown |
+| annualized_volatility | REAL | Volatilitas tahunan |
+| portfolio_value | REAL | Nilai portofolio |
+| created_at | TEXT | Waktu record dibuat |
+
 ---
 
 # Lampiran B: Data Contracts (Pydantic)
@@ -1741,6 +2351,9 @@ class DataQualityReport(BaseModel):
 | 13 | ai_learning | trading_system.ai_learning.engine | AILearningEngine |
 | 14 | risk | trading_system.risk.engine | RiskEngine |
 | 15 | execution | trading_system.execution.engine | ExecutionEngine |
+| 16 | automated_execution | trading_system.execution.automated | AutomatedExecutionEngine |
+| 17 | rebalancer | trading_system.portfolio.rebalancer | PortfolioRebalancer |
+| 18 | performance_analytics | trading_system.portfolio.performance | PerformanceAnalytics |
 
 ---
 
@@ -1770,9 +2383,17 @@ class DataQualityReport(BaseModel):
 | VAH | Value Area High — batas atas 70% volume |
 | VAL | Value Area Low — batas bawah 30% volume |
 | XAI | Explainable AI — AI yang dapat dijelaskan |
+| VaR | Value at Risk — kerugian maksimum pada tingkat kepercayaan tertentu |
+| CVaR | Conditional Value at Risk — rata-rata kerugian di luar VaR |
+| Trailing Stop | Stop loss yang bergerak mengikuti harga naik |
+| Rebalancer | Penyeimbangan portofolio ke bobot target |
+| Monte Carlo | Simulasi probabilistik dengan random sampling |
+| Walk-Forward | Validasi strategi dengan rolling window train-test |
+| Smart Money | Broker asing/institusional besar (CLSA, JPM, UBS, dll) |
+| Foreign Flow | Aliran modal asing (net buy/sell) di bursa |
 
 ---
 
-*Dokumen ini disusun pada Juli 2026. Versi aplikasi: 0.1.0.*
+*Dokumen ini disusun pada Juli 2026. Versi aplikasi: 0.1.0. Update terakhir: sinkronisasi dengan implementasi multi-phase.*
 
 *Untuk pertanyaan teknis, merujuk pada kode sumber di direktori `src/trading_system/` dan `frontend/`.*
