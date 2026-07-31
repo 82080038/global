@@ -24,8 +24,8 @@ type ConnStatus = "connecting" | "open" | "closed" | "error";
 
 const WS_URL =
   typeof window !== "undefined"
-    ? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:8000/ws/engines`
-    : "ws://localhost:8000/ws/engines";
+    ? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:8000/ws/live`
+    : "ws://localhost:8000/ws/live";
 
 export default function EnginesPage() {
   const [data, setData] = useState<EnginesResponse | null>(null);

@@ -2,7 +2,7 @@
 
 > **Versi aplikasi:** 0.1.0  
 > **Update:** 31 Juli 2026  
-> **Total unit tests:** 117 (semua passing)
+> **Total unit tests:** 154 (semua passing)
 
 ## Legenda
 
@@ -55,7 +55,7 @@
 
 | Modul | File | Status | Catatan |
 |-------|------|--------|---------|
-| Portfolio Engine | `portfolio/engine.py` | ✅ Done | Generate orders dari recommendation, capital allocation |
+| Portfolio Engine | `portfolio/engine.py` | ✅ Done | Read positions from DB, generate BUY/SELL orders, exposure tracking |
 | Performance Analytics | `portfolio/performance.py` | ✅ Done | Equity curve, Sharpe, drawdown, win rate, profit factor, daily snapshots |
 | Portfolio Rebalancer | `portfolio/rebalancer.py` | ✅ Done | Target weights, drift detection, auto/manual rebalance, runtime toggle |
 
@@ -126,7 +126,7 @@
 
 | Modul | File | Status | Catatan |
 |-------|------|--------|---------|
-| Daily Runner | `scripts/daily_runner.py` | ✅ Done | Scheduler, fetch + compute + notify |
+| Daily Runner | `scripts/daily_runner.py` | ✅ Done | 7-step pipeline: fetch → scores → recommendations → execution → risk → performance → notify |
 | E2E Test Script | `scripts/test_end_to_end.py` | ✅ Done | Full pipeline test |
 | Start Production (Linux) | `scripts/start_production.sh` | ✅ Done | Backend + frontend |
 | Start Production (Windows) | `scripts/start_production.bat` | ✅ Done | Backend + frontend |
@@ -153,7 +153,7 @@
 | Markowitz Optimization | Medium | Portfolio mean-variance optimization |
 | Walk-Forward CV | Medium | AI Learning cross-validation |
 | Bayesian Updating | Low | AI Learning real-time adaptation |
-| CI/CD Pipeline | Medium | GitHub Actions |
+| CI/CD Pipeline | ✅ Done | GitHub Actions: lint, test with coverage, frontend build, Docker build |
 | Mobile Responsive | Low | Frontend |
 | Dark/Light Toggle | Low | Frontend |
 

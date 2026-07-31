@@ -6,6 +6,34 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dan
 
 ---
 
+## [0.1.1] — 2026-07-31
+
+### Fixed — Integration & Sync
+
+- ENGINE_REGISTRY: tambah 3 engine missing (automated_execution, rebalancer, performance_analytics) — sekarang 18 engine
+- WebSocket path: `/ws/engines` → `/ws/live` di backend & frontend (sinkron dengan docs)
+- Portfolio Engine: baca dari tabel `positions` (sebelumnya hardcoded CASH), handle BUY & SELL, tambah `get_exposure()`
+- Daily Runner: tambah 3 step baru — automated execution, daily risk metrics, performance snapshot (7-step pipeline)
+
+### Added — Security & Infrastructure
+
+- CORS middleware (configurable via `CORS_ORIGINS` env var)
+- API key authentication (optional, via `API_KEY` env var, header `X-API-Key`)
+- Rate limiting (in-memory, per-IP, configurable via `RATE_LIMIT_MAX`)
+- Dockerfile HEALTHCHECK
+- CI/CD pipeline: `.github/workflows/ci.yml` — lint, test with coverage, frontend build, Docker build
+- pytest-cov + `.coveragerc` untuk coverage measurement
+
+### Added — Testing
+
+- 37 unit test baru (117 → 154 total): test_portfolio, test_api, test_sentiment, test_corporate, test_xai, test_monitoring, test_paper_trading, test_notifier
+
+### Removed
+
+- `plotly` dari requirements.txt (tidak digunakan)
+
+---
+
 ## [0.1.0] — 2026-07-31
 
 ### Added — Data Layer

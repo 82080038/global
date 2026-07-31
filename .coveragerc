@@ -1,0 +1,17 @@
+[run]
+source = trading_system
+omit =
+    */tests/*
+    */__init__.py
+    */seeder.py
+
+[report]
+show_missing = True
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    raise NotImplementedError
+
+[html]
+directory = htmlcov

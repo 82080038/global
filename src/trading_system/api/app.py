@@ -11,7 +11,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from trading_system.data.storage import DataStorage
 from trading_system.data.acquisition import YahooFinanceAdapter, normalize_ohlcv
@@ -29,7 +31,48 @@ from trading_system.ai_learning.engine import AILearningEngine
 
 app = FastAPI(title="Trading System API", version="0.1.0")
 
+# CORS middleware — allow frontend (port 3000) and any origin in dev
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 storage = DataStorage()
+
+# API Key authentication (optional — set API_KEY env var to enable)
+_API_KEY = os.getenv("API_KEY", "")
+
+@app.middleware("http")
+async def api_key_auth(request: Request, call_next):
+    """Validate API key if API_KEY env var is set. Skip for health/root/ws."""
+    if _API_KEY and request.url.path not in ("/", "/api/health", "/ws/engines"):
+        if not request.url.path.startswith("/ws/"):
+            provided = request.headers.get("X-API-Key", "")
+            if provided != _API_KEY:
+                return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key"})
+    return await call_next(request)
+
+# Simple rate limiting (in-memory, per-IP)
+_rate_limit_store: dict[str, list[float]] = {}
+_RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "60"))  # requests per window
+_RATE_LIMIT_WINDOW = 60  # seconds
+
+@app.middleware("http")
+async def rate_limit(request: Request, call_next):
+    """Simple in-memory rate limiting per client IP."""
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    if client_ip not in _rate_limit_store:
+        _rate_limit_store[client_ip] = []
+    # Remove old entries
+    _rate_limit_store[client_ip] = [t for t in _rate_limit_store[client_ip] if now - t < _RATE_LIMIT_WINDOW]
+    if len(_rate_limit_store[client_ip]) >= _RATE_LIMIT_MAX:
+        return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Try again later."})
+    _rate_limit_store[client_ip].append(now)
+    return await call_next(request)
 
 
 @app.get("/")
@@ -548,6 +591,9 @@ ENGINE_REGISTRY = [
     {"name": "ai_learning", "module": "trading_system.ai_learning.engine", "cls": "AILearningEngine"},
     {"name": "risk", "module": "trading_system.risk.engine", "cls": "RiskEngine"},
     {"name": "execution", "module": "trading_system.execution.engine", "cls": "ExecutionEngine"},
+    {"name": "automated_execution", "module": "trading_system.execution.automated", "cls": "AutomatedExecutionEngine"},
+    {"name": "rebalancer", "module": "trading_system.portfolio.rebalancer", "cls": "PortfolioRebalancer"},
+    {"name": "performance_analytics", "module": "trading_system.portfolio.performance", "cls": "PerformanceAnalytics"},
 ]
 
 
@@ -603,7 +649,7 @@ def get_engines():
     return _build_engines_status()
 
 
-@app.websocket("/ws/engines")
+@app.websocket("/ws/live")
 async def ws_engines(websocket: WebSocket):
     await websocket.accept()
     try:

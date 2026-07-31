@@ -595,6 +595,28 @@ Frontend Engine Monitor (`/engines`) terhubung ke WebSocket ini dengan auto-reco
 
 ---
 
+## Security
+
+### API Key Authentication
+
+Jika env var `API_KEY` di-set, semua endpoint (kecuali `/` dan `/api/health`) membutuhkan header:
+
+```
+X-API-Key: your_api_key
+```
+
+Jika `API_KEY` kosong (default), autentikasi dinonaktifkan (untuk development).
+
+### CORS
+
+Cross-origin requests diizinkan dari origin yang dikonfigurasi di env var `CORS_ORIGINS` (default: `http://localhost:3000,http://127.0.0.1:3000`).
+
+### Rate Limiting
+
+Setiap IP dibatasi maksimum `RATE_LIMIT_MAX` request per 60 detik (default: 60). Jika melebihi, response `429 Too Many Requests`.
+
+---
+
 ## Error Handling
 
 Semua endpoint mengembalikan HTTP status code standar:
@@ -603,7 +625,9 @@ Semua endpoint mengembalikan HTTP status code standar:
 |------|-----------|
 | 200 | Success |
 | 400 | Bad request (missing parameter, invalid value) |
+| 401 | Unauthorized (missing or invalid API key) |
 | 404 | Not found (ticker tidak ada di DB, data tidak tersedia) |
+| 429 | Too many requests (rate limit exceeded) |
 | 500 | Internal server error |
 
 **Error response format:**

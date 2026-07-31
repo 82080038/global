@@ -142,8 +142,45 @@ def send_notifications(recommendations: list[dict]) -> None:
         logger.info(f"Notification sent for {rec['ticker']}: {rec['action']}")
 
 
+def run_automated_execution(tickers: list[str]) -> None:
+    """Run one cycle of automated execution (monitoring mode by default)."""
+    try:
+        from trading_system.execution.automated import AutomatedExecutionEngine
+        engine = AutomatedExecutionEngine()
+        results = engine.run_once(tickers)
+        actions = [r for r in results if r.get("status") not in ("no_action", "monitoring", "skipped", "circuit_breaker")]
+        if actions:
+            logger.info(f"Execution cycle: {len(actions)} actions taken")
+        else:
+            logger.info("Execution cycle: no actions (monitoring mode or no signals)")
+    except Exception as e:
+        logger.error(f"Automated execution failed: {e}")
+
+
+def save_daily_risk_metrics() -> None:
+    """Save daily portfolio risk metrics (VaR, CVaR, drawdown)."""
+    try:
+        from trading_system.risk.engine import RiskEngine
+        engine = RiskEngine()
+        engine.save_daily_risk()
+        logger.info("Daily risk metrics saved")
+    except Exception as e:
+        logger.error(f"Daily risk metrics failed: {e}")
+
+
+def save_performance_snapshot() -> None:
+    """Save daily equity snapshot for performance tracking."""
+    try:
+        from trading_system.portfolio.performance import PerformanceAnalytics
+        analytics = PerformanceAnalytics()
+        equity = analytics.save_daily_snapshot()
+        logger.info(f"Performance snapshot saved (equity: {equity})")
+    except Exception as e:
+        logger.error(f"Performance snapshot failed: {e}")
+
+
 def daily_job() -> None:
-    """Run the full daily pipeline: fetch → scores → recommendations → notifications."""
+    """Run the full daily pipeline: fetch → scores → recommendations → execution → risk → performance → notifications."""
     logger.info("=" * 60)
     logger.info("🔄 Memulai daily update...")
     tickers = get_watchlist()
@@ -168,9 +205,24 @@ def daily_job() -> None:
     logger.info("Step 3: Generate Recommendations")
     recommendations = generate_recommendations(tickers)
 
-    # Step 4: Send notifications
+    # Step 4: Run automated execution (monitoring mode by default)
     logger.info("─" * 40)
-    logger.info("Step 4: Send Notifications")
+    logger.info("Step 4: Automated Execution Cycle")
+    run_automated_execution(tickers)
+
+    # Step 5: Save daily risk metrics
+    logger.info("─" * 40)
+    logger.info("Step 5: Daily Risk Metrics")
+    save_daily_risk_metrics()
+
+    # Step 6: Save performance snapshot
+    logger.info("─" * 40)
+    logger.info("Step 6: Performance Snapshot")
+    save_performance_snapshot()
+
+    # Step 7: Send notifications
+    logger.info("─" * 40)
+    logger.info("Step 7: Send Notifications")
     send_notifications(recommendations)
 
     logger.info("=" * 60)
