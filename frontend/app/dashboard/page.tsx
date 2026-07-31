@@ -127,6 +127,8 @@ interface PerformanceData {
   equity_curve: { date: string; equity: number }[];
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+
 export default function Dashboard() {
   const [ticker, setTicker] = useState("BBCA.JK");
   const [input, setInput] = useState("BBCA.JK");
@@ -152,7 +154,7 @@ export default function Dashboard() {
 
   const fetchPerformance = useCallback(async (period: string) => {
     try {
-      const res = await fetch(`/api/performance?period=${period}`);
+      const res = await fetch(`${API_BASE}/api/performance?period=${period}`);
       if (res.ok) {
         setPerformanceData(await res.json());
       }
@@ -163,7 +165,7 @@ export default function Dashboard() {
 
   const fetchWatchlist = useCallback(async () => {
     try {
-      const res = await fetch(`/api/watchlist`);
+      const res = await fetch(`${API_BASE}/api/watchlist`);
       if (res.ok) {
         const json = await res.json();
         setWatchlist(json.tickers || []);
@@ -175,7 +177,7 @@ export default function Dashboard() {
 
   const fetchExecutionLogs = useCallback(async () => {
     try {
-      const res = await fetch(`/api/execution/logs?limit=20`);
+      const res = await fetch(`${API_BASE}/api/execution/logs?limit=20`);
       if (res.ok) {
         const json = await res.json();
         setExecutionLogs(json.logs || []);
@@ -187,7 +189,7 @@ export default function Dashboard() {
 
   const fetchRebalanceStatus = useCallback(async () => {
     try {
-      const res = await fetch(`/api/rebalance/status`);
+      const res = await fetch(`${API_BASE}/api/rebalance/status`);
       if (res.ok) {
         setRebalanceStatus(await res.json());
       }
@@ -198,7 +200,7 @@ export default function Dashboard() {
 
   const fetchAutoTradeToggle = useCallback(async () => {
     try {
-      const res = await fetch(`/api/execution/toggle`);
+      const res = await fetch(`${API_BASE}/api/execution/toggle`);
       if (res.ok) {
         setAutoTradeToggle(await res.json());
       }
@@ -209,7 +211,7 @@ export default function Dashboard() {
 
   const fetchRebalanceToggle = useCallback(async () => {
     try {
-      const res = await fetch(`/api/rebalance/toggle`);
+      const res = await fetch(`${API_BASE}/api/rebalance/toggle`);
       if (res.ok) {
         setRebalanceToggle(await res.json());
       }
@@ -222,7 +224,7 @@ export default function Dashboard() {
     setTogglingAutoTrade(true);
     try {
       const newValue = !autoTradeToggle?.auto_trade_enabled;
-      const res = await fetch(`/api/execution/toggle`, {
+      const res = await fetch(`${API_BASE}/api/execution/toggle`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: newValue }),
@@ -241,7 +243,7 @@ export default function Dashboard() {
     setTogglingRebalance(true);
     try {
       const newValue = !rebalanceToggle?.rebalance_enabled;
-      const res = await fetch(`/api/rebalance/toggle`, {
+      const res = await fetch(`${API_BASE}/api/rebalance/toggle`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: newValue }),
@@ -259,7 +261,7 @@ export default function Dashboard() {
   const triggerRebalance = async () => {
     setRebalanceLoading(true);
     try {
-      const res = await fetch(`/api/rebalance`, { method: "POST" });
+      const res = await fetch(`${API_BASE}/api/rebalance`, { method: "POST" });
       const data = await res.json();
       if (res.ok) {
         await Promise.all([fetchExecutionLogs(), fetchRebalanceStatus()]);
@@ -305,11 +307,11 @@ export default function Dashboard() {
       setError("");
       try {
         const [ohlcvRes, scoresRes, recRes, expRes, monRes] = await Promise.all([
-          fetch(`/api/indicators/${ticker}`),
-          fetch(`/api/scores/${ticker}`),
-          fetch(`/api/recommend/${ticker}`),
-          fetch(`/api/explain/${ticker}`),
-          fetch(`/api/monitor`),
+          fetch(`${API_BASE}/api/indicators/${ticker}`),
+          fetch(`${API_BASE}/api/scores/${ticker}`),
+          fetch(`${API_BASE}/api/recommend/${ticker}`),
+          fetch(`${API_BASE}/api/explain/${ticker}`),
+          fetch(`${API_BASE}/api/monitor`),
         ]);
 
         const ohlcvJson = await ohlcvRes.json();

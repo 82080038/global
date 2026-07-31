@@ -33,7 +33,7 @@ from trading_system.monitoring.engine import MonitoringEngine
 from trading_system.paper_trading.engine import PaperTradingEngine
 from trading_system.xai.engine import ExplainableAIEngine
 
-app = FastAPI(title="Trading System API", version="0.1.0")
+app = FastAPI(title="Trading System API", version="0.1.7")
 
 # CORS middleware — allow frontend (port 3000) and any origin in dev
 app.add_middleware(
@@ -60,7 +60,28 @@ if _ENV == "production" and not _API_KEY:
 # Endpoint sensitif yang mengubah perilaku trading runtime — selalu wajib API key
 # (bukan opsional) meskipun ENV bukan production, karena dampaknya langsung ke
 # eksekusi order nyata (§3.5).
-_SENSITIVE_PATHS = {"/api/execution/toggle", "/api/rebalance/toggle"}
+_SENSITIVE_PATHS = {
+    "/api/execution/toggle",
+    "/api/rebalance/toggle",
+    "/api/execution/run",
+    "/api/rebalance",
+    "/api/fetch",
+    "/api/data/{ticker}",
+    "/api/scores/{ticker}",
+    "/api/orders",
+    "/api/audit",
+    "/api/positions/{position_id}",
+    "/api/ai/weights",
+    "/api/performance/snapshots",
+    "/api/risk/daily",
+    "/api/archive/{ticker}",
+    "/api/relationships",
+    "/api/corporate-actions/{ticker}",
+    "/api/news",
+}
+
+# DELETE methods are always sensitive regardless of path
+_DELETE_METHOD = "DELETE"
 
 
 def _valid_api_key(provided: str) -> bool:
@@ -76,11 +97,14 @@ async def api_key_auth(request: Request, call_next):
     header custom tidak selalu tersedia saat upgrade koneksi; lihat `ws_engines`.
     """
     path = request.url.path
+    method = request.method
     if path in ("/", "/api/health") or path.startswith("/ws/"):
         return await call_next(request)
 
-    if path in _SENSITIVE_PATHS and not _API_KEY:
-        # Endpoint sensitif tidak boleh berjalan tanpa proteksi API key sama sekali.
+    # DELETE methods are always sensitive (destructive operations)
+    is_sensitive = method == _DELETE_METHOD or path in _SENSITIVE_PATHS
+
+    if is_sensitive and not _API_KEY:
         return JSONResponse(status_code=503, content={"detail": "API_KEY belum dikonfigurasi di server; endpoint ini dinonaktifkan demi keamanan."})
 
     if _API_KEY:
@@ -840,6 +864,56 @@ def get_audit_logs(
     """Get audit log entries with optional filtering and pagination."""
     logs = storage.get_audit_logs(event_type=event_type, actor=actor, limit=limit, offset=offset)
     return {"logs": logs, "count": len(logs)}
+
+
+# ====================== UPDATE ENDPOINTS (CRUD completeness) ======================
+@app.patch("/api/positions/{position_id}")
+def update_position(position_id: int, payload: dict):
+    """Update position fields (stop_loss, take_profit, trailing_stop_pct, status, etc.)."""
+    allowed_fields = {"stop_loss", "take_profit", "trailing_stop_pct", "status",
+                      "current_price", "highest_price_since_entry", "quantity",
+                      "avg_entry_price", "closed_at"}
+    updates = {k: v for k, v in payload.items() if k in allowed_fields}
+    if not updates:
+        raise HTTPException(status_code=400, detail=f"No valid fields to update. Allowed: {allowed_fields}")
+    existing = storage.get_open_position_by_id(position_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail=f"Position {position_id} not found")
+    storage.update_position(position_id, **updates)
+    storage.audit("update.position", {"position_id": position_id, "fields": list(updates.keys())})
+    return {"position_id": position_id, "updated": True, "fields": list(updates.keys())}
+
+
+@app.put("/api/watchlist/{ticker}")
+def update_watchlist(ticker: str, payload: dict):
+    """Update watchlist entry (notes, is_favorite)."""
+    allowed_fields = {"notes", "is_favorite"}
+    updates = {k: v for k, v in payload.items() if k in allowed_fields}
+    if not updates:
+        raise HTTPException(status_code=400, detail=f"No valid fields. Allowed: {allowed_fields}")
+    storage.update_watchlist(ticker, **updates)
+    storage.audit("update.watchlist", {"ticker": ticker, "fields": list(updates.keys())})
+    return {"ticker": ticker, "updated": True, "fields": list(updates.keys())}
+
+
+@app.put("/api/system-state/{key}")
+def set_system_state(key: str, payload: dict):
+    """Set a system state key-value pair (e.g., circuit breaker flags)."""
+    value = payload.get("value")
+    if value is None:
+        raise HTTPException(status_code=400, detail="Field 'value' is required")
+    storage.set_state(key, str(value))
+    storage.audit("set.system_state", {"key": key})
+    return {"key": key, "set": True}
+
+
+@app.get("/api/system-state/{key}")
+def get_system_state(key: str):
+    """Get a system state value by key."""
+    value = storage.get_state(key)
+    if value is None:
+        raise HTTPException(status_code=404, detail=f"State key '{key}' not found")
+    return {"key": key, "value": value}
 
 
 # ====================== DELETE ENDPOINTS (CRUD completeness) ======================

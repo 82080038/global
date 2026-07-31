@@ -274,6 +274,46 @@ Ringkasan exposure portfolio: cash, invested, total equity, exposure %.
 
 Posisi untuk ticker spesifik.
 
+### PATCH `/api/positions/{position_id}`
+
+Update position fields (stop_loss, take_profit, trailing_stop_pct, status, current_price, etc.).
+
+**Request:**
+```json
+{"stop_loss": 8500, "take_profit": 10000}
+```
+
+**Response:**
+```json
+{"position_id": 1, "updated": true, "fields": ["stop_loss", "take_profit"]}
+```
+
+### PUT `/api/watchlist/{ticker}`
+
+Update watchlist entry (notes, is_favorite).
+
+**Request:**
+```json
+{"notes": "Watch for breakout above 9500"}
+```
+
+### PUT `/api/system-state/{key}`
+
+Set a system state key-value pair (e.g., circuit breaker flags).
+
+**Request:**
+```json
+{"value": "HALT"}
+```
+
+### GET `/api/system-state/{key}`
+
+Get a system state value by key. Returns 404 if key not found.
+
+```json
+{"key": "circuit_breaker", "value": "HALT"}
+```
+
 ### GET `/api/orders?ticker=BBCA.JK&limit=100`
 
 Riwayat order.

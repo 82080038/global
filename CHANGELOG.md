@@ -8,38 +8,62 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dan
 
 ## [0.1.7] — 2026-08-01
 
-Complete CRUD operations, frontend-backend integration fixes, lint cleanup.
+Complete CRUD operations, frontend-backend integration fixes, lint cleanup, security hardening.
 
 ### Added — CRUD Operations
 
 - **12 Delete methods** in `DataStorage`: `delete_ohlcv`, `delete_scores`, `delete_orders`, `delete_audit_logs`, `delete_position`, `delete_ai_weights`, `delete_equity_snapshots`, `delete_daily_risk_metrics`, `delete_relationships`, `delete_corporate_actions`, `delete_news`.
 - **`get_audit_logs`** Read method with filtering + pagination in `DataStorage`.
+- **`get_open_position_by_id`** Read method in `DataStorage`.
+- **`update_watchlist`** Update method in `DataStorage`.
 - **`delete_archived_ticker`** in `ArchiveAdapter` for Parquet file deletion.
 - **12 DELETE API endpoints** for all resources + **GET `/api/audit`** for audit log reading.
 - **GET `/api/portfolio/exposure`** endpoint for portfolio exposure summary.
-- Total API routes: **59 REST** (47 GET/POST + 12 DELETE) + 1 WebSocket.
+- **PATCH `/api/positions/{position_id}`** endpoint for updating position fields (stop_loss, take_profit, status, etc.).
+- **PUT `/api/watchlist/{ticker}`** endpoint for updating watchlist notes/favorite status.
+- **PUT `/api/system-state/{key}`** + **GET `/api/system-state/{key}`** endpoints for circuit breaker flags and runtime state.
+- Total API routes: **63 REST** (47 GET/POST + 12 DELETE + 4 PATCH/PUT/GET update) + 1 WebSocket.
+
+### Fixed — Security Hardening
+
+- **DELETE method protection**: All DELETE requests now require API key (previously only 2 toggle endpoints were sensitive).
+- **Destructive POST endpoints** (`/api/execution/run`, `/api/rebalance`, `/api/fetch`) added to `_SENSITIVE_PATHS`.
+- **API version** updated from `0.1.0` to `0.1.7` in FastAPI app metadata.
 
 ### Fixed — Frontend-Backend Integration
 
 - **Audit page** (`audit/page.tsx`): Fixed field mapping mismatch — was reading `data.entries` with `id/action/detail` fields; now correctly reads `data.logs` with `event_id/event_type/payload/timestamp/actor`.
 - **Backtest page** (`backtest/page.tsx`): Changed from GET to POST — API endpoint is `POST /api/backtest`, not `GET /api/backtest/{ticker}`.
+- **Dashboard page** (`dashboard/page.tsx`): Fixed all fetch calls to use `API_BASE` consistently (was mixing relative `/api/...` paths with absolute URLs).
 
 ### Fixed — Lint & Code Quality
 
 - **108 ruff lint errors** fixed in test files (unused imports, unsorted imports, f-string placeholders, UP017 datetime.UTC alias, SIM300 Yoda conditions).
 - All test files now pass `ruff check` with zero errors.
 
+### Fixed — Documentation
+
+- **STATUS.md**: Database table count corrected from 13 to 32 (actual count).
+- **API_REFERENCE.md**: Added `GET /api/portfolio/exposure` documentation.
+- **CHANGELOG.md**: Fixed version numbering (0.1.6 → 0.1.5, was duplicate).
+
+### Fixed — CI
+
+- **CI workflow**: Added `tests/unit/` to ruff check (was only checking `src/`).
+- **CI workflow**: Added `npm run lint` step before frontend build.
+
 ### Cleanup
 
 - Removed duplicate script `scripts/import_archive_to_sqlite.py` (superseded by `import_legacy_data.py`).
 - Updated `.gitignore`: added `.mypy_cache/`, `.ruff_cache/`, `data/archive/*.parquet`.
+- Added `.gitkeep` to `data/` and `data/archive/` (folders were empty in repo).
 
 ### Tests
 
-- Total: **553 unit tests** (was 537), all passing, 0 warnings.
-- Added 16 API endpoint tests (2 audit, 2 portfolio exposure, 12 DELETE).
+- Total: **562 unit tests** (was 537), all passing, 0 warnings.
+- Added 25 API endpoint tests (2 audit, 2 portfolio exposure, 12 DELETE, 9 PATCH/PUT/GET update).
 - Ruff clean on both `src/` and `tests/`.
-- Frontend ESLint clean.
+- Frontend ESLint clean (0 warnings).
 
 ---
 

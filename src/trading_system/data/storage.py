@@ -643,6 +643,19 @@ class DataStorage:
             cols = [d[0] for d in conn.execute("SELECT * FROM positions WHERE status = 'OPEN' ORDER BY opened_at DESC").description]
             return [dict(zip(cols, row)) for row in rows]
 
+    def get_open_position_by_id(self, position_id: int) -> dict | None:
+        """Get a position by ID (any status)."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM positions WHERE id = ?", (position_id,)
+            ).fetchone()
+            if row:
+                cols = [d[0] for d in conn.execute(
+                    "SELECT * FROM positions WHERE id = ?", (position_id,)
+                ).description]
+                return dict(zip(cols, row))
+            return None
+
     def update_position(self, position_id: int, **kwargs):
         """Update position fields."""
         from datetime import datetime
@@ -761,6 +774,18 @@ class DataStorage:
             conn.execute(
                 "UPDATE watchlist SET is_favorite = 0 WHERE ticker = ?", (ticker,)
             )
+            return True
+
+    def update_watchlist(self, ticker: str, **kwargs) -> bool:
+        """Update watchlist fields (notes, is_favorite)."""
+        allowed = {"notes", "is_favorite"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return False
+        sets = ", ".join(f"{k} = ?" for k in updates)
+        vals = list(updates.values()) + [ticker]
+        with self._connect() as conn:
+            conn.execute(f"UPDATE watchlist SET {sets} WHERE ticker = ?", vals)
             return True
 
     def toggle_watchlist(self, ticker: str) -> bool:
