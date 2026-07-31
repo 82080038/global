@@ -1,7 +1,7 @@
 # Saran Pengembangan Sistem Trading — Hasil Analisa Mendalam
 
 > **Tanggal analisa:** 31 Juli 2026
-> **Versi aplikasi:** 0.1.7
+> **Versi aplikasi:** 0.1.8
 > **Cakupan:** Seluruh codebase — `src/trading_system/` (18 engine), `frontend/`, `scripts/`, `tests/`, CI/CD, Docker, dokumentasi.
 
 ---
@@ -74,7 +74,7 @@ Faktor yang **berkorelasi negatif** dengan forward return (mis. sentiment score 
 
 ## 3. Prioritas Tinggi (P1) — Kebenaran Kuantitatif & Keamanan
 
-### 3.1 Look-ahead bias 1 bar di Backtest Engine
+### 3.1 Look-ahead bias 1 bar di Backtest Engine ✅ SELESAI (v0.1.4)
 
 `backtest/engine.py::run`: sinyal dihitung dari `close` bar yang sama dengan harga eksekusi (`price = row["close"]`). Dalam praktik, sinyal MA crossover baru diketahui **setelah** close, sehingga eksekusi realistis adalah **open bar berikutnya**.
 
@@ -84,13 +84,17 @@ Faktor yang **berkorelasi negatif** dengan forward return (mis. sentiment score 
 - Terapkan tick size IDX (fraksi harga Rp1/2/5/10/25) pada fill price.
 - Refactor: `run` dan `run_with_data` adalah ~90% duplikat — satukan menjadi satu loop inti.
 
-### 3.2 Backtest hanya single-asset, tanpa strategi berbasis Decision Engine
+> **Resolved:** Eksekusi next-bar-open (`df["open"].shift(-1)`) diimplementasikan; share count dibulatkan ke `IDX_LOT_SIZE` (100); fill price dibulatkan ke tick size IDX via `round_to_tick()`; `run` dan `run_with_data` disatukan ke `_run_core`.
+
+### 3.2 Backtest hanya single-asset, tanpa strategi berbasis Decision Engine ✅ SELESAI (v0.1.4)
 
 Strategi yang tersedia hanya `BuyAndHold` dan `MovingAverageCrossover`. **Tidak ada backtest untuk strategi yang benar-benar dipakai sistem** (multi-factor conviction score). Artinya klaim performa sistem tidak pernah teruji secara historis.
 
 **Saran:** buat `ConvictionStrategy` yang mereplay skor historis dari tabel `scores` (point-in-time) dan menghasilkan sinyal sesuai `decide_action`. Tambahkan backtest portofolio multi-aset dengan alokasi dari Risk Engine. Ini adalah **fitur paling bernilai** untuk memvalidasi keseluruhan sistem.
 
-### 3.3 Ketidakkonsistenan modal (capital)
+> **Resolved:** `ConvictionStrategy` diimplementasikan di `backtest/strategies.py` (v0.1.4). Strategi mereplay skor historis dari tabel `scores` via `pd.merge_asof` (point-in-time) dan menghasilkan sinyal BUY/SELL sesuai `decide_action`. CLI: `--strategy conviction`. API: `POST /api/backtest` dengan `strategy: "conviction"`.
+
+### 3.3 Ketidakkonsistenan modal (capital) ✅ SELESAI (v0.1.3)
 
 - `risk/engine.py::analyze` default `capital = 1_000_000_000`.
 - `execution/automated.py` membaca `TRADING_CAPITAL` env (default `100_000_000`).
@@ -99,6 +103,8 @@ Strategi yang tersedia hanya `BuyAndHold` dan `MovingAverageCrossover`. **Tidak 
 `DecisionEngine.recommend` memanggil `self.risk.analyze(ticker)` **tanpa** meneruskan capital, sehingga `position_size` di rekomendasi dihitung dengan modal 1 miliar meskipun robot trading beroperasi dengan 100 juta.
 
 **Saran:** satu sumber kebenaran — `TRADING_CAPITAL` dibaca di `config.py` dan di-inject ke semua engine.
+
+> **Resolved:** `TRADING_CAPITAL` dan `EXIT_CONVICTION_THRESHOLD` disatukan di `config.py` sebagai satu sumber kebenaran, dipakai konsisten di `risk/engine.py`, `decision/engine.py`, `execution/automated.py`, `cli.py`, `api/app.py`.
 
 ### 3.4 Perhitungan Daily Loss Limit tidak akurat ✅ SELESAI (v0.1.3)
 
@@ -124,7 +130,7 @@ Strategi yang tersedia hanya `BuyAndHold` dan `MovingAverageCrossover`. **Tidak 
 >
 > **Resolved (v0.1.8):** Sensitive path matching diperbaiki untuk parameterized paths (prefix matching); read-only GET endpoints dikeluarkan dari `_SENSITIVE_PATHS`; POST body validation untuk `/api/rebalance` dan `/api/execution/run` menggunakan `Body(default_factory=dict)`.
 
-### 3.6 Metodologi risiko
+### 3.6 Metodologi risiko (sebagian selesai)
 
 `risk/engine.py`:
 
@@ -133,11 +139,17 @@ Strategi yang tersedia hanya `BuyAndHold` dan `MovingAverageCrossover`. **Tidak 
 - Risiko dihitung **per ticker**, tidak ada VaR portofolio dengan korelasi antar-posisi (matriks korelasi sudah tersedia di `relationship_matrix` — manfaatkan).
 - Monte Carlo (`backtest/metrics.py`) memakai IID bootstrap — mengabaikan autokorelasi & volatility clustering. Gunakan **block bootstrap** (mis. blok 10–20 hari).
 
+> **Resolved (v0.1.3):** Historical VaR (percentile empiris) ditambahkan sebagai pembanding VaR parametrik di `risk/engine.py`.
+>
+> **Resolved (v0.1.4):** Block bootstrap Monte Carlo diimplementasikan dengan parameter `block_size` di `monte_carlo_simulation` untuk preserve autokorelasi & volatility clustering.
+>
+> **Belum selesai:** Slippage kontinu dari rasio order/ADV; VaR portofolio dengan korelasi antar-posisi.
+
 ---
 
 ## 4. Prioritas Menengah (P2) — Arsitektur, Data, dan Ketahanan
 
-### 4.1 Sumber data tunggal (yfinance) = single point of failure
+### 4.1 Sumber data tunggal (yfinance) = single point of failure ✅ SELESAI (v0.1.5)
 
 Seluruh sistem (OHLCV, fundamental, macro, global, corporate actions) bergantung pada Yahoo Finance yang: (a) tidak resmi & bisa berubah/blokir sewaktu-waktu, (b) delayed, (c) data fundamental `.JK` sangat terbatas (sudah diakui di `fundamental.py`), (d) foreign flow & broker summary hanya **proxy** dari harga+volume, bukan data riil IDX.
 
@@ -146,13 +158,17 @@ Seluruh sistem (OHLCV, fundamental, macro, global, corporate actions) bergantung
 - `source_config.yaml` yang disebut di komentar `acquisition.py` belum ada — realisasikan sebagai mekanisme mapping ticker→source.
 - Fetch saat ini selalu tarik `period=2y` penuh — implementasikan **incremental fetch** (dari timestamp terakhir di DB) untuk mengurangi beban & rate limit.
 
-### 4.2 Data macro/global menjadi basi (stale)
+> **Resolved:** `DataSourceAdapter` interface diimplementasikan dengan `SQLiteAdapter`, `CSVAdapter`, `ArchiveAdapter`; `DataSourceManager` dengan priority fallback + auto last_timestamp lookup; `fetch_incremental()` untuk incremental fetch.
+
+### 4.2 Data macro/global menjadi basi (stale) ✅ SELESAI (v0.1.4)
 
 `analysis/macro.py::ensure_data` dan `global_market.py::ensure_data` hanya fetch **jika tabel kosong**. Setelah fetch pertama, data tidak pernah di-refresh — skor macro/global akan dihitung dari data usang tanpa peringatan.
 
 **Saran:** cek umur data (`max(timestamp)`); refresh jika > 1 hari bursa. Tambahkan `data_age_days` ke breakdown skor agar Decision Engine bisa mendiskon faktor basi.
 
-### 4.3 Penyimpanan: performa dan integritas
+> **Resolved:** `ensure_data` kini menerima `max_age_days` (default 1); re-fetch jika `max(timestamp)` lebih tua dari threshold. `data_age_days` ditambahkan ke breakdown skor macro & global.
+
+### 4.3 Penyimpanan: performa dan integritas ✅ SELESAI (v0.1.5)
 
 `data/storage.py`:
 
@@ -163,18 +179,28 @@ Seluruh sistem (OHLCV, fundamental, macro, global, corporate actions) bergantung
 - Tidak ada index sekunder (mis. `scores(ticker, engine, as_of)` sudah PK, tapi `audit_log(timestamp)`, `orders(created_at)` belum) — tambahkan untuk query log yang membesar.
 - File parquet raw zone menumpuk tanpa retensi (`{ticker}_{interval}_{timestamp}.parquet` setiap fetch) — tambahkan kebijakan retensi/cleanup.
 
-### 4.4 Skalabilitas API & WebSocket
+> **Resolved:** WAL journal mode persistent + `synchronous=NORMAL` + 64MB cache; `executemany_batch()` helper untuk large imports; 18 tabel D1–D31 di Alembic migration; `_migrate_legacy_tables()` untuk schema incompatible; `adjusted_close` integration dengan corporate actions (formula split/dividen diperbaiki, auto-fetch, CLI `update-adjusted-close`); index `orders(created_at)` dan `audit_log(timestamp)` ditambahkan.
+>
+> **Belum selesai:** Retensi/cleanup Parquet raw zone.
+
+### 4.4 Skalabilitas API & WebSocket ✅ SELESAI (v0.1.7)
 
 - `_build_engines_status()` meng-import 18 modul + query DB, dan dipanggil **per klien WS setiap 5 detik**. Dengan 10 klien = 120 build/menit. Gunakan satu background task yang broadcast ke semua klien (pattern pub/sub), plus cache TTL untuk `GET /api/engines`.
 - Endpoint berat (backtest, Monte Carlo, `POST /api/fetch`) berjalan sinkron di request-response — untuk simulasi besar gunakan background task/job queue dengan endpoint status.
 - Tidak ada pagination pada endpoint list (orders, audit logs) — akan berat saat data tumbuh.
 
-### 4.5 Duplikasi logika & konsistensi antar engine
+> **Resolved:** Engine status cache (3s TTL) untuk WS `/ws/live` — tidak recompute setiap 5 detik. Pagination di `/api/tickers`, `/api/data/ohlcv`, `/api/watchlist/all`.
+>
+> **Belum selesai:** Background task/job queue untuk endpoint berat (backtest, Monte Carlo, fetch).
+
+### 4.5 Duplikasi logika & konsistensi antar engine ✅ SELESAI (v0.1.5)
 
 - Perhitungan **ATR** ada 3 versi: `risk/engine.py::_atr`, `execution/automated.py::_get_atr`, `analysis/technical.py` — pindahkan ke satu modul `utils/indicators.py`.
 - Logika fee BUY/SELL diduplikasi di `execution/engine.py`, `automated.py`, `rebalancer.py`, `backtest/engine.py` — gunakan `ExecutionEngine.compute_fees` di semua tempat.
 - `import json` berulang di dalam fungsi (belasan tempat) — pindah ke top-level import.
 - `AutomatedExecutionEngine` mengeksekusi order sendiri **tanpa** memakai `ExecutionEngine.simulate_fill` (tidak ada slippage pada harga eksekusi robot) — inkonsisten dengan backtest yang memakai slippage.
+
+> **Resolved:** `risk/costs.py` sebagai single source of truth: `compute_atr()`, `get_latest_atr()`, `CostModel` (buy/sell fee, levy, slippage, simulate_fill, check_feasibility). Semua engine kini delegasi ke `costs.py`: `risk/engine.py`, `execution/engine.py`, `execution/automated.py`, `backtest/engine.py`, `analysis/technical.py`.
 
 ### 4.6 Technical & Macro engine — kualitas sinyal
 
@@ -194,12 +220,16 @@ Seluruh sistem (OHLCV, fundamental, macro, global, corporate actions) bergantung
 
 ## 5. Prioritas Rendah (P3) — Kualitas, DX, dan Fitur Lanjutan
 
-### 5.1 Kualitas kode & tooling
+### 5.1 Kualitas kode & tooling ✅ SELESAI (v0.1.7)
 
 - Tambahkan **ruff** (lint + format) dan **mypy** ke CI — pyflakes saat ini `|| true` (baris 32 `ci.yml`) sehingga lint error tidak pernah menggagalkan build. Minimal hilangkan `|| true`.
 - Tambahkan `pip-audit`/`dependabot` untuk keamanan dependensi.
 - Pisahkan dependensi dev (pytest, playwright) dari runtime di `pyproject.toml` (`[project.optional-dependencies]`) — image Docker production tidak perlu Playwright.
 - Sinkronkan angka test di dokumentasi: `docs/STATUS.md` menyebut **154** di atas dan **117** di bawah; README menyebut 117.
+
+> **Resolved:** Ruff (192 errors → 0, 247 auto-fixed) + mypy (non-blocking) + coverage gate 50% (actual 69%) di CI. Angka test disinkronkan: 562 di semua dokumentasi.
+>
+> **Belum selesai:** `pip-audit`/`dependabot`; pemisahan dependensi dev vs runtime di `pyproject.toml`.
 
 ### 5.2 Testing
 

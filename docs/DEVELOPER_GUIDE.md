@@ -190,7 +190,7 @@ global/
 │   ├── paper_trading/           # Paper trading simulator
 │   │   └── engine.py
 │   ├── api/                     # REST API
-│   │   └── app.py               #   FastAPI app (63 endpoints + 1 WS)
+│   │   └── app.py               #   FastAPI app (64 endpoints + 1 WS)
 │   ├── utils/                   # Utilities
 │   │   ├── notifier.py          #   Telegram notifier
 │   │   └── logging_config.py    #   Logging setup
@@ -208,8 +208,10 @@ global/
 │   │   ├── components/
 │   │   │   ├── TerminalLayout.tsx  # Shared layout (sidebar nav)
 │   │   │   └── PriceChart.tsx      # Candlestick chart (lightweight-charts)
+│   │   ├── lib/
+│   │   │   └── api.ts              #   Shared apiFetch() with API key injection
 │   │   ├── layout.tsx           #   Root layout (fonts, metadata)
-│   │   └── globals.css          #   Tailwind global styles
+│   │   └── globals.css          #   Tailwind global styles (dark theme)
 │   ├── package.json             #   Next.js 16, React 19, Recharts, Tailwind 4
 │   ├── Dockerfile               #   Frontend Docker image
 │   └── .env.local               #   NEXT_PUBLIC_API_BASE=http://localhost:8000
@@ -245,7 +247,7 @@ global/
 │
 ├── docs/                        # DOCUMENTATION
 │   ├── DEVELOPER_GUIDE.md       #   ← YOU ARE HERE
-│   ├── API_REFERENCE.md         #   Detailed API docs (all 63 endpoints)
+│   ├── API_REFERENCE.md         #   Detailed API docs (all 64 endpoints)
 │   ├── STATUS.md                #   Current project status
 │   ├── SARAN_PENGEMBANGAN.md    #   Development roadmap (1197 lines)
 │   ├── TEST_PLAN.md             #   Test strategy
@@ -258,7 +260,7 @@ global/
 ├── .github/workflows/ci.yml     # CI: ruff + mypy + pytest + frontend lint + build + Docker
 ├── .env.example                 # Environment template (copy to .env)
 ├── .gitignore                   # Git ignore rules
-├── CHANGELOG.md                 # Version history (0.1.0 → 0.1.7)
+├── CHANGELOG.md                 # Version history (0.1.0 → 0.1.8)
 ├── README.md                    # Project overview
 ├── Dockerfile                   # Backend Docker image
 ├── docker-compose.yml           # Backend + Frontend containers
@@ -385,15 +387,17 @@ Setiap data OHLCV yang di-fetch divalidasi dengan scoring:
 
 ### Frontend → Backend Communication
 
-Semua halaman menggunakan `NEXT_PUBLIC_API_BASE` environment variable:
+Semua halaman menggunakan shared `apiFetch()` utility (`frontend/app/lib/api.ts`) yang otomatis meng-inject `X-API-Key` header:
 
 ```typescript
 // .env.local
 NEXT_PUBLIC_API_BASE=http://localhost:8000
+NEXT_PUBLIC_API_KEY=your_api_key  # opsional, hanya jika API_KEY di-set di backend
 
-// Di kode:
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
-const res = await fetch(`${API_BASE}/api/scores/${ticker}`);
+// Di kode (semua halaman):
+import { apiFetch } from "../lib/api";
+const res = await apiFetch(`/api/scores/${ticker}`);
+// apiFetch otomatis menambahkan API_BASE + X-API-Key header
 ```
 
 ### UI Design
@@ -451,7 +455,7 @@ Database: **SQLite** (`data/trading_system.db`), 32 tabel.
 
 **Base URL:** `http://localhost:8000`
 **Swagger docs:** `http://localhost:8000/docs`
-**Total:** 63 REST endpoints + 1 WebSocket
+**Total:** 64 REST endpoints + 1 WebSocket
 
 ### Read (GET) — tidak butuh API key di dev mode
 
@@ -481,6 +485,8 @@ Database: **SQLite** (`data/trading_system.db`), 32 tabel.
 | `GET /api/factor-weights/{ticker}` | AI factor weights |
 | `GET /api/corporate/{ticker}` | Corporate actions |
 | `GET /api/relationship/{ticker}` | Market relationship |
+| `GET /api/risk/{ticker}` | Per-ticker risk analysis (VaR, position sizing) |
+| `GET /api/risk/daily` | Daily portfolio risk metrics |
 | `GET /api/engines` | Engine registry (18 engines) |
 
 ### Write (POST) — butuh API key jika API_KEY set
@@ -491,7 +497,7 @@ Database: **SQLite** (`data/trading_system.db`), 32 tabel.
 | `POST /api/scores/compute` | Compute scores for ticker |
 | `POST /api/recommend` | Custom-weighted recommendation |
 | `POST /api/paper-trade` | Simulate paper trade |
-| `POST /api/backtest` | Run backtest |
+| `POST /api/backtest` | Run backtest (buy_and_hold, ma_crossover, conviction) |
 | `POST /api/backtest/monte-carlo` | Monte Carlo simulation |
 | `POST /api/backtest/walk-forward` | Walk-forward analysis |
 | `POST /api/execution/run` | Manual execution cycle |
@@ -499,6 +505,8 @@ Database: **SQLite** (`data/trading_system.db`), 32 tabel.
 | `POST /api/rebalance` | Trigger manual rebalance |
 | `POST /api/rebalance/toggle` | Toggle rebalance on/off |
 | `POST /api/performance/snapshot` | Save equity snapshot |
+| `POST /api/risk/refresh` | Recalculate daily risk metrics |
+| `POST /api/ai/train` | Train AI weights from historical data |
 
 ### Update (PATCH/PUT) — butuh API key
 
@@ -563,6 +571,8 @@ Database: **SQLite** (`data/trading_system.db`), 32 tabel.
 | `paper-trade` | Simulate paper trade | `cli paper-trade BBCA.JK` |
 | `execution` | Run automated execution | `cli execution --interval 15` |
 | `execution --once` | Run one cycle | `cli execution --once --tickers BBCA.JK` |
+| `schedule` | Daily scheduler (persistent) | `cli schedule` |
+| `schedule --once` | Run scheduler once (cron mode) | `cli schedule --once` |
 | `test-e2e` | End-to-end pipeline test | `cli test-e2e --tickers BBCA.JK TLKM.JK` |
 
 ---
@@ -607,6 +617,7 @@ cp .env.example .env
 ```bash
 # frontend/.env.local
 NEXT_PUBLIC_API_BASE=http://localhost:8000
+NEXT_PUBLIC_API_KEY=your_api_key  # opsional, sama dengan API_KEY backend
 ```
 
 ### Config Python (`src/trading_system/config.py`)
@@ -821,7 +832,7 @@ type: short description
 
 | File | Isi | Kapan Baca |
 |------|-----|-----------|
-| `docs/API_REFERENCE.md` | Detail semua 63 API endpoints dengan parameter & response | Saat integrasi frontend/API |
+| `docs/API_REFERENCE.md` | Detail semua 64 API endpoints dengan parameter & response | Saat integrasi frontend/API |
 | `docs/STATUS.md` | Status proyek, metrik (tests, endpoints, tables) | Saat cek progress |
 | `docs/SARAN_PENGEMBANGAN.md` | Roadmap pengembangan (1197 lines) | Saat planning sprint |
 | `docs/arsitektur-sistem-trading.md` | Deep-dive arsitektur (58K) | Saat perlu memahami detail engine |
@@ -829,7 +840,7 @@ type: short description
 | `docs/ANALISIS_SUMBER_DATA.md` | Analisis sumber data (MySQL, SQLite, CSV) | Saat import data |
 | `docs/MAPPING_PARQUET_SQLITE.md` | Mapping kolom Parquet → SQLite | Saat import legacy data |
 | `docs/TEST_PLAN.md` | Strategi testing | Saat menulis test baru |
-| `CHANGELOG.md` | Version history (0.1.0 → 0.1.7) | Saat cek apa yang berubah |
+| `CHANGELOG.md` | Version history (0.1.0 → 0.1.8) | Saat cek apa yang berubah |
 | `.env.example` | Template environment variables | Saat setup pertama |
 
 ---

@@ -2,7 +2,7 @@
 
 ## Buku Panduan Teknis Lengkap
 
-### Versi 0.1.7 — Phase 1–5
+### Versi 0.1.8 — Phase 1–5
 
 **Sistem Operasi Pengambilan Keputusan Investasi**
 
@@ -2394,6 +2394,6 @@ class DataQualityReport(BaseModel):
 
 ---
 
-*Dokumen ini disusun pada Juli 2026. Versi aplikasi: 0.1.7. Update terakhir: 1 Agustus 2026 — sinkronisasi dengan implementasi multi-phase, CRUD lengkap, security hardening.*
+*Dokumen ini disusun pada Juli 2026. Versi aplikasi: 0.1.8. Update terakhir: 1 Agustus 2026 — sinkronisasi dengan implementasi multi-phase, CRUD lengkap, security hardening, deep audit (frontend-backend integration, Docker/CI fixes, code quality, missing endpoints).*
 
 *Untuk pertanyaan teknis, merujuk pada kode sumber di direktori `src/trading_system/` dan `frontend/`.*
