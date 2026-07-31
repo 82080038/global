@@ -29,7 +29,7 @@ jobs:
 
       - name: Lint with ruff
         run: |
-          ruff check src/trading_system/
+          ruff check src/trading_system/ tests/unit/
 
       - name: Type check with mypy
         continue-on-error: true
@@ -64,6 +64,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
 
       - name: Build frontend
         working-directory: frontend

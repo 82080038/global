@@ -256,6 +256,20 @@ Semua posisi terbuka.
 {"positions": [{"ticker": "BBCA.JK", "quantity": 1000, "entry_price": 9000, "stop_loss": 8750, "take_profit": 9500, "status": "open"}], "count": 1}
 ```
 
+### GET `/api/portfolio/exposure`
+
+Ringkasan exposure portfolio: cash, invested, total equity, exposure %.
+
+```json
+{
+  "cash": 50000,
+  "invested": 500000,
+  "total_equity": 550000,
+  "exposure_pct": 90.91,
+  "position_count": 1
+}
+```
+
 ### GET `/api/positions/{ticker}`
 
 Posisi untuk ticker spesifik.

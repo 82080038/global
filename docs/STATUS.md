@@ -290,5 +290,5 @@ Data Layer → Analysis Layer → Sentiment Layer → Risk Layer
 
 **Total engines:** 18 base + 18 TIP-adopted = 36 (lihat Lampiran C di buku-sistem-trading.md)  
 **Total API endpoints:** 59 REST (47 GET/POST + 12 DELETE) + 1 WebSocket  
-**Total database tables:** 13  
+**Total database tables:** 32  
 **Total unit tests:** 553

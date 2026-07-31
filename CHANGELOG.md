@@ -43,7 +43,7 @@ Complete CRUD operations, frontend-backend integration fixes, lint cleanup.
 
 ---
 
-## [0.1.6] — 2026-08-01
+## [0.1.5] — 2026-08-01
 
 Data archive & port modul dari proyek `pasar_modal`.
 
