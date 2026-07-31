@@ -81,6 +81,167 @@ TABLE_MAP = {
         "partition_by": None,
         "date_col": None,
     },
+    # --- Tambahan batch 2 ---
+    "chart_patterns": {
+        "mysql_table": "chart_patterns",
+        "partition_by": "year",
+        "date_col": "tanggal",
+    },
+    "saham_historical": {
+        "mysql_table": "saham_historical",
+        "partition_by": "year",
+        "date_col": "tanggal",
+    },
+    "multi_asset": {
+        "mysql_table": "multi_asset",
+        "partition_by": "year",
+        "date_col": "tanggal",
+    },
+    "foreign_flow": {
+        "mysql_table": "foreign_flow",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "fear_greed_index": {
+        "mysql_table": "fear_greed_index",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "indikator_teknikal": {
+        "mysql_table": "indikator_teknikal",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "saham": {
+        "mysql_table": "saham",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "stock_ipo": {
+        "mysql_table": "stock_ipo",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "corporate_governance": {
+        "mysql_table": "corporate_governance",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "kebijakan_regulasi": {
+        "mysql_table": "kebijakan_regulasi",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "esg_scores": {
+        "mysql_table": "esg_scores",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "event_eksternal": {
+        "mysql_table": "event_eksternal",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "ai_scores": {
+        "mysql_table": "ai_scores",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "ai_alerts": {
+        "mysql_table": "ai_alerts",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "ai_portfolio": {
+        "mysql_table": "ai_portfolio",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "ai_correlation": {
+        "mysql_table": "ai_correlation",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "ai_auto_trade": {
+        "mysql_table": "ai_auto_trade",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "pattern_analysis": {
+        "mysql_table": "pattern_analysis",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "stock_personality": {
+        "mysql_table": "stock_personality",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "sektor": {
+        "mysql_table": "sektor",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "blind_forecast": {
+        "mysql_table": "blind_forecast",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "backtest_result": {
+        "mysql_table": "backtest_result",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "transaksi": {
+        "mysql_table": "transaksi",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "portfolio": {
+        "mysql_table": "portfolio",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "trade_journal": {
+        "mysql_table": "trade_journal",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "strategy_config": {
+        "mysql_table": "strategy_config",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "price_alerts": {
+        "mysql_table": "price_alerts",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "training_log": {
+        "mysql_table": "training_log",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "ml_config": {
+        "mysql_table": "ml_config",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "trader_saldo": {
+        "mysql_table": "trader_saldo",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "notifications": {
+        "mysql_table": "notifications",
+        "partition_by": None,
+        "date_col": None,
+    },
+    "data_fetch_log": {
+        "mysql_table": "data_fetch_log",
+        "partition_by": None,
+        "date_col": None,
+    },
 }
 
 
