@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import warnings
 
-import numpy as np
-import pandas as pd
 import yfinance as yf
 
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -109,46 +107,65 @@ class FundamentalAnalysisEngine:
             growth["revenue_growth"] = float(self.info["revenueGrowth"]) * 100
         return growth
 
-    def compute_score(self, ratios: dict) -> tuple[float, dict]:
+    def compute_score(self, ratios: dict) -> tuple[float, dict, float]:
+        """Compute fundamental score using only available data.
+
+        Missing data does NOT get a neutral 12.5 score. Instead, the score
+        is normalized over available components only. A data_coverage ratio
+        (0-1) is returned so callers can penalize or flag low-coverage scores.
+
+        Returns: (score 0-100, breakdown, data_coverage 0-1)
+        """
         breakdown = {}
+        max_per_component = 25.0
+        components = {}
 
         # Valuation (0-25): lower PER/PBV good
         per = ratios.get("PER")
         pbv = ratios.get("PBV")
         if per is not None:
-            breakdown["PER"] = min(25, max(0, 25 - (per / 5)))  # 0 PER -> 25, PER 50+ -> 0
-        else:
-            breakdown["PER"] = 12.5
+            components["PER"] = min(max_per_component, max(0, 25 - (per / 5)))
         if pbv is not None:
-            breakdown["PBV"] = min(25, max(0, 25 - (pbv / 0.4)))
-        else:
-            breakdown["PBV"] = 12.5
+            components["PBV"] = min(max_per_component, max(0, 25 - (pbv / 0.4)))
 
         # Profitability (0-25)
         roe = ratios.get("ROE")
         if roe is not None:
-            breakdown["ROE"] = min(25, roe)
-        else:
-            breakdown["ROE"] = 12.5
+            components["ROE"] = min(max_per_component, roe)
 
         # Leverage (0-25): lower DER is better
         der = ratios.get("DER")
         if der is not None:
-            breakdown["DER"] = max(0, 25 - der * 25)
-        else:
-            breakdown["DER"] = 12.5
+            components["DER"] = max(0, 25 - der * 25)
 
         # Growth (0-25)
-        eps_g = ratios.get("eps_growth") or 0
-        rev_g = ratios.get("revenue_growth") or 0
+        eps_g = ratios.get("eps_growth")
+        rev_g = ratios.get("revenue_growth")
         if eps_g is not None or rev_g is not None:
             avg = ((eps_g or 0) + (rev_g or 0)) / 2
-            breakdown["growth"] = min(25, max(0, 12.5 + avg))
-        else:
-            breakdown["growth"] = 12.5
+            components["growth"] = min(max_per_component, max(0, 12.5 + avg))
 
-        score = sum(breakdown.values())
-        return float(score), breakdown
+        # Calculate coverage
+        total_possible = 5 * max_per_component  # PER, PBV, ROE, DER, growth
+        data_coverage = len(components) / 5.0 if total_possible > 0 else 0.0
+
+        # Score: normalize available component scores to 0-100 scale
+        if components:
+            raw_score = sum(components.values())
+            # Scale: (raw / max_possible_for_available) * 100
+            max_available = len(components) * max_per_component
+            score = (raw_score / max_available) * 100 if max_available > 0 else 0.0
+            # Penalize low coverage: reduce score proportionally when < 60% data available
+            if data_coverage < 0.6:
+                score *= data_coverage / 0.6
+        else:
+            score = 0.0
+
+        breakdown = {k: round(v, 2) for k, v in components.items()}
+        breakdown["_data_coverage"] = round(data_coverage, 2)
+        breakdown["_missing"] = [c for c in ["PER", "PBV", "ROE", "DER", "growth"] if c not in components]
+
+        return float(score), breakdown, data_coverage
 
     def analyze(self) -> dict:
         if not self.ticker:
@@ -157,10 +174,11 @@ class FundamentalAnalysisEngine:
 
         if not self.info:
             return {
-                "status": "warning",
+                "status": "failed",
                 "message": f"No fundamental data for {self.ticker} from yfinance",
                 "engine": self.name,
                 "score": None,
+                "weight_multiplier": 0.0,
             }
 
         ratios = {}
@@ -169,11 +187,23 @@ class FundamentalAnalysisEngine:
         ratios.update(self.get_leverage())
         ratios.update(self.get_growth())
 
-        score, breakdown = self.compute_score(ratios)
+        score, breakdown, coverage = self.compute_score(ratios)
+
+        status = "ok"
+        weight_multiplier = 1.0
+        if coverage < 0.4:
+            status = "failed"
+            weight_multiplier = 0.0
+        elif coverage < 0.6:
+            status = "degraded"
+            weight_multiplier = 0.5
+
         return {
-            "status": "ok",
+            "status": status,
             "engine": self.name,
-            "score": round(score, 2),
+            "score": round(score, 2) if weight_multiplier > 0 else None,
+            "data_coverage": round(coverage, 2),
+            "weight_multiplier": weight_multiplier,
             "ratios": {k: round(v, 4) if isinstance(v, float) else v for k, v in ratios.items()},
             "breakdown": breakdown,
         }

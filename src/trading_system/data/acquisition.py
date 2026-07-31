@@ -13,7 +13,6 @@ import pandas as pd
 import yfinance as yf
 
 from trading_system.config import RAW_ZONE, YFINANCE_RATE_LIMIT_CALLS, YFINANCE_RATE_LIMIT_WINDOW
-from trading_system.data.contracts import DataSourceHealth
 from trading_system.data.storage import DataStorage
 
 

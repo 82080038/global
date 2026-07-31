@@ -1,13 +1,16 @@
 """FastAPI API dasar (Phase 1)."""
 
 import sys
+import os
 import time
+import logging
 import importlib
 import asyncio
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
+import pandas as pd
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
 from trading_system.data.storage import DataStorage
@@ -49,6 +52,45 @@ def get_data(category: str, ticker: str, start: str | None = None, end: str | No
     return {"ticker": ticker, "count": len(df), "data": df.reset_index().to_dict(orient="records")}
 
 
+@app.get("/api/indicators/{ticker}")
+def get_indicators(ticker: str):
+    """Return OHLCV with computed technical indicators (RSI, MACD, MA, Bollinger)."""
+    from trading_system.analysis.technical import TechnicalAnalysisEngine
+
+    df = storage.load_ohlcv(ticker)
+    if df.empty:
+        raise HTTPException(status_code=404, detail="Data not found")
+    engine = TechnicalAnalysisEngine()
+    engine.ohlcv = df
+    df_with_indicators = engine.compute_indicators()
+    records = []
+    for idx, row in df_with_indicators.iterrows():
+        record = {
+            "time": str(idx).split("T")[0] if hasattr(idx, "split") else str(idx),
+            "open": row["open"],
+            "high": row["high"],
+            "low": row["low"],
+            "close": row["close"],
+            "volume": row["volume"],
+        }
+        if "rsi" in row and not pd.isna(row.get("rsi")):
+            record["rsi"] = float(row["rsi"])
+        if "macd" in row and not pd.isna(row.get("macd")):
+            record["macd"] = float(row["macd"])
+        if "macd_signal" in row and not pd.isna(row.get("macd_signal")):
+            record["macd_signal"] = float(row["macd_signal"])
+        if "ma_20" in row and not pd.isna(row.get("ma_20")):
+            record["ma_20"] = float(row["ma_20"])
+        if "ma_50" in row and not pd.isna(row.get("ma_50")):
+            record["ma_50"] = float(row["ma_50"])
+        if "bb_upper" in row and not pd.isna(row.get("bb_upper")):
+            record["bb_upper"] = float(row["bb_upper"])
+        if "bb_lower" in row and not pd.isna(row.get("bb_lower")):
+            record["bb_lower"] = float(row["bb_lower"])
+        records.append(record)
+    return {"ticker": ticker, "count": len(records), "data": records}
+
+
 @app.post("/api/fetch")
 def fetch_data(payload: dict):
     tickers = payload.get("tickers", [])
@@ -61,9 +103,9 @@ def fetch_data(payload: dict):
         if result["status"] == "ok":
             raw = normalize_ohlcv(result["records"])
             clean, report = validator.validate(raw)
-            if report.action != "pause":
+            if report.action not in ("pause",):
                 storage.save_ohlcv(clean)
-            results.append({"ticker": t, "rows": len(clean), "quality": report.data_quality_score})
+            results.append({"ticker": t, "rows": len(clean), "quality": report.data_quality_score, "tier": report.tier, "action": report.action})
         else:
             results.append({"ticker": t, "error": result["message"]})
     return {"results": results}
@@ -199,6 +241,297 @@ def run_backtest(payload: dict):
     }
 
 
+@app.post("/api/backtest/monte-carlo")
+def run_monte_carlo(payload: dict):
+    """Run Monte Carlo simulation on historical returns of a ticker."""
+    from trading_system.backtest.metrics import monte_carlo_simulation
+
+    ticker = payload.get("ticker")
+    n_simulations = payload.get("n_simulations", 1000)
+    n_periods = payload.get("n_periods", 252)
+    capital = payload.get("capital", 1_000_000_000)
+    if not ticker:
+        raise HTTPException(status_code=400, detail="ticker required")
+
+    df = storage.load_ohlcv(ticker)
+    if df.empty:
+        raise HTTPException(status_code=404, detail="Data not found")
+
+    returns = df["close"].pct_change().dropna()
+    result = monte_carlo_simulation(returns, n_simulations=n_simulations, n_periods=n_periods, initial_capital=capital)
+    return {"ticker": ticker, **result}
+
+
+@app.post("/api/backtest/walk-forward")
+def run_walk_forward(payload: dict):
+    """Run walk-forward analysis for a strategy."""
+    from trading_system.backtest.metrics import walk_forward_analysis
+
+    ticker = payload.get("ticker")
+    strategy_name = payload.get("strategy", "buy_and_hold")
+    n_splits = payload.get("n_splits", 5)
+    train_size = payload.get("train_size", 252)
+    test_size = payload.get("test_size", 63)
+    if not ticker:
+        raise HTTPException(status_code=400, detail="ticker required")
+
+    df = storage.load_ohlcv(ticker)
+    if df.empty:
+        raise HTTPException(status_code=404, detail="Data not found")
+
+    if strategy_name == "buy_and_hold":
+        factory = lambda: BuyAndHold()
+    elif strategy_name == "ma_crossover":
+        factory = lambda: MovingAverageCrossover(20, 50)
+    else:
+        raise HTTPException(status_code=400, detail="Unknown strategy")
+
+    result = walk_forward_analysis(df, factory, n_splits=n_splits, train_size=train_size, test_size=test_size)
+    return {"ticker": ticker, "strategy": strategy_name, **result}
+
+
+@app.get("/api/positions")
+def get_positions():
+    """Get all open positions."""
+    positions = storage.get_all_open_positions()
+    return {"positions": positions, "count": len(positions)}
+
+
+@app.get("/api/positions/{ticker}")
+def get_position(ticker: str):
+    """Get open position for a specific ticker."""
+    position = storage.get_open_position(ticker)
+    if not position:
+        raise HTTPException(status_code=404, detail=f"No open position for {ticker}")
+    return position
+
+
+@app.get("/api/orders")
+def get_orders(ticker: str | None = None, limit: int = 100):
+    """Get order history."""
+    orders = storage.get_orders(ticker=ticker, limit=limit)
+    return {"orders": orders, "count": len(orders)}
+
+
+@app.post("/api/execution/run")
+def run_execution_cycle(payload: dict):
+    """Run one execution cycle (manual trigger)."""
+    from trading_system.execution.automated import AutomatedExecutionEngine
+
+    tickers = payload.get("tickers")
+    engine = AutomatedExecutionEngine(storage=storage)
+    results = engine.run_once(tickers)
+    return {"results": results, "count": len(results)}
+
+
+@app.post("/api/rebalance")
+def trigger_rebalance(payload: dict | None = None):
+    """Trigger portfolio rebalancing manually."""
+    from trading_system.portfolio.rebalancer import PortfolioRebalancer
+
+    rebalancer = PortfolioRebalancer(storage=storage)
+    # Temporarily enable if called via API
+    if not rebalancer.rebalance_enabled:
+        rebalancer.rebalance_enabled = True
+    results = rebalancer.run_rebalance()
+    return {"status": "ok", "orders": results, "count": len(results)}
+
+
+@app.get("/api/rebalance/status")
+def get_rebalance_status():
+    """Get current rebalance status (weights, drift, config)."""
+    from trading_system.portfolio.rebalancer import PortfolioRebalancer
+
+    rebalancer = PortfolioRebalancer(storage=storage)
+    return rebalancer.get_rebalance_status()
+
+
+@app.get("/api/execution/logs")
+def get_execution_logs(limit: int = 20):
+    """Get recent execution logs (orders + audit events) for dashboard display."""
+    orders = storage.get_orders(limit=limit)
+    logs = []
+    for o in orders:
+        logs.append({
+            "type": "ORDER",
+            "ticker": o.get("ticker", ""),
+            "action": o.get("order_type", ""),
+            "quantity": o.get("quantity", 0),
+            "price": o.get("price", 0),
+            "total_value": o.get("total_value", 0),
+            "fee": o.get("fee", 0),
+            "status": o.get("status", ""),
+            "trigger": o.get("trigger", "MANUAL"),
+            "timestamp": o.get("created_at", ""),
+            "details": f"{o.get('order_style', 'MARKET')} order",
+        })
+
+    # Also get recent audit events for decision signals
+    import sqlite3
+    from trading_system.config import DB_PATH
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        audit_rows = conn.execute(
+            "SELECT event_type, payload, timestamp FROM audit_log WHERE event_type LIKE 'decision.%' ORDER BY rowid DESC LIMIT 10"
+        ).fetchall()
+        conn.close()
+
+        import json
+        for event_type, payload_str, ts in audit_rows:
+            try:
+                payload = json.loads(payload_str)
+                logs.append({
+                    "type": "SIGNAL",
+                    "ticker": payload.get("ticker", ""),
+                    "action": payload.get("action", ""),
+                    "conviction": payload.get("conviction_score", 0),
+                    "status": "GENERATED",
+                    "timestamp": ts,
+                    "details": f"Conviction: {payload.get('conviction_score', 'N/A')}",
+                })
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # Sort by timestamp descending
+    logs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    return {"logs": logs[:limit], "count": len(logs[:limit])}
+
+
+# ====================== RUNTIME TOGGLES ======================
+# In-memory runtime config (persists until server restart).
+# On startup, reads from .env. Can be toggled via API without restart.
+
+_runtime_config = {
+    "auto_trade_enabled": os.getenv("AUTO_TRADE_ENABLED", "false").lower() == "true",
+    "rebalance_enabled": os.getenv("REBALANCE_ENABLED", "false").lower() == "true",
+}
+
+
+@app.get("/api/execution/toggle")
+def get_auto_trade_toggle():
+    """Get current auto-trade toggle status."""
+    return {
+        "auto_trade_enabled": _runtime_config["auto_trade_enabled"],
+        "capital": float(os.getenv("TRADING_CAPITAL", "100000000")),
+        "risk_per_trade": float(os.getenv("RISK_PER_TRADE", "0.01")),
+        "daily_loss_limit": float(os.getenv("DAILY_LOSS_LIMIT", "0")),
+    }
+
+
+@app.post("/api/execution/toggle")
+def set_auto_trade_toggle(payload: dict):
+    """Toggle auto-trade on/off at runtime (no server restart needed).
+
+    Body: {"enabled": true/false}
+    """
+    enabled = payload.get("enabled", False)
+    _runtime_config["auto_trade_enabled"] = bool(enabled)
+
+    # Also update os.environ so new AutomatedExecutionEngine instances pick it up
+    os.environ["AUTO_TRADE_ENABLED"] = "true" if enabled else "false"
+
+    status = "ENABLED" if enabled else "DISABLED"
+    logger = logging.getLogger("api.toggle")
+    logger.warning(f"Auto-trade toggled {status} via API")
+
+    return {
+        "auto_trade_enabled": _runtime_config["auto_trade_enabled"],
+        "message": f"Auto-trade {status}. {'Orders will execute automatically.' if enabled else 'Monitor mode only — no real execution.'}",
+    }
+
+
+@app.get("/api/rebalance/toggle")
+def get_rebalance_toggle():
+    """Get current rebalance toggle status."""
+    return {
+        "rebalance_enabled": _runtime_config["rebalance_enabled"],
+        "frequency": os.getenv("REBALANCE_FREQUENCY", "monthly"),
+        "target_weights": os.getenv("REBALANCE_TARGET_WEIGHTS", ""),
+    }
+
+
+@app.post("/api/rebalance/toggle")
+def set_rebalance_toggle(payload: dict):
+    """Toggle rebalance on/off at runtime (no server restart needed).
+
+    Body: {"enabled": true/false}
+    Optional: {"frequency": "daily|weekly|monthly", "target_weights": {"BBCA.JK": 0.4, ...}}
+    """
+    enabled = payload.get("enabled", False)
+    _runtime_config["rebalance_enabled"] = bool(enabled)
+    os.environ["REBALANCE_ENABLED"] = "true" if enabled else "false"
+
+    # Optional: update frequency
+    if "frequency" in payload:
+        freq = payload["frequency"]
+        if freq in ("daily", "weekly", "monthly"):
+            os.environ["REBALANCE_FREQUENCY"] = freq
+
+    # Optional: update target weights
+    if "target_weights" in payload:
+        import json
+        os.environ["REBALANCE_TARGET_WEIGHTS"] = json.dumps(payload["target_weights"])
+
+    status = "ENABLED" if enabled else "DISABLED"
+    logger = logging.getLogger("api.toggle")
+    logger.warning(f"Rebalance toggled {status} via API")
+
+    return {
+        "rebalance_enabled": _runtime_config["rebalance_enabled"],
+        "frequency": os.getenv("REBALANCE_FREQUENCY", "monthly"),
+        "message": f"Rebalance {status}.",
+    }
+
+
+# ====================== PERFORMANCE ANALYTICS ======================
+@app.get("/api/performance")
+def get_performance(period: str = "1M"):
+    """Get portfolio performance metrics: equity curve, Sharpe, drawdown, win rate."""
+    from trading_system.portfolio.performance import PerformanceAnalytics
+    analytics = PerformanceAnalytics(storage=storage)
+    return analytics.get_performance(period=period)
+
+
+@app.post("/api/performance/snapshot")
+def save_performance_snapshot():
+    """Save a daily equity snapshot manually."""
+    from trading_system.portfolio.performance import PerformanceAnalytics
+    analytics = PerformanceAnalytics(storage=storage)
+    equity = analytics.save_daily_snapshot()
+    return {"status": "ok", "equity": equity}
+
+
+# ====================== WATCHLIST ======================
+@app.get("/api/tickers")
+def list_tickers():
+    """List all tickers in the database."""
+    tickers = storage.list_tickers()
+    return {"tickers": tickers, "count": len(tickers)}
+
+
+@app.get("/api/watchlist")
+def get_watchlist():
+    """Get favorite tickers from watchlist."""
+    items = storage.get_watchlist(favorites_only=True)
+    return {"tickers": [item["ticker"] for item in items], "count": len(items)}
+
+
+@app.post("/api/watchlist/{ticker}")
+def toggle_watchlist(ticker: str):
+    """Toggle favorite status for a ticker."""
+    is_fav = storage.toggle_watchlist(ticker)
+    return {"ticker": ticker, "is_favorite": is_fav}
+
+
+@app.get("/api/watchlist/all")
+def get_full_watchlist():
+    """Get full watchlist with details."""
+    items = storage.get_watchlist(favorites_only=False)
+    return {"items": items, "count": len(items)}
+
+
 ENGINE_REGISTRY = [
     {"name": "technical", "module": "trading_system.analysis.technical", "cls": "TechnicalAnalysisEngine"},
     {"name": "fundamental", "module": "trading_system.analysis.fundamental", "cls": "FundamentalAnalysisEngine"},
@@ -280,6 +613,56 @@ async def ws_engines(websocket: WebSocket):
             await asyncio.sleep(5)
     except WebSocketDisconnect:
         pass
+
+
+# ====================== AI LEARNING ======================
+@app.post("/api/ai/train")
+def train_ai_weights(ticker: str | None = None):
+    """Train Linear Regression to optimize factor weights from historical data."""
+    from trading_system.ai_learning.engine import AILearningEngine
+    engine = AILearningEngine()
+    result = engine.train_linear_regression(ticker=ticker)
+    return result
+
+
+@app.get("/api/ai/weights")
+def get_ai_weights(ticker: str | None = None):
+    """Get current AI-optimized weights."""
+    from trading_system.ai_learning.engine import AILearningEngine
+    engine = AILearningEngine()
+    weights = engine.storage.get_ai_weights(ticker=ticker, max_age_days=30)
+    if weights is None:
+        return {"status": "no_weights", "message": "No trained weights found. Run /api/ai/train first."}
+    return {"status": "ok", "weights": weights}
+
+
+# ====================== DAILY RISK METRICS ======================
+@app.get("/api/risk/daily")
+def get_daily_risk(limit: int = 30):
+    """Get daily portfolio risk metrics (VaR, CVaR, max drawdown)."""
+    from trading_system.risk.engine import RiskEngine
+    engine = RiskEngine()
+    metrics = engine.storage.get_daily_risk_metrics(limit=limit)
+    return {"status": "ok", "metrics": metrics, "count": len(metrics)}
+
+
+@app.post("/api/risk/refresh")
+def refresh_daily_risk():
+    """Recalculate and save daily portfolio risk metrics."""
+    from trading_system.risk.engine import RiskEngine
+    engine = RiskEngine()
+    result = engine.save_daily_risk()
+    return result
+
+
+# ====================== SENTIMENT NLP ======================
+@app.get("/api/sentiment/{ticker}")
+def get_sentiment(ticker: str):
+    """Get news-based sentiment analysis for a ticker (Indonesian NLP)."""
+    from trading_system.sentiment.engine import SentimentEngine
+    engine = SentimentEngine()
+    result = engine.compute(ticker)
+    return result
 
 
 if __name__ == "__main__":

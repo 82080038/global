@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Any, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class OHLCVRecord(BaseModel):
@@ -33,4 +33,5 @@ class DataQualityReport(BaseModel):
     record_count: int
     data_quality_score: float  # 0-100
     anomalies: list[dict[str, Any]] = []
-    action: str = "accept"  # accept, flag, pause
+    action: str = "accept"  # accept, flag, delayed_review, pause
+    tier: str = "gold"  # gold (>=90), silver (70-89), bronze (50-69), reject (<50)

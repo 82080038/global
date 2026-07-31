@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import TerminalLayout from "../components/TerminalLayout";
 import PriceChart from "../components/PriceChart";
 import {
@@ -11,6 +11,8 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  AreaChart,
+  Area,
 } from "recharts";
 
 interface Candle {
@@ -20,6 +22,13 @@ interface Candle {
   low: number;
   close: number;
   volume: number;
+  rsi?: number;
+  macd?: number;
+  macd_signal?: number;
+  ma_20?: number;
+  ma_50?: number;
+  bb_upper?: number;
+  bb_lower?: number;
 }
 
 interface ScoreData {
@@ -70,6 +79,59 @@ interface Monitor {
   alerts?: unknown[];
 }
 
+interface ExecutionLog {
+  type: string;
+  ticker: string;
+  action: string;
+  quantity?: number;
+  price?: number;
+  total_value?: number;
+  fee?: number;
+  status: string;
+  trigger?: string;
+  timestamp: string;
+  details?: string;
+  conviction?: number;
+}
+
+interface RebalanceStatus {
+  enabled: boolean;
+  frequency: string;
+  target_weights: Record<string, number>;
+  current_weights: Record<string, number>;
+  total_portfolio_value: number;
+  drift: Record<string, number>;
+}
+
+interface AutoTradeToggle {
+  auto_trade_enabled: boolean;
+  capital: number;
+  risk_per_trade: number;
+  daily_loss_limit: number;
+}
+
+interface RebalanceToggle {
+  rebalance_enabled: boolean;
+  frequency: string;
+  target_weights: string;
+}
+
+interface PerformanceData {
+  total_return: number;
+  sharpe_ratio: number;
+  max_drawdown: number;
+  win_rate: number;
+  total_trades: number;
+  current_equity: number;
+  initial_capital: number;
+  equity_curve: { date: string; equity: number }[];
+}
+
+interface WatchlistItem {
+  ticker: string;
+  is_favorite: boolean;
+};
+
 export default function Dashboard() {
   const [ticker, setTicker] = useState("BBCA.JK");
   const [input, setInput] = useState("BBCA.JK");
@@ -81,6 +143,169 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState<string>("—");
+  const [executionLogs, setExecutionLogs] = useState<ExecutionLog[]>([]);
+  const [rebalanceStatus, setRebalanceStatus] = useState<RebalanceStatus | null>(null);
+  const [rebalanceLoading, setRebalanceLoading] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [autoTradeToggle, setAutoTradeToggle] = useState<AutoTradeToggle | null>(null);
+  const [rebalanceToggle, setRebalanceToggle] = useState<RebalanceToggle | null>(null);
+  const [togglingAutoTrade, setTogglingAutoTrade] = useState(false);
+  const [togglingRebalance, setTogglingRebalance] = useState(false);
+  const [performanceData, setPerformanceData] = useState<PerformanceData | null>(null);
+  const [performancePeriod, setPerformancePeriod] = useState("1M");
+  const [watchlist, setWatchlist] = useState<string[]>([]);
+
+  const fetchPerformance = useCallback(async (period: string) => {
+    try {
+      const res = await fetch(`/api/performance?period=${period}`);
+      if (res.ok) {
+        setPerformanceData(await res.json());
+      }
+    } catch {
+      // silent
+    }
+  }, []);
+
+  const fetchWatchlist = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/watchlist`);
+      if (res.ok) {
+        const json = await res.json();
+        setWatchlist(json.tickers || []);
+      }
+    } catch {
+      // silent
+    }
+  }, []);
+
+  const toggleFavorite = async (symbol: string) => {
+    try {
+      await fetch(`/api/watchlist/${symbol}`, { method: "POST" });
+      fetchWatchlist();
+    } catch {
+      // silent
+    }
+  };
+
+  const fetchExecutionLogs = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/execution/logs?limit=20`);
+      if (res.ok) {
+        const json = await res.json();
+        setExecutionLogs(json.logs || []);
+      }
+    } catch {
+      // silent
+    }
+  }, []);
+
+  const fetchRebalanceStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/rebalance/status`);
+      if (res.ok) {
+        setRebalanceStatus(await res.json());
+      }
+    } catch {
+      // silent
+    }
+  }, []);
+
+  const fetchAutoTradeToggle = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/execution/toggle`);
+      if (res.ok) {
+        setAutoTradeToggle(await res.json());
+      }
+    } catch {
+      // silent
+    }
+  }, []);
+
+  const fetchRebalanceToggle = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/rebalance/toggle`);
+      if (res.ok) {
+        setRebalanceToggle(await res.json());
+      }
+    } catch {
+      // silent
+    }
+  }, []);
+
+  const toggleAutoTrade = async () => {
+    setTogglingAutoTrade(true);
+    try {
+      const newValue = !autoTradeToggle?.auto_trade_enabled;
+      const res = await fetch(`/api/execution/toggle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: newValue }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAutoTradeToggle(prev => prev ? { ...prev, auto_trade_enabled: data.auto_trade_enabled } : null);
+      }
+    } catch {
+      // silent
+    }
+    setTogglingAutoTrade(false);
+  };
+
+  const toggleRebalance = async () => {
+    setTogglingRebalance(true);
+    try {
+      const newValue = !rebalanceToggle?.rebalance_enabled;
+      const res = await fetch(`/api/rebalance/toggle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: newValue }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRebalanceToggle(prev => prev ? { ...prev, rebalance_enabled: data.rebalance_enabled, frequency: data.frequency } : null);
+      }
+    } catch {
+      // silent
+    }
+    setTogglingRebalance(false);
+  };
+
+  const triggerRebalance = async () => {
+    setRebalanceLoading(true);
+    try {
+      const res = await fetch(`/api/rebalance`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        await Promise.all([fetchExecutionLogs(), fetchRebalanceStatus()]);
+      } else {
+        alert(`Rebalance failed: ${data.detail || "Unknown error"}`);
+      }
+    } catch (e) {
+      alert(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    setRebalanceLoading(false);
+  };
+
+  // Auto-refresh execution logs every 15s, performance every 60s
+  useEffect(() => {
+    fetchExecutionLogs();
+    fetchRebalanceStatus();
+    fetchAutoTradeToggle();
+    fetchRebalanceToggle();
+    fetchPerformance(performancePeriod);
+    fetchWatchlist();
+    if (!autoRefresh) return;
+    const logInterval = setInterval(() => {
+      fetchExecutionLogs();
+    }, 15000);
+    const perfInterval = setInterval(() => {
+      fetchPerformance(performancePeriod);
+    }, 60000);
+    return () => {
+      clearInterval(logInterval);
+      clearInterval(perfInterval);
+    };
+  }, [autoRefresh, fetchExecutionLogs, fetchRebalanceStatus, fetchAutoTradeToggle, fetchRebalanceToggle, fetchPerformance, fetchWatchlist, performancePeriod]);
 
   useEffect(() => {
     let active = true;
@@ -89,7 +314,7 @@ export default function Dashboard() {
       setError("");
       try {
         const [ohlcvRes, scoresRes, recRes, expRes, monRes] = await Promise.all([
-          fetch(`/api/data/ohlcv?ticker=${ticker}`),
+          fetch(`/api/indicators/${ticker}`),
           fetch(`/api/scores/${ticker}`),
           fetch(`/api/recommend/${ticker}`),
           fetch(`/api/explain/${ticker}`),
@@ -107,12 +332,19 @@ export default function Dashboard() {
         if (ohlcvRes.ok) {
           setOhlcv(
             ohlcvJson.data.map((row: Record<string, unknown>) => ({
-              time: (row.timestamp as string).split("T")[0],
+              time: (row.time as string),
               open: row.open as number,
               high: row.high as number,
               low: row.low as number,
               close: row.close as number,
               volume: (row.volume as number) ?? 0,
+              rsi: row.rsi as number | undefined,
+              macd: row.macd as number | undefined,
+              macd_signal: row.macd_signal as number | undefined,
+              ma_20: row.ma_20 as number | undefined,
+              ma_50: row.ma_50 as number | undefined,
+              bb_upper: row.bb_upper as number | undefined,
+              bb_lower: row.bb_lower as number | undefined,
             }))
           );
         } else {
@@ -403,6 +635,248 @@ export default function Dashboard() {
           </div>
         )}
       </section>
+
+      {/* ===== PERFORMANCE ANALYTICS ===== */}
+      {performanceData && performanceData.equity_curve?.length > 0 && (
+        <section className="mt-2 border border-zinc-800 bg-zinc-900/30 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-500 font-mono">Performance Analytics</h2>
+            <div className="flex gap-1">
+              {["1W", "1M", "3M", "6M", "1Y", "ALL"].map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPerformancePeriod(p)}
+                  className={`px-2 py-0.5 text-[10px] font-mono ${
+                    performancePeriod === p
+                      ? "border border-blue-500 bg-blue-500/20 text-blue-300"
+                      : "border border-zinc-700 bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Metric Cards */}
+          <div className="mb-3 grid grid-cols-2 gap-1 lg:grid-cols-5">
+            <div className="border border-zinc-800 bg-zinc-900/50 p-2">
+              <div className="text-[10px] uppercase text-zinc-500 font-mono">Total Return</div>
+              <div className={`mt-1 text-lg font-bold ${performanceData.total_return >= 0 ? "text-green-400" : "text-red-400"}`}>
+                {performanceData.total_return >= 0 ? "+" : ""}{performanceData.total_return.toFixed(2)}%
+              </div>
+            </div>
+            <div className="border border-zinc-800 bg-zinc-900/50 p-2">
+              <div className="text-[10px] uppercase text-zinc-500 font-mono">Sharpe Ratio</div>
+              <div className="mt-1 text-lg font-bold text-zinc-200">{performanceData.sharpe_ratio.toFixed(2)}</div>
+            </div>
+            <div className="border border-zinc-800 bg-zinc-900/50 p-2">
+              <div className="text-[10px] uppercase text-zinc-500 font-mono">Max Drawdown</div>
+              <div className="mt-1 text-lg font-bold text-red-400">{performanceData.max_drawdown.toFixed(2)}%</div>
+            </div>
+            <div className="border border-zinc-800 bg-zinc-900/50 p-2">
+              <div className="text-[10px] uppercase text-zinc-500 font-mono">Win Rate</div>
+              <div className="mt-1 text-lg font-bold text-zinc-200">{performanceData.win_rate.toFixed(1)}%</div>
+            </div>
+            <div className="border border-zinc-800 bg-zinc-900/50 p-2">
+              <div className="text-[10px] uppercase text-zinc-500 font-mono">Total Trades</div>
+              <div className="mt-1 text-lg font-bold text-zinc-200">{performanceData.total_trades}</div>
+            </div>
+          </div>
+
+          {/* Equity Curve */}
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={performanceData.equity_curve}>
+                <defs>
+                  <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#8884d8" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="date" stroke="#666" fontSize={9} tickFormatter={(d: string) => d.slice(5)} />
+                <YAxis stroke="#666" fontSize={9} domain={["auto", "auto"]} />
+                <Tooltip
+                  formatter={(value: number) => `Rp ${value.toLocaleString("id-ID", { maximumFractionDigits: 0 })}`}
+                  contentStyle={{ background: "#18181b", border: "1px solid #27272a" }}
+                  itemStyle={{ color: "#e4e4e7" }}
+                />
+                <Area type="monotone" dataKey="equity" stroke="#8884d8" fillOpacity={1} fill="url(#equityGrad)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      )}
+
+      {/* ===== WATCHLIST ===== */}
+      {watchlist.length > 0 && (
+        <section className="mt-2 border border-zinc-800 bg-zinc-900/30 p-3">
+          <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-zinc-500 font-mono">Watchlist</h2>
+          <div className="flex flex-wrap gap-1">
+            {watchlist.map((t) => (
+              <button
+                key={t}
+                onClick={() => {
+                  setInput(t);
+                  setTicker(t);
+                }}
+                className="border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-300 hover:bg-zinc-700"
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ===== EXECUTION LOG & REBALANCE ===== */}
+      <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-3">
+        {/* Execution Log (2 cols) */}
+        <section className="border border-zinc-800 bg-zinc-900/30 p-3 lg:col-span-2">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-500 font-mono">Execution Log</h2>
+            <div className="flex items-center gap-3">
+              {/* Auto-Trade Toggle */}
+              <button
+                onClick={toggleAutoTrade}
+                disabled={togglingAutoTrade}
+                className={`flex items-center gap-1.5 rounded px-2 py-0.5 text-[10px] font-mono transition-colors ${
+                  autoTradeToggle?.auto_trade_enabled
+                    ? "bg-green-900/50 text-green-300 border border-green-700"
+                    : "bg-zinc-800 text-zinc-400 border border-zinc-700"
+                } disabled:opacity-50`}
+              >
+                <span className={`inline-block h-2 w-2 rounded-full ${autoTradeToggle?.auto_trade_enabled ? "bg-green-400" : "bg-zinc-500"}`} />
+                Auto-Trade {autoTradeToggle?.auto_trade_enabled ? "ON" : "OFF"}
+              </button>
+              <label className="flex items-center gap-1 text-[10px] text-zinc-500 font-mono">
+                <input
+                  type="checkbox"
+                  checked={autoRefresh}
+                  onChange={(e) => setAutoRefresh(e.target.checked)}
+                  className="accent-blue-500"
+                />
+                Auto-refresh
+              </label>
+              <button
+                onClick={fetchExecutionLogs}
+                className="border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-300 hover:bg-zinc-700"
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+          <div className="max-h-64 overflow-y-auto">
+            {executionLogs.length > 0 ? (
+              executionLogs.map((log, idx) => (
+                <div
+                  key={idx}
+                  className={`flex items-center gap-2 border-b border-zinc-800/50 px-2 py-1.5 text-[10px] font-mono ${
+                    log.type === "ORDER" ? "border-l-2 border-l-blue-500" : "border-l-2 border-l-yellow-500"
+                  }`}
+                >
+                  <span className="w-16 flex-shrink-0 text-zinc-500">
+                    {new Date(log.timestamp).toLocaleTimeString()}
+                  </span>
+                  <span
+                    className={`px-1.5 py-0.5 text-[9px] font-bold ${
+                      log.type === "ORDER" ? "bg-blue-950 text-blue-300" : "bg-yellow-950 text-yellow-300"
+                    }`}
+                  >
+                    {log.type}
+                  </span>
+                  <span className="w-14 flex-shrink-0 font-bold text-zinc-200">{log.ticker}</span>
+                  <span
+                    className={`font-bold ${
+                      log.action === "BUY" ? "text-green-400" : log.action === "SELL" ? "text-red-400" : "text-zinc-400"
+                    }`}
+                  >
+                    {log.action}
+                  </span>
+                  <span className="flex-1 truncate text-zinc-400">
+                    {log.type === "ORDER"
+                      ? `${log.quantity} @ Rp ${log.price?.toFixed(2) || "0"}${log.trigger ? ` (${log.trigger})` : ""}`
+                      : `Conviction: ${log.conviction || "N/A"}`}
+                  </span>
+                  <span
+                    className={`px-1.5 py-0.5 text-[9px] ${
+                      log.status === "FILLED" || log.status === "GENERATED" ? "bg-green-950 text-green-300" : "bg-zinc-800 text-zinc-400"
+                    }`}
+                  >
+                    {log.status}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="py-8 text-center text-zinc-600 text-xs">
+                No execution logs yet. Run the automated execution engine or trigger a manual order.
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Rebalance Panel (1 col) */}
+        <section className="border border-zinc-800 bg-zinc-900/30 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-500 font-mono">Rebalancing</h2>
+            {/* Rebalance Toggle */}
+            <button
+              onClick={toggleRebalance}
+              disabled={togglingRebalance}
+              className={`flex items-center gap-1.5 rounded px-2 py-0.5 text-[10px] font-mono transition-colors ${
+                rebalanceToggle?.rebalance_enabled
+                  ? "bg-purple-900/50 text-purple-300 border border-purple-700"
+                  : "bg-zinc-800 text-zinc-400 border border-zinc-700"
+              } disabled:opacity-50`}
+            >
+              <span className={`inline-block h-2 w-2 rounded-full ${rebalanceToggle?.rebalance_enabled ? "bg-purple-400" : "bg-zinc-500"}`} />
+              {rebalanceToggle?.rebalance_enabled ? "ON" : "OFF"}
+            </button>
+          </div>
+          <div className="space-y-2 text-[10px] font-mono">
+            <div className="flex justify-between">
+              <span className="text-zinc-500">Frequency</span>
+              <span className="text-zinc-200">{rebalanceStatus?.frequency || "monthly"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-zinc-500">Portfolio Value</span>
+              <span className="text-zinc-200">
+                Rp {(rebalanceStatus?.total_portfolio_value || 0).toLocaleString("id-ID", { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            {rebalanceStatus?.target_weights && Object.entries(rebalanceStatus.target_weights).length > 0 ? (
+              <div className="mt-2 space-y-1">
+                <div className="text-zinc-500">Target Weights</div>
+                {Object.entries(rebalanceStatus.target_weights).map(([ticker, weight]) => {
+                  const current = rebalanceStatus.current_weights?.[ticker] || 0;
+                  const drift = rebalanceStatus.drift?.[ticker] || 0;
+                  return (
+                    <div key={ticker} className="flex items-center justify-between">
+                      <span className="text-zinc-300">{ticker}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-zinc-400">{(weight * 100).toFixed(0)}%</span>
+                        <span className="text-zinc-600">vs</span>
+                        <span className={drift > 0.05 ? "text-yellow-400" : "text-green-400"}>
+                          {(current * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-zinc-600">No target weights configured.</div>
+            )}
+          </div>
+          <button
+            onClick={triggerRebalance}
+            disabled={rebalanceLoading}
+            className="mt-3 w-full border border-purple-700 bg-purple-700/20 px-3 py-1.5 text-xs font-medium text-purple-300 hover:bg-purple-700/30 disabled:opacity-50"
+          >
+            {rebalanceLoading ? "Processing..." : "Run Rebalance Now"}
+          </button>
+        </section>
+      </div>
 
       <footer className="mt-2 border border-zinc-800 bg-zinc-900/30 p-2 text-[10px] text-zinc-500 font-mono">
         <div className="flex items-center justify-between">

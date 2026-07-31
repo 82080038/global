@@ -7,8 +7,6 @@ Jenis validasi:
 - Reconciliation (placeholder)
 """
 
-from typing import Any
-
 import pandas as pd
 
 from trading_system.data.contracts import DataQualityReport
@@ -21,7 +19,12 @@ class DataQualityValidator:
 
     def validate(self, df: pd.DataFrame) -> tuple[pd.DataFrame, DataQualityReport]:
         if df.empty:
-            return df, DataQualityReport(record_count=0, data_quality_score=0.0, action="pause")
+            return df, DataQualityReport(
+                record_count=0,
+                data_quality_score=0.0,
+                action="pause",
+                tier="reject",
+            )
 
         df = df.copy()
         anomalies = []
@@ -99,13 +102,23 @@ class DataQualityValidator:
 
         score = max(0.0, min(100.0, score))
 
-        # Tindakan otomatis
-        if score < 70:
-            action = "pause"
-        elif score < 90:
-            action = "flag"
-        else:
+        # Tiered action system:
+        # >= 90: accept (gold) — data is clean, use immediately
+        # 70-89: flag (silver) — minor issues, use but flag for review
+        # 50-69: delayed_review (bronze) — notable issues, queue for manual review
+        # < 50: pause (reject) — severe issues, do not use
+        if score >= 90:
             action = "accept"
+            tier = "gold"
+        elif score >= 70:
+            action = "flag"
+            tier = "silver"
+        elif score >= 50:
+            action = "delayed_review"
+            tier = "bronze"
+        else:
+            action = "pause"
+            tier = "reject"
 
         df["data_quality_score"] = score
 
@@ -114,6 +127,7 @@ class DataQualityValidator:
             data_quality_score=round(score, 2),
             anomalies=anomalies,
             action=action,
+            tier=tier,
         )
 
         self.storage.audit(

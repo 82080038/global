@@ -6,8 +6,6 @@ Output: macro_score dan macro_regime (easing, tightening, growth, slowdown).
 
 from __future__ import annotations
 
-import pandas as pd
-
 from trading_system.config import DEFAULT_MACRO_TICKERS
 from trading_system.data.acquisition import YahooFinanceAdapter, normalize_ohlcv
 from trading_system.data.storage import DataStorage

@@ -5,8 +5,6 @@ Menghitung rolling correlation dan lag antara saham dan aset global/macro.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 import numpy as np
 import pandas as pd
 

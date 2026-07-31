@@ -36,8 +36,9 @@ class AnalysisPipeline:
         if result["status"] == "ok":
             validator = DataQualityValidator()
             raw = normalize_ohlcv(result["records"])
-            clean, _ = validator.validate(raw)
-            self.storage.save_ohlcv(clean)
+            clean, report = validator.validate(raw)
+            if report.action != "pause":
+                self.storage.save_ohlcv(clean)
             return True
         return False
 
@@ -63,7 +64,7 @@ class AnalysisPipeline:
         rel = self.relationship.compute(ticker)
 
         # Corporate actions
-        corp = self.corporate.fetch(ticker)
+        self.corporate.fetch(ticker)
 
         # Sentiment
         sent = self.sentiment.compute(ticker)
@@ -79,7 +80,7 @@ class AnalysisPipeline:
 
         as_of = datetime.now(timezone.utc).isoformat()
         for engine, res in results.items():
-            if res.get("status") in ("ok", "warning") and res.get("score") is not None:
+            if res.get("status") in ("ok", "warning", "degraded", "failed") and res.get("score") is not None:
                 self.storage.save_score(
                     ticker,
                     engine,
@@ -87,6 +88,9 @@ class AnalysisPipeline:
                     res.get("breakdown", {}),
                     as_of=as_of,
                 )
+            # Store weight_multiplier for decision engine to use
+            if res.get("weight_multiplier") is not None and res.get("breakdown") is not None:
+                res["breakdown"]["_weight_multiplier"] = res["weight_multiplier"]
 
         return {
             "status": "ok",
