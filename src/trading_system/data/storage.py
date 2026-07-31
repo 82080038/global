@@ -867,3 +867,172 @@ class DataStorage:
             cols = [d[0] for d in cursor.description]
             rows = cursor.fetchall()
             return [dict(zip(cols, row)) for row in rows]
+
+    # ---------- Delete operations (CRUD completeness) ----------
+    def delete_ohlcv(self, ticker: str, timeframe: str = "1d") -> int:
+        """Delete all OHLCV rows for a ticker. Returns number of rows deleted."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM ohlcv WHERE ticker = ? AND timeframe = ?",
+                (ticker, timeframe),
+            )
+            return cursor.rowcount
+
+    def delete_scores(self, ticker: str | None = None, engine: str | None = None) -> int:
+        """Delete scores. If no filters, deletes all. Returns rows deleted."""
+        sql = "DELETE FROM scores"
+        params: list = []
+        conditions: list[str] = []
+        if ticker:
+            conditions.append("ticker = ?")
+            params.append(ticker)
+        if engine:
+            conditions.append("engine = ?")
+            params.append(engine)
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+        with self._connect() as conn:
+            cursor = conn.execute(sql, params)
+            return cursor.rowcount
+
+    def delete_orders(self, ticker: str | None = None, before_date: str | None = None) -> int:
+        """Delete orders, optionally filtered by ticker and/or older than a date."""
+        sql = "DELETE FROM orders"
+        params: list = []
+        conditions: list[str] = []
+        if ticker:
+            conditions.append("ticker = ?")
+            params.append(ticker)
+        if before_date:
+            conditions.append("created_at < ?")
+            params.append(before_date)
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+        with self._connect() as conn:
+            cursor = conn.execute(sql, params)
+            return cursor.rowcount
+
+    def get_audit_logs(
+        self,
+        event_type: str | None = None,
+        actor: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict]:
+        """Read audit log entries with optional filtering and pagination."""
+        sql = "SELECT * FROM audit_log"
+        params: list = []
+        conditions: list[str] = []
+        if event_type:
+            conditions.append("event_type LIKE ?")
+            params.append(f"{event_type}%")
+        if actor:
+            conditions.append("actor = ?")
+            params.append(actor)
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+        sql += " ORDER BY rowid DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        with self._connect() as conn:
+            cursor = conn.execute(sql, params)
+            cols = [d[0] for d in cursor.description]
+            rows = cursor.fetchall()
+            return [dict(zip(cols, row)) for row in rows]
+
+    def delete_audit_logs(self, before_date: str | None = None, event_type: str | None = None) -> int:
+        """Delete audit logs, optionally filtered by date and/or event_type prefix."""
+        sql = "DELETE FROM audit_log"
+        params: list = []
+        conditions: list[str] = []
+        if before_date:
+            conditions.append("timestamp < ?")
+            params.append(before_date)
+        if event_type:
+            conditions.append("event_type LIKE ?")
+            params.append(f"{event_type}%")
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+        with self._connect() as conn:
+            cursor = conn.execute(sql, params)
+            return cursor.rowcount
+
+    def delete_position(self, position_id: int) -> bool:
+        """Delete a position by ID. Returns True if deleted."""
+        with self._connect() as conn:
+            cursor = conn.execute("DELETE FROM positions WHERE id = ?", (position_id,))
+            return cursor.rowcount > 0
+
+    def delete_ai_weights(self, ticker: str | None = None, before_date: str | None = None) -> int:
+        """Delete AI weight entries, optionally filtered by ticker and/or date."""
+        sql = "DELETE FROM ai_weights"
+        params: list = []
+        conditions: list[str] = []
+        if ticker:
+            conditions.append("ticker = ?")
+            params.append(ticker)
+        if before_date:
+            conditions.append("created_at < ?")
+            params.append(before_date)
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+        with self._connect() as conn:
+            cursor = conn.execute(sql, params)
+            return cursor.rowcount
+
+    def delete_equity_snapshots(self, before_date: str | None = None) -> int:
+        """Delete equity snapshots, optionally older than a date."""
+        sql = "DELETE FROM equity_snapshots"
+        params: list = []
+        if before_date:
+            sql += " WHERE date < ?"
+            params.append(before_date)
+        with self._connect() as conn:
+            cursor = conn.execute(sql, params)
+            return cursor.rowcount
+
+    def delete_daily_risk_metrics(self, before_date: str | None = None) -> int:
+        """Delete daily risk metrics, optionally older than a date."""
+        sql = "DELETE FROM daily_risk_metrics"
+        params: list = []
+        if before_date:
+            sql += " WHERE date < ?"
+            params.append(before_date)
+        with self._connect() as conn:
+            cursor = conn.execute(sql, params)
+            return cursor.rowcount
+
+    def delete_relationships(self, asset_a: str | None = None) -> int:
+        """Delete relationship matrix entries, optionally filtered by asset_a."""
+        sql = "DELETE FROM relationship_matrix"
+        params: list = []
+        if asset_a:
+            sql += " WHERE asset_a = ?"
+            params.append(asset_a)
+        with self._connect() as conn:
+            cursor = conn.execute(sql, params)
+            return cursor.rowcount
+
+    def delete_corporate_actions(self, ticker: str) -> int:
+        """Delete corporate actions for a ticker."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM corporate_actions WHERE ticker = ?", (ticker,)
+            )
+            return cursor.rowcount
+
+    def delete_news(self, source: str | None = None, before_date: str | None = None) -> int:
+        """Delete news entries, optionally filtered by source and/or date."""
+        sql = "DELETE FROM news"
+        params: list = []
+        conditions: list[str] = []
+        if source:
+            conditions.append("source = ?")
+            params.append(source)
+        if before_date:
+            conditions.append("published_at < ?")
+            params.append(before_date)
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+        with self._connect() as conn:
+            cursor = conn.execute(sql, params)
+            return cursor.rowcount

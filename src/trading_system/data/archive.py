@@ -137,3 +137,16 @@ class ArchiveAdapter:
             "ohlcv_size_mb": round(total_size / 1024 / 1024, 2),
             "archived_tickers": self.list_archived_tickers(),
         }
+
+    def delete_archived_ticker(self, ticker: str) -> int:
+        """Delete all Parquet files for a ticker from the archive. Returns files deleted."""
+        ohlcv_dir = self._ohlcv_dir()
+        files = list(ohlcv_dir.glob(f"{ticker}*.parquet"))
+        if not files:
+            base = ticker.replace(".JK", "")
+            files = list(ohlcv_dir.glob(f"{base}*.parquet"))
+        count = 0
+        for f in files:
+            f.unlink()
+            count += 1
+        return count

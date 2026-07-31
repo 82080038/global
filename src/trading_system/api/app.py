@@ -803,6 +803,119 @@ def get_sentiment(ticker: str):
     return result
 
 
+# ====================== AUDIT LOG (Read) ======================
+@app.get("/api/audit")
+def get_audit_logs(
+    event_type: str | None = None,
+    actor: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """Get audit log entries with optional filtering and pagination."""
+    logs = storage.get_audit_logs(event_type=event_type, actor=actor, limit=limit, offset=offset)
+    return {"logs": logs, "count": len(logs)}
+
+
+# ====================== DELETE ENDPOINTS (CRUD completeness) ======================
+@app.delete("/api/data/{ticker}")
+def delete_ohlcv(ticker: str, timeframe: str = "1d"):
+    """Delete all OHLCV data for a ticker."""
+    deleted = storage.delete_ohlcv(ticker, timeframe=timeframe)
+    storage.audit("delete.ohlcv", {"ticker": ticker, "timeframe": timeframe, "rows": deleted})
+    return {"ticker": ticker, "deleted": deleted}
+
+
+@app.delete("/api/scores/{ticker}")
+def delete_scores(ticker: str, engine: str | None = None):
+    """Delete scores for a ticker, optionally filtered by engine."""
+    deleted = storage.delete_scores(ticker=ticker, engine=engine)
+    storage.audit("delete.scores", {"ticker": ticker, "engine": engine, "rows": deleted})
+    return {"ticker": ticker, "engine": engine, "deleted": deleted}
+
+
+@app.delete("/api/orders")
+def delete_orders(ticker: str | None = None, before_date: str | None = None):
+    """Delete orders, optionally filtered by ticker and/or older than a date."""
+    deleted = storage.delete_orders(ticker=ticker, before_date=before_date)
+    storage.audit("delete.orders", {"ticker": ticker, "before_date": before_date, "rows": deleted})
+    return {"deleted": deleted}
+
+
+@app.delete("/api/audit")
+def delete_audit_logs(before_date: str | None = None, event_type: str | None = None):
+    """Delete audit logs, optionally filtered by date and/or event_type prefix."""
+    deleted = storage.delete_audit_logs(before_date=before_date, event_type=event_type)
+    return {"deleted": deleted}
+
+
+@app.delete("/api/positions/{position_id}")
+def delete_position(position_id: int):
+    """Delete a position by ID."""
+    deleted = storage.delete_position(position_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Position {position_id} not found")
+    storage.audit("delete.position", {"position_id": position_id})
+    return {"position_id": position_id, "deleted": True}
+
+
+@app.delete("/api/ai/weights")
+def delete_ai_weights(ticker: str | None = None, before_date: str | None = None):
+    """Delete AI weight entries, optionally filtered by ticker and/or date."""
+    deleted = storage.delete_ai_weights(ticker=ticker, before_date=before_date)
+    storage.audit("delete.ai_weights", {"ticker": ticker, "before_date": before_date, "rows": deleted})
+    return {"deleted": deleted}
+
+
+@app.delete("/api/performance/snapshots")
+def delete_equity_snapshots(before_date: str | None = None):
+    """Delete equity snapshots, optionally older than a date."""
+    deleted = storage.delete_equity_snapshots(before_date=before_date)
+    storage.audit("delete.equity_snapshots", {"before_date": before_date, "rows": deleted})
+    return {"deleted": deleted}
+
+
+@app.delete("/api/risk/daily")
+def delete_daily_risk_metrics(before_date: str | None = None):
+    """Delete daily risk metrics, optionally older than a date."""
+    deleted = storage.delete_daily_risk_metrics(before_date=before_date)
+    storage.audit("delete.daily_risk", {"before_date": before_date, "rows": deleted})
+    return {"deleted": deleted}
+
+
+@app.delete("/api/archive/{ticker}")
+def delete_archived_ticker(ticker: str):
+    """Delete all Parquet files for a ticker from the archive."""
+    from trading_system.data.archive import ArchiveAdapter
+    adapter = ArchiveAdapter()
+    deleted = adapter.delete_archived_ticker(ticker)
+    storage.audit("delete.archive", {"ticker": ticker, "files": deleted})
+    return {"ticker": ticker, "files_deleted": deleted}
+
+
+@app.delete("/api/relationships")
+def delete_relationships(asset_a: str | None = None):
+    """Delete relationship matrix entries, optionally filtered by asset_a."""
+    deleted = storage.delete_relationships(asset_a=asset_a)
+    storage.audit("delete.relationships", {"asset_a": asset_a, "rows": deleted})
+    return {"deleted": deleted}
+
+
+@app.delete("/api/corporate-actions/{ticker}")
+def delete_corporate_actions(ticker: str):
+    """Delete corporate actions for a ticker."""
+    deleted = storage.delete_corporate_actions(ticker)
+    storage.audit("delete.corporate_actions", {"ticker": ticker, "rows": deleted})
+    return {"ticker": ticker, "deleted": deleted}
+
+
+@app.delete("/api/news")
+def delete_news(source: str | None = None, before_date: str | None = None):
+    """Delete news entries, optionally filtered by source and/or date."""
+    deleted = storage.delete_news(source=source, before_date=before_date)
+    storage.audit("delete.news", {"source": source, "before_date": before_date, "rows": deleted})
+    return {"deleted": deleted}
+
+
 if __name__ == "__main__":
     from trading_system.utils.logging_config import setup_logging
     setup_logging()

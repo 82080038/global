@@ -634,3 +634,100 @@ Semua endpoint mengembalikan HTTP status code standar:
 ```json
 {"detail": "Ticker not found in database"}
 ```
+
+---
+
+## Audit Log
+
+### GET `/api/audit`
+
+Get audit log entries with optional filtering and pagination.
+
+**Query Parameters:**
+- `event_type` (optional): Filter by event type prefix (e.g., `decision`, `order`)
+- `actor` (optional): Filter by actor
+- `limit` (default 100): Maximum entries to return
+- `offset` (default 0): Pagination offset
+
+```json
+{
+  "logs": [
+    {"event_id": 1, "event_type": "decision.buy", "payload": "{...}", "timestamp": "2026-08-01T10:00:00", "actor": "system"}
+  ],
+  "count": 1
+}
+```
+
+---
+
+## DELETE Endpoints (CRUD)
+
+### DELETE `/api/data/{ticker}`
+
+Delete all OHLCV data for a ticker.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `timeframe` | str | `"1d"` | Timeframe to delete |
+
+```json
+{"ticker": "BBCA.JK", "deleted": 500}
+```
+
+### DELETE `/api/scores/{ticker}`
+
+Delete scores for a ticker, optionally filtered by engine.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `engine` | str | `null` | Engine name filter |
+
+### DELETE `/api/orders`
+
+Delete orders, optionally filtered by ticker and/or older than a date.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `ticker` | str | `null` | Ticker filter |
+| `before_date` | str | `null` | ISO date threshold |
+
+### DELETE `/api/audit`
+
+Delete audit logs, optionally filtered by date and/or event_type prefix.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `before_date` | str | `null` | ISO date threshold |
+| `event_type` | str | `null` | Event type prefix filter |
+
+### DELETE `/api/positions/{position_id}`
+
+Delete a position by ID. Returns 404 if not found.
+
+### DELETE `/api/ai/weights`
+
+Delete AI weight entries, optionally filtered by ticker and/or date.
+
+### DELETE `/api/performance/snapshots`
+
+Delete equity snapshots, optionally older than a date.
+
+### DELETE `/api/risk/daily`
+
+Delete daily risk metrics, optionally older than a date.
+
+### DELETE `/api/archive/{ticker}`
+
+Delete all Parquet files for a ticker from the archive.
+
+### DELETE `/api/relationships`
+
+Delete relationship matrix entries, optionally filtered by asset_a.
+
+### DELETE `/api/corporate-actions/{ticker}`
+
+Delete corporate actions for a ticker.
+
+### DELETE `/api/news`
+
+Delete news entries, optionally filtered by source and/or date.
