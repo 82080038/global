@@ -1,13 +1,20 @@
 """Unit tests for Layer 4: FF (Enhanced Risk Engine) + EE (Alpha Validation Lab)."""
 
-import pytest
-from datetime import datetime, timezone
+from datetime import datetime
 
-from trading_system.risk.enhanced_risk import (
-    EnhancedRiskEngine, RiskConfig, PositionSizing, RiskMetrics, RISK_VERSION,
-)
+import pytest
+
 from trading_system.analysis.alpha_validation import (
-    AlphaValidationLab, ExperimentConfig, ValidationResult, VALIDATION_VERSION, THRESHOLDS,
+    THRESHOLDS,
+    VALIDATION_VERSION,
+    AlphaValidationLab,
+    ExperimentConfig,
+)
+from trading_system.risk.enhanced_risk import (
+    RISK_VERSION,
+    EnhancedRiskEngine,
+    PositionSizing,
+    RiskConfig,
 )
 
 

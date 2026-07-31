@@ -2,10 +2,12 @@
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from trading_system.risk.costs import (
-    CostModel, compute_atr, get_latest_atr, get_default_cost_model,
+    CostModel,
+    compute_atr,
+    get_default_cost_model,
+    get_latest_atr,
 )
 
 

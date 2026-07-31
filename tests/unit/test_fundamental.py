@@ -1,7 +1,6 @@
 """Unit tests for FundamentalAnalysisEngine."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from trading_system.analysis.fundamental import FundamentalAnalysisEngine
 

@@ -1,10 +1,9 @@
 """Unit tests for P2-1: Corporate action → adjusted_close integration."""
 
+from unittest.mock import MagicMock
+
 import numpy as np
 import pandas as pd
-import pytest
-from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
 
 from trading_system.corporate.actions import CorporateActionEngine
 from trading_system.data.storage import DataStorage

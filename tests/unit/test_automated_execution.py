@@ -1,9 +1,9 @@
 """Regression tests for AutomatedExecutionEngine — daily loss limit (§3.4)."""
 
-import os
-import pandas as pd
+from datetime import UTC
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, patch
 
 from trading_system.execution.automated import AutomatedExecutionEngine
 
@@ -26,8 +26,8 @@ def test_no_limit_set_never_halts(mock_storage):
 def test_uses_realized_pnl_column_not_avg_buy_estimate(engine, mock_storage):
     """Loss harus dihitung dari kolom realized_pnl langsung, bukan estimasi
     rata-rata harga BUY historis yang bisa jauh meleset."""
-    from datetime import datetime, timezone
-    today = datetime.now(timezone.utc).date().isoformat()
+    from datetime import datetime
+    today = datetime.now(UTC).date().isoformat()
 
     mock_storage.get_orders.return_value = [
         {"ticker": "TEST.JK", "order_type": "SELL", "realized_pnl": -2_000_000,
@@ -44,8 +44,8 @@ def test_uses_realized_pnl_column_not_avg_buy_estimate(engine, mock_storage):
 def test_halt_persisted_and_checked_on_next_call(engine, mock_storage):
     """Setelah limit terpicu, panggilan berikutnya di hari yang sama tetap halt
     tanpa perlu menghitung ulang order (state dipersist di system_state)."""
-    from datetime import datetime, timezone
-    today = datetime.now(timezone.utc).date().isoformat()
+    from datetime import datetime
+    today = datetime.now(UTC).date().isoformat()
     mock_storage.get_state.return_value = today
 
     assert engine._check_daily_loss_limit() is True
@@ -53,8 +53,8 @@ def test_halt_persisted_and_checked_on_next_call(engine, mock_storage):
 
 
 def test_no_halt_when_loss_within_limit(engine, mock_storage):
-    from datetime import datetime, timezone
-    today = datetime.now(timezone.utc).date().isoformat()
+    from datetime import datetime
+    today = datetime.now(UTC).date().isoformat()
     mock_storage.get_orders.return_value = [
         {"ticker": "TEST.JK", "order_type": "SELL", "realized_pnl": -500_000,
          "created_at": f"{today}T10:00:00+00:00", "price": 100, "quantity": 100},

@@ -1,9 +1,7 @@
 """Unit tests for ArchiveAdapter (Parquet archive on external HDD)."""
 
+
 import pandas as pd
-import pytest
-from pathlib import Path
-from unittest.mock import patch
 
 from trading_system.data.archive import ArchiveAdapter
 

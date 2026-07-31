@@ -1,7 +1,6 @@
 """Comprehensive tests for CRUD operations — Delete methods in DataStorage and ArchiveAdapter."""
 
 import pandas as pd
-import pytest
 
 from trading_system.data.storage import DataStorage
 

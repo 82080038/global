@@ -1,42 +1,39 @@
 """Tests for ported modules: regime, kelly, tax, red_flags, screener."""
 
-import numpy as np
 import pandas as pd
 import pytest
 
-from trading_system.analysis.regime import detect_regime, regime_to_multiplier, REGIME_MULTIPLIERS
-from trading_system.risk.kelly import (
-    calculate_kelly_criterion,
-    calculate_position_size_kelly,
-    calculate_kelly_from_history,
-    KellyResult,
-)
-from trading_system.execution.tax import (
-    TaxRates,
-    calculate_buy_costs,
-    calculate_sell_costs,
-    calculate_dividend_tax,
-    calculate_trade_result,
-    calculate_effective_rate,
-)
 from trading_system.analysis.red_flags import (
-    RedFlag,
-    EarningsQualityMetrics,
     BalanceSheetHealth,
-    calculate_earnings_quality_metrics,
+    EarningsQualityMetrics,
+    RedFlag,
     calculate_balance_sheet_health,
-    detect_earnings_quality_red_flags,
-    detect_balance_sheet_red_flags,
-    detect_governance_red_flags,
-    detect_all_red_flags,
+    calculate_earnings_quality_metrics,
     calculate_red_flag_score,
+    detect_all_red_flags,
+    detect_balance_sheet_red_flags,
+    detect_earnings_quality_red_flags,
+    detect_governance_red_flags,
     get_red_flag_summary,
 )
+from trading_system.analysis.regime import detect_regime, regime_to_multiplier
 from trading_system.analysis.screener import (
+    momentum_template,
     screen_universe,
     technical_template,
-    momentum_template,
-    TEMPLATES,
+)
+from trading_system.execution.tax import (
+    calculate_buy_costs,
+    calculate_dividend_tax,
+    calculate_effective_rate,
+    calculate_sell_costs,
+    calculate_trade_result,
+)
+from trading_system.risk.kelly import (
+    KellyResult,
+    calculate_kelly_criterion,
+    calculate_kelly_from_history,
+    calculate_position_size_kelly,
 )
 
 

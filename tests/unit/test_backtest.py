@@ -1,14 +1,14 @@
 """Unit tests for BacktestEngine and strategies."""
 
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pandas as pd
-import pytest
-from unittest.mock import patch, MagicMock
 
 from trading_system.backtest.engine import BacktestEngine, CostModel
-from trading_system.backtest.strategies import BuyAndHold, MovingAverageCrossover, ConvictionStrategy
 from trading_system.backtest.metrics import monte_carlo_simulation
-from trading_system.config import IDX_LOT_SIZE, round_to_tick, idx_tick_size
+from trading_system.backtest.strategies import BuyAndHold, ConvictionStrategy, MovingAverageCrossover
+from trading_system.config import IDX_LOT_SIZE, idx_tick_size, round_to_tick
 
 
 class TestStrategies:

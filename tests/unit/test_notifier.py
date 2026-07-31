@@ -1,7 +1,7 @@
 """Tests for notifier — Telegram notification functions."""
 
-from unittest.mock import patch, MagicMock
 import os
+from unittest.mock import patch
 
 
 def test_notifier_not_configured():

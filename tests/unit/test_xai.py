@@ -1,7 +1,8 @@
 """Tests for XAI Engine — narrative explanation generation."""
 
-import pandas as pd
 from unittest.mock import MagicMock
+
+import pandas as pd
 
 from trading_system.xai.engine import ExplainableAIEngine
 

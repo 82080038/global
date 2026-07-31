@@ -1,9 +1,8 @@
 """Unit tests for RiskEngine."""
 
-import numpy as np
+from unittest.mock import MagicMock
+
 import pandas as pd
-import pytest
-from unittest.mock import patch, MagicMock
 
 from trading_system.risk.engine import RiskEngine
 

@@ -1,11 +1,11 @@
 """Unit tests for AILearningEngine."""
 
 import json
-import pandas as pd
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 
-from trading_system.ai_learning.engine import AILearningEngine, REGIME_WEIGHTS
+import pandas as pd
+
+from trading_system.ai_learning.engine import REGIME_WEIGHTS, AILearningEngine
 
 
 class TestAILearningEngine:

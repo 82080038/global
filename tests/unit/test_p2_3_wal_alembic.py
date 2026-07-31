@@ -1,8 +1,6 @@
 """Unit tests for P2-3: WAL + executemany + Alembic schema."""
 
 import sqlite3
-import pytest
-from pathlib import Path
 
 from trading_system.data.storage import DataStorage
 
@@ -49,7 +47,7 @@ class TestExecutemanyBatch:
 
     def test_batch_large(self, tmp_path):
         storage = DataStorage(db_path=str(tmp_path / "test.db"))
-        rows = [(f"S{i}", f"2024-01-01", float(i), "unit", "test") for i in range(12000)]
+        rows = [(f"S{i}", "2024-01-01", float(i), "unit", "test") for i in range(12000)]
         sql = "INSERT OR REPLACE INTO macro_data (series_name, date, value, unit, source) VALUES (?, ?, ?, ?, ?)"
         n = storage.executemany_batch(sql, rows, batch_size=5000)
         assert n == 12000

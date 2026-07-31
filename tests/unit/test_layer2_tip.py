@@ -1,18 +1,28 @@
 """Unit tests for Layer 2: K (Advanced Technical) + F (Enhanced Regime) + X (Factor Engine)."""
 
-import numpy as np
-import pandas as pd
-import pytest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
+import numpy as np
+import pandas as pd
+
 from trading_system.analysis.advanced_technical import (
-    ichimoku_cloud, williams_r, on_balance_volume, stochastic_rsi, compute_advanced_indicators,
+    compute_advanced_indicators,
+    ichimoku_cloud,
+    on_balance_volume,
+    stochastic_rsi,
+    williams_r,
 )
 from trading_system.analysis.enhanced_regime import EnhancedRegimeEngine
 from trading_system.analysis.factor_engine import (
-    FactorEngine, FactorConfig, percentile_rank,
-    compute_momentum, compute_low_volatility, compute_quality, compute_size, compute_value_proxy,
+    FactorConfig,
+    FactorEngine,
+    compute_low_volatility,
+    compute_momentum,
+    compute_quality,
+    compute_size,
+    compute_value_proxy,
+    percentile_rank,
 )
 
 
@@ -136,35 +146,35 @@ class TestFactorEngine:
 
     def test_compute_momentum(self):
         df = _make_ohlcv(260)
-        val, bars = compute_momentum(df, datetime.now(timezone.utc))
+        val, bars = compute_momentum(df, datetime.now(UTC))
         assert val is not None
         assert bars == 260
 
     def test_compute_momentum_short(self):
         df = _make_ohlcv(10)
-        val, bars = compute_momentum(df, datetime.now(timezone.utc))
+        val, bars = compute_momentum(df, datetime.now(UTC))
         assert val is None
 
     def test_compute_low_volatility(self):
         df = _make_ohlcv(100)
-        val, bars = compute_low_volatility(df, datetime.now(timezone.utc))
+        val, bars = compute_low_volatility(df, datetime.now(UTC))
         assert val is not None
         assert val < 0  # negative vol
 
     def test_compute_quality(self):
         df = _make_ohlcv(100)
-        val, bars = compute_quality(df, datetime.now(timezone.utc))
+        val, bars = compute_quality(df, datetime.now(UTC))
         assert val is not None
 
     def test_compute_size(self):
         df = _make_ohlcv(25)
-        val, bars = compute_size(df, datetime.now(timezone.utc))
+        val, bars = compute_size(df, datetime.now(UTC))
         assert val is not None
         assert val > 0
 
     def test_compute_value_proxy(self):
         df = _make_ohlcv(10)
-        val, bars = compute_value_proxy(df, datetime.now(timezone.utc))
+        val, bars = compute_value_proxy(df, datetime.now(UTC))
         assert val is not None
         assert val > 0
 

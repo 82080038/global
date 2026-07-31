@@ -1,10 +1,8 @@
 """Unit tests for Component W: World Monitor patterns (7-signal + CII)."""
 
-import pytest
 
 from trading_system.analysis.world_monitor import (
     CII_COUNTRY_WEIGHTS,
-    MarketSignal,
     compute_cii_score,
     compute_market_composite,
     detect_convergence,

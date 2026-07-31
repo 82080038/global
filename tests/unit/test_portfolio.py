@@ -1,6 +1,5 @@
 """Tests for PortfolioEngine — position management and order generation."""
 
-import pandas as pd
 from unittest.mock import MagicMock
 
 from trading_system.portfolio.engine import PortfolioEngine

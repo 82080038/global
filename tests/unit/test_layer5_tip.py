@@ -1,16 +1,20 @@
 """Unit tests for Layer 5: N (Labeling) + S (Deep Learning) + T (Ensemble) + L (Model Registry)."""
 
+
 import numpy as np
 import pandas as pd
 import pytest
-from datetime import datetime, timedelta
 
+from trading_system.ai_learning.deep_learning import DeepLearningConfig, DeepLearningModel
+from trading_system.ai_learning.ensemble import EnsembleConfig, EnsembleSystem
 from trading_system.ai_learning.labeling import (
-    LabelingEngine, LabelingConfig, forward_return_labels, triple_barrier_labels, alpha_adjusted_labels,
+    LabelingConfig,
+    LabelingEngine,
+    alpha_adjusted_labels,
+    forward_return_labels,
+    triple_barrier_labels,
 )
-from trading_system.ai_learning.deep_learning import DeepLearningModel, DeepLearningConfig
-from trading_system.ai_learning.ensemble import EnsembleSystem, EnsembleConfig
-from trading_system.ai_learning.model_registry import ModelRegistry, ModelRecord
+from trading_system.ai_learning.model_registry import ModelRegistry
 
 
 def _make_ohlcv(n=100, start_price=1000):

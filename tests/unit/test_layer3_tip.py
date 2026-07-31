@@ -1,13 +1,16 @@
 """Unit tests for Layer 3: Y (Alpha Composer) + Z (No-Trade Engine)."""
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from trading_system.analysis.alpha_composer import (
-    AlphaComposer, AlphaConfig, AlphaSignal, ALPHA_VERSION, REGIME_MULTIPLIERS,
+    ALPHA_VERSION,
+    REGIME_MULTIPLIERS,
+    AlphaComposer,
+    AlphaConfig,
 )
 from trading_system.analysis.no_trade import (
-    NoTradeEngine, NoTradeConfig, NoTradeResult, NOTRADE_VERSION,
+    NOTRADE_VERSION,
+    NoTradeEngine,
 )
 
 
@@ -158,7 +161,7 @@ class TestNoTradeEngine:
 
     def test_no_trade_stale_data(self):
         engine = NoTradeEngine()
-        old_date = datetime(2020, 1, 1, tzinfo=timezone.utc)
+        old_date = datetime(2020, 1, 1, tzinfo=UTC)
         result = engine.evaluate(
             alpha_signal=self._make_signal(),
             regime_state="risk_on",

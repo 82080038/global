@@ -1,16 +1,13 @@
 """Unit tests for Data Quality Engine (CC, §4.1) and YFinanceRateLimiter (DD, §4.1)."""
 
-import pandas as pd
-import pytest
 from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock
 
-from trading_system.data.quality import check_quality, QualityReport
+import pandas as pd
+
+from trading_system.data.quality import check_quality
 from trading_system.data.rate_limit import (
-    YFinanceRateLimiter,
     CircuitState,
-    RateLimitResult,
-    SymbolFailure,
+    YFinanceRateLimiter,
 )
 
 

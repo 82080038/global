@@ -1,16 +1,18 @@
 """Unit tests for P2-2: DataSourceAdapter multi-source + incremental fetch."""
 
 import sqlite3
-import pandas as pd
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
+import pandas as pd
 
 from trading_system.data.acquisition import (
-    DataSourceAdapter, SQLiteAdapter, CSVAdapter, DataSourceManager,
+    CSVAdapter,
+    DataSourceAdapter,
+    DataSourceManager,
+    SQLiteAdapter,
     normalize_ohlcv,
 )
-from trading_system.data.storage import DataStorage
 
 
 def _make_source_sqlite(tmp_path: str, n_rows=50, ticker="TEST.JK"):

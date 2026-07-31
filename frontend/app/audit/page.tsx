@@ -6,10 +6,11 @@ import TerminalLayout from "../components/TerminalLayout";
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
 interface AuditEntry {
-  id: number;
+  event_id: number;
+  event_type: string;
+  payload: string;
   timestamp: string;
-  action: string;
-  detail: string;
+  actor: string;
 }
 
 export default function AuditPage() {
@@ -25,7 +26,7 @@ export default function AuditPage() {
       const res = await fetch(`${API_BASE}/api/audit?limit=100`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setEntries(data.entries || data || []);
+      setEntries(data.logs || []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load audit log");
     } finally {
@@ -43,8 +44,8 @@ export default function AuditPage() {
   const filtered = filter
     ? entries.filter(
         (e) =>
-          e.action?.toLowerCase().includes(filter.toLowerCase()) ||
-          e.detail?.toLowerCase().includes(filter.toLowerCase())
+          e.event_type?.toLowerCase().includes(filter.toLowerCase()) ||
+          e.payload?.toLowerCase().includes(filter.toLowerCase())
       )
     : entries;
 
@@ -88,8 +89,9 @@ export default function AuditPage() {
               <tr className="text-zinc-500">
                 <th className="px-3 py-1 text-left">ID</th>
                 <th className="px-3 py-1 text-left">Timestamp</th>
-                <th className="px-3 py-1 text-left">Action</th>
-                <th className="px-3 py-1 text-left">Detail</th>
+                <th className="px-3 py-1 text-left">Event Type</th>
+                <th className="px-3 py-1 text-left">Actor</th>
+                <th className="px-3 py-1 text-left">Payload</th>
               </tr>
             </thead>
             <tbody>
@@ -98,10 +100,11 @@ export default function AuditPage() {
                   key={i}
                   className="border-t border-zinc-800 text-zinc-400 hover:bg-zinc-800/30"
                 >
-                  <td className="px-3 py-1 text-zinc-600">{entry.id}</td>
+                  <td className="px-3 py-1 text-zinc-600">{entry.event_id}</td>
                   <td className="px-3 py-1 font-mono">{entry.timestamp}</td>
-                  <td className="px-3 py-1 font-mono text-blue-400">{entry.action}</td>
-                  <td className="px-3 py-1">{entry.detail}</td>
+                  <td className="px-3 py-1 font-mono text-blue-400">{entry.event_type}</td>
+                  <td className="px-3 py-1 font-mono text-zinc-300">{entry.actor}</td>
+                  <td className="px-3 py-1 max-w-xs truncate" title={entry.payload}>{entry.payload}</td>
                 </tr>
               ))}
             </tbody>

@@ -8,8 +8,8 @@ import pandas as pd
 import pytest
 
 from trading_system.data.storage import DataStorage
-from trading_system.portfolio.performance import PerformanceAnalytics
 from trading_system.execution.automated import AutomatedExecutionEngine
+from trading_system.portfolio.performance import PerformanceAnalytics
 
 
 @pytest.fixture

@@ -1,11 +1,9 @@
 """Unit tests for DecisionEngine."""
 
-import json
-import pandas as pd
-import pytest
-from unittest.mock import patch, MagicMock
 
-from trading_system.decision.engine import DecisionEngine, DEFAULT_WEIGHTS
+import pandas as pd
+
+from trading_system.decision.engine import DEFAULT_WEIGHTS, DecisionEngine
 
 
 class TestDecisionEngine:

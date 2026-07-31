@@ -1,22 +1,25 @@
 """Unit tests for Layer 6: C, D, V, H, I, AA, BB, M, Q."""
 
-import numpy as np
-import pandas as pd
-import pytest
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
+import numpy as np
+import pandas as pd
+
 from trading_system.ai_learning.purged_tss import PurgedKFold, walk_forward_indices
-from trading_system.ai_learning.walk_forward import WalkForwardValidator, WalkForwardConfig
-from trading_system.risk.expectancy import TradingExpectancy, TradeResult
+from trading_system.ai_learning.walk_forward import WalkForwardConfig, WalkForwardValidator
 from trading_system.analysis.attribution import PerformanceAttribution
-from trading_system.risk.corr_sizing import CorrelationPositionSizing
 from trading_system.analysis.cross_asset import CrossAssetEngine
+from trading_system.analysis.factor_screener import FactorScreenerService
 from trading_system.analysis.lead_lag import LeadLagAnalyzer
 from trading_system.analysis.manipulation import (
-    check_manipulation, detect_volume_anomaly, detect_pump_dump, detect_wash_trading,
+    check_manipulation,
+    detect_pump_dump,
+    detect_volume_anomaly,
+    detect_wash_trading,
 )
-from trading_system.analysis.factor_screener import FactorScreenerService
+from trading_system.risk.corr_sizing import CorrelationPositionSizing
+from trading_system.risk.expectancy import TradeResult, TradingExpectancy
 
 
 def _make_ohlcv(n=100, start_price=1000):

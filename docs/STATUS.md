@@ -2,7 +2,7 @@
 
 > **Versi aplikasi:** 0.1.0  
 > **Update:** 1 Agustus 2026  
-> **Total unit tests:** 537 (semua passing, 0 warnings)
+> **Total unit tests:** 553 (semua passing, 0 warnings)
 
 ## Perbaikan Terbaru (implementasi `docs/SARAN_PENGEMBANGAN.md`)
 
@@ -254,7 +254,7 @@
 
 | Layer | Status | Jumlah |
 |-------|--------|--------|
-| Unit Tests | ✅ Done | 537 tests (25 file) — includes 155 TIP + 20 CRUD tests |
+| Unit Tests | ✅ Done | 553 tests (26 file) — includes 155 TIP + 20 CRUD + 16 API tests |
 | E2E Tests | ✅ Done | 4 browser tests (Playwright) |
 | Lint | ✅ Done | ruff clean, mypy non-blocking |
 
@@ -289,6 +289,6 @@ Data Layer → Analysis Layer → Sentiment Layer → Risk Layer
 ```
 
 **Total engines:** 18 base + 18 TIP-adopted = 36 (lihat Lampiran C di buku-sistem-trading.md)  
-**Total API endpoints:** 58 REST (46 GET/POST + 12 DELETE) + 1 WebSocket  
+**Total API endpoints:** 59 REST (47 GET/POST + 12 DELETE) + 1 WebSocket  
 **Total database tables:** 13  
-**Total unit tests:** 537
+**Total unit tests:** 553

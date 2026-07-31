@@ -1,11 +1,10 @@
 """Unit tests for DataQualityValidator."""
 
+from unittest.mock import MagicMock, patch
+
 import pandas as pd
-import pytest
-from unittest.mock import patch, MagicMock
 
 from trading_system.data.validation import DataQualityValidator
-from trading_system.data.contracts import DataQualityReport
 
 
 class TestDataQualityValidator:

@@ -1,9 +1,10 @@
 """Unit tests for DataSourceAdapter and YahooFinanceAdapter (§4.1)."""
 
+from datetime import UTC, datetime
+from unittest.mock import MagicMock, patch
+
 import pandas as pd
 import pytest
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
 
 from trading_system.data.acquisition import DataSourceAdapter, YahooFinanceAdapter, normalize_ohlcv
 
@@ -42,7 +43,7 @@ class TestDataSourceAdapter:
         adapter.storage = MagicMock()
 
         # 1 day ago → should use "5d" period
-        recent_ts = (datetime.now(timezone.utc) - pd.Timedelta(days=1)).isoformat()
+        recent_ts = (datetime.now(UTC) - pd.Timedelta(days=1)).isoformat()
 
         with patch.object(adapter, "fetch") as mock_fetch:
             mock_fetch.return_value = {"status": "ok", "records": pd.DataFrame(), "message": "test"}
@@ -57,7 +58,7 @@ class TestDataSourceAdapter:
         adapter.storage = MagicMock()
 
         # 200 days ago → should use "1y" period
-        old_ts = (datetime.now(timezone.utc) - pd.Timedelta(days=200)).isoformat()
+        old_ts = (datetime.now(UTC) - pd.Timedelta(days=200)).isoformat()
 
         with patch.object(adapter, "fetch") as mock_fetch:
             mock_fetch.return_value = {"status": "ok", "records": pd.DataFrame(), "message": "test"}

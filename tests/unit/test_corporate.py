@@ -1,7 +1,8 @@
 """Tests for CorporateActionEngine — split and dividend detection."""
 
-import pandas as pd
 from unittest.mock import MagicMock, patch
+
+import pandas as pd
 
 from trading_system.corporate.actions import CorporateActionEngine
 

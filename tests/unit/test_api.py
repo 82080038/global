@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -115,3 +115,155 @@ class TestApiKeySecurity:
         monkeypatch.setattr(app_module, "_API_KEY", "secret123")
         response = client.get("/api/health")
         assert response.status_code == 200
+
+
+class TestAuditLogEndpoint:
+    """Test GET /api/audit endpoint."""
+
+    def test_get_audit_logs(self, client):
+        with patch("trading_system.api.app.storage") as mock_storage:
+            mock_storage.get_audit_logs.return_value = [
+                {"event_id": 1, "event_type": "test.event", "payload": "{}", "timestamp": "2024-01-01", "actor": "system"}
+            ]
+            response = client.get("/api/audit")
+            assert response.status_code == 200
+            data = response.json()
+            assert "logs" in data
+            assert data["count"] == 1
+
+    def test_get_audit_logs_empty(self, client):
+        with patch("trading_system.api.app.storage") as mock_storage:
+            mock_storage.get_audit_logs.return_value = []
+            response = client.get("/api/audit")
+            assert response.status_code == 200
+            assert response.json()["count"] == 0
+
+
+class TestPortfolioExposureEndpoint:
+    """Test GET /api/portfolio/exposure endpoint."""
+
+    def test_exposure_with_no_positions(self, client):
+        with patch("trading_system.api.app.storage") as mock_storage:
+            mock_storage.get_all_open_positions.return_value = []
+            mock_storage.get_equity_snapshots.return_value = []
+            response = client.get("/api/portfolio/exposure")
+            assert response.status_code == 200
+            data = response.json()
+            assert "cash" in data
+            assert "invested" in data
+            assert "total_equity" in data
+            assert "exposure_pct" in data
+            assert "position_count" in data
+            assert data["invested"] == 0
+            assert data["position_count"] == 0
+
+    def test_exposure_with_positions(self, client):
+        with patch("trading_system.api.app.storage") as mock_storage:
+            mock_storage.get_all_open_positions.return_value = [
+                {"ticker": "TEST.JK", "quantity": 100, "current_price": 5000, "avg_entry_price": 4500},
+            ]
+            mock_storage.get_equity_snapshots.return_value = [
+                {"equity": 100000, "cash": 50000},
+            ]
+            response = client.get("/api/portfolio/exposure")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["invested"] == 500000
+            assert data["position_count"] == 1
+
+
+class TestDeleteEndpoints:
+    """Test all DELETE endpoints."""
+
+    def test_delete_ohlcv(self, client):
+        with patch("trading_system.api.app.storage") as mock_storage:
+            mock_storage.delete_ohlcv.return_value = 100
+            mock_storage.audit = MagicMock()
+            response = client.delete("/api/data/TEST.JK")
+            assert response.status_code == 200
+            assert response.json()["deleted"] == 100
+
+    def test_delete_scores(self, client):
+        with patch("trading_system.api.app.storage") as mock_storage:
+            mock_storage.delete_scores.return_value = 5
+            mock_storage.audit = MagicMock()
+            response = client.delete("/api/scores/TEST.JK")
+            assert response.status_code == 200
+            assert response.json()["deleted"] == 5
+
+    def test_delete_orders(self, client):
+        with patch("trading_system.api.app.storage") as mock_storage:
+            mock_storage.delete_orders.return_value = 10
+            mock_storage.audit = MagicMock()
+            response = client.delete("/api/orders")
+            assert response.status_code == 200
+            assert response.json()["deleted"] == 10
+
+    def test_delete_audit_logs(self, client):
+        with patch("trading_system.api.app.storage") as mock_storage:
+            mock_storage.delete_audit_logs.return_value = 50
+            response = client.delete("/api/audit")
+            assert response.status_code == 200
+            assert response.json()["deleted"] == 50
+
+    def test_delete_position_found(self, client):
+        with patch("trading_system.api.app.storage") as mock_storage:
+            mock_storage.delete_position.return_value = True
+            mock_storage.audit = MagicMock()
+            response = client.delete("/api/positions/1")
+            assert response.status_code == 200
+            assert response.json()["deleted"] is True
+
+    def test_delete_position_not_found(self, client):
+        with patch("trading_system.api.app.storage") as mock_storage:
+            mock_storage.delete_position.return_value = False
+            response = client.delete("/api/positions/999")
+            assert response.status_code == 404
+
+    def test_delete_ai_weights(self, client):
+        with patch("trading_system.api.app.storage") as mock_storage:
+            mock_storage.delete_ai_weights.return_value = 3
+            mock_storage.audit = MagicMock()
+            response = client.delete("/api/ai/weights")
+            assert response.status_code == 200
+            assert response.json()["deleted"] == 3
+
+    def test_delete_equity_snapshots(self, client):
+        with patch("trading_system.api.app.storage") as mock_storage:
+            mock_storage.delete_equity_snapshots.return_value = 30
+            mock_storage.audit = MagicMock()
+            response = client.delete("/api/performance/snapshots")
+            assert response.status_code == 200
+            assert response.json()["deleted"] == 30
+
+    def test_delete_daily_risk_metrics(self, client):
+        with patch("trading_system.api.app.storage") as mock_storage:
+            mock_storage.delete_daily_risk_metrics.return_value = 15
+            mock_storage.audit = MagicMock()
+            response = client.delete("/api/risk/daily")
+            assert response.status_code == 200
+            assert response.json()["deleted"] == 15
+
+    def test_delete_relationships(self, client):
+        with patch("trading_system.api.app.storage") as mock_storage:
+            mock_storage.delete_relationships.return_value = 8
+            mock_storage.audit = MagicMock()
+            response = client.delete("/api/relationships")
+            assert response.status_code == 200
+            assert response.json()["deleted"] == 8
+
+    def test_delete_corporate_actions(self, client):
+        with patch("trading_system.api.app.storage") as mock_storage:
+            mock_storage.delete_corporate_actions.return_value = 4
+            mock_storage.audit = MagicMock()
+            response = client.delete("/api/corporate-actions/TEST.JK")
+            assert response.status_code == 200
+            assert response.json()["deleted"] == 4
+
+    def test_delete_news(self, client):
+        with patch("trading_system.api.app.storage") as mock_storage:
+            mock_storage.delete_news.return_value = 20
+            mock_storage.audit = MagicMock()
+            response = client.delete("/api/news")
+            assert response.status_code == 200
+            assert response.json()["deleted"] == 20

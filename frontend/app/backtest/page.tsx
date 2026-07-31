@@ -25,7 +25,11 @@ export default function BacktestPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/backtest/${ticker}`);
+      const res = await fetch(`${API_BASE}/api/backtest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticker, strategy: "buy_and_hold" }),
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setResult(data);

@@ -1,14 +1,15 @@
 """Tests for SentimentEngine — aggregation and fallback logic."""
 
-import pandas as pd
 from unittest.mock import MagicMock, patch
 
-from trading_system.sentiment.engine import SentimentEngine, POSITIVE_WORDS, NEGATIVE_WORDS
+import pandas as pd
+
+from trading_system.sentiment.engine import NEGATIVE_WORDS, POSITIVE_WORDS, SentimentEngine
 
 
 def test_lexicon_no_overlap():
     """POSITIVE_WORDS dan NEGATIVE_WORDS tidak boleh berbagi kata (mis. 'rugi')."""
-    assert POSITIVE_WORDS & NEGATIVE_WORDS == set()
+    assert set() == POSITIVE_WORDS & NEGATIVE_WORDS
 
 
 def test_rugi_is_negative_only():

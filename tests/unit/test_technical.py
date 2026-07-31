@@ -1,8 +1,6 @@
 """Unit tests for TechnicalAnalysisEngine."""
 
-import numpy as np
 import pandas as pd
-import pytest
 
 from trading_system.analysis.technical import TechnicalAnalysisEngine
 

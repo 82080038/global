@@ -398,6 +398,32 @@ def get_positions():
     return {"positions": positions, "count": len(positions)}
 
 
+@app.get("/api/portfolio/exposure")
+def get_portfolio_exposure():
+    """Get portfolio exposure summary: cash, invested, total equity, exposure %."""
+    positions = storage.get_all_open_positions()
+    invested = sum(
+        float(p.get("quantity", 0)) * float(p.get("current_price", p.get("avg_entry_price", 0)))
+        for p in positions
+    )
+    snapshots = storage.get_equity_snapshots(limit=1)
+    if snapshots:
+        total_equity = float(snapshots[-1].get("equity", 0))
+        cash = float(snapshots[-1].get("cash", 0))
+    else:
+        from trading_system.config import TRADING_CAPITAL
+        total_equity = float(TRADING_CAPITAL)
+        cash = total_equity - invested
+    exposure_pct = round((invested / total_equity * 100) if total_equity > 0 else 0, 2)
+    return {
+        "cash": round(cash, 2),
+        "invested": round(invested, 2),
+        "total_equity": round(total_equity, 2),
+        "exposure_pct": exposure_pct,
+        "position_count": len(positions),
+    }
+
+
 @app.get("/api/positions/{ticker}")
 def get_position(ticker: str):
     """Get open position for a specific ticker."""

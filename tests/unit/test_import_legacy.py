@@ -1,12 +1,12 @@
 """Unit tests for legacy data import (§13.5 #5)."""
 
 import sqlite3
-import pandas as pd
-import pytest
 from pathlib import Path
 
-from trading_system.data.storage import DataStorage
+import pandas as pd
+
 from trading_system.data.import_legacy import LegacyDataImporter
+from trading_system.data.storage import DataStorage
 
 
 def _make_source_db(tmp_path: str):

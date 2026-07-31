@@ -1,6 +1,5 @@
 """Unit tests for P2-5: WS broadcast cache + pagination."""
 
-import time
 from unittest.mock import MagicMock, patch
 
 import pytest

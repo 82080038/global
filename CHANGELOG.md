@@ -6,7 +6,44 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dan
 
 ---
 
-## [0.1.5] — 2026-08-01
+## [0.1.7] — 2026-08-01
+
+Complete CRUD operations, frontend-backend integration fixes, lint cleanup.
+
+### Added — CRUD Operations
+
+- **12 Delete methods** in `DataStorage`: `delete_ohlcv`, `delete_scores`, `delete_orders`, `delete_audit_logs`, `delete_position`, `delete_ai_weights`, `delete_equity_snapshots`, `delete_daily_risk_metrics`, `delete_relationships`, `delete_corporate_actions`, `delete_news`.
+- **`get_audit_logs`** Read method with filtering + pagination in `DataStorage`.
+- **`delete_archived_ticker`** in `ArchiveAdapter` for Parquet file deletion.
+- **12 DELETE API endpoints** for all resources + **GET `/api/audit`** for audit log reading.
+- **GET `/api/portfolio/exposure`** endpoint for portfolio exposure summary.
+- Total API routes: **59 REST** (47 GET/POST + 12 DELETE) + 1 WebSocket.
+
+### Fixed — Frontend-Backend Integration
+
+- **Audit page** (`audit/page.tsx`): Fixed field mapping mismatch — was reading `data.entries` with `id/action/detail` fields; now correctly reads `data.logs` with `event_id/event_type/payload/timestamp/actor`.
+- **Backtest page** (`backtest/page.tsx`): Changed from GET to POST — API endpoint is `POST /api/backtest`, not `GET /api/backtest/{ticker}`.
+
+### Fixed — Lint & Code Quality
+
+- **108 ruff lint errors** fixed in test files (unused imports, unsorted imports, f-string placeholders, UP017 datetime.UTC alias, SIM300 Yoda conditions).
+- All test files now pass `ruff check` with zero errors.
+
+### Cleanup
+
+- Removed duplicate script `scripts/import_archive_to_sqlite.py` (superseded by `import_legacy_data.py`).
+- Updated `.gitignore`: added `.mypy_cache/`, `.ruff_cache/`, `data/archive/*.parquet`.
+
+### Tests
+
+- Total: **553 unit tests** (was 537), all passing, 0 warnings.
+- Added 16 API endpoint tests (2 audit, 2 portfolio exposure, 12 DELETE).
+- Ruff clean on both `src/` and `tests/`.
+- Frontend ESLint clean.
+
+---
+
+## [0.1.6] — 2026-08-01
 
 Data archive & port modul dari proyek `pasar_modal`.
 
