@@ -19,15 +19,28 @@ import pandas as pd
 import pymysql
 
 
-def get_connection():
+def get_connection(database: str = "data_pasar_modal"):
     return pymysql.connect(
         host=os.getenv("MYSQL_HOST", "localhost"),
         port=int(os.getenv("MYSQL_PORT", "3306")),
         user=os.getenv("MYSQL_USER", "root"),
         password=os.getenv("MYSQL_PASSWORD", "root"),
-        database="data_pasar_modal",
+        database=database,
         charset="utf8mb4",
     )
+
+
+# Tables from other MySQL databases
+EXTRA_DB_TABLES = {
+    # market_master — master data instrumen
+    "mm_instrument": {"db": "market_master", "mysql_table": "instrument", "partition_by": None, "date_col": None},
+    "mm_security": {"db": "market_master", "mysql_table": "security", "partition_by": None, "date_col": None},
+    "mm_issuer": {"db": "market_master", "mysql_table": "issuer", "partition_by": None, "date_col": None},
+    "mm_listing": {"db": "market_master", "mysql_table": "listing", "partition_by": None, "date_col": None},
+    "mm_exchange": {"db": "market_master", "mysql_table": "exchange", "partition_by": None, "date_col": None},
+    # data_ingestion — OHLCV from another system
+    "di_ohlcv_daily": {"db": "data_ingestion", "mysql_table": "ohlcv_daily", "partition_by": "year", "date_col": "trade_date"},
+}
 
 
 TABLE_MAP = {
@@ -245,7 +258,7 @@ TABLE_MAP = {
 }
 
 
-def export_table(conn, name: str, config: dict, archive_dir: Path, batch_size: int = 50000):
+def export_table(conn, name: str, config: dict, archive_dir: Path, batch_size: int = 50000, db_name: str = "data_pasar_modal"):
     mysql_table = config["mysql_table"]
     partition_by = config.get("partition_by")
     date_col = config.get("date_col")
@@ -254,14 +267,14 @@ def export_table(conn, name: str, config: dict, archive_dir: Path, batch_size: i
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n{'='*60}")
-    print(f"Exporting: {mysql_table} -> {name}/")
+    print(f"Exporting: {db_name}.{mysql_table} -> {name}/")
 
     # Check if table exists
     with conn.cursor() as cur:
         cur.execute(
             "SELECT COUNT(*) FROM information_schema.tables "
-            "WHERE table_schema='data_pasar_modal' AND table_name=%s",
-            (mysql_table,),
+            "WHERE table_schema=%s AND table_name=%s",
+            (db_name, mysql_table),
         )
         if cur.fetchone()[0] == 0:
             print(f"  SKIP: Table {mysql_table} not found")
@@ -341,20 +354,30 @@ def main():
     print(f"Archive directory: {archive_dir}")
 
     tables = args.tables or list(TABLE_MAP.keys())
-    conn = get_connection()
+    all_maps = {**TABLE_MAP, **EXTRA_DB_TABLES}
 
-    total = 0
+    # Group by database
+    by_db: dict[str, list[str]] = {}
     for name in tables:
-        if name not in TABLE_MAP:
+        if name not in all_maps:
             print(f"  WARNING: Unknown table '{name}', skipping")
             continue
-        try:
-            exported = export_table(conn, name, TABLE_MAP[name], archive_dir)
-            total += exported
-        except Exception as e:
-            print(f"  ERROR exporting {name}: {e}")
+        cfg = all_maps[name]
+        db = cfg.get("db", "data_pasar_modal")
+        by_db.setdefault(db, []).append(name)
 
-    conn.close()
+    total = 0
+    for db_name, db_tables in by_db.items():
+        conn = get_connection(db_name)
+        for name in db_tables:
+            cfg = all_maps[name]
+            try:
+                exported = export_table(conn, name, cfg, archive_dir, db_name=db_name)
+                total += exported
+            except Exception as e:
+                print(f"  ERROR exporting {name}: {e}")
+        conn.close()
+
     print(f"\n{'='*60}")
     print(f"Total rows exported: {total:,}")
     print(f"Archive location: {archive_dir}")

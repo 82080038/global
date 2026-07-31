@@ -6,6 +6,35 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dan
 
 ---
 
+## [0.1.5] — 2026-08-01
+
+Data archive & port modul dari proyek `pasar_modal`.
+
+### Added — Data Archive
+
+- **`DATA_ARCHIVE_DIR`** config + env var untuk fleksibilitas lokasi archive (`config.py`).
+- **`ArchiveAdapter`** — baca/tulis Parquet archive dengan date filtering, list tickers, archive info (`data/archive.py`).
+- **`scripts/export_mysql_to_parquet.py`** — multi-database export (data_pasar_modal + market_master + data_ingestion) dengan year partitioning untuk tabel besar.
+- **`scripts/export_sqlite_to_parquet.py`** — export SQLite `saham.db` ke Parquet.
+- Export lengkap: 1.5M+ baris MySQL + 47K baris SQLite → ~33 MB Parquet di external HDD `K:\trading_data\raw`.
+
+### Added — Ported Modules
+
+- **`analysis/regime.py`** — market regime detection (trending/neutral/volatile/shock) berbasis VIX, IHSG vs SMA200, korelasi.
+- **`risk/kelly.py`** — Kelly Criterion position sizing dengan half/quarter Kelly, confidence interval, dan kalkulasi dari trade history.
+- **`execution/tax.py`** — Indonesia stock tax calculator (PPh final 0.1%, broker fee, clearing fee, custody fee, dividend tax 10%).
+- **`analysis/red_flags.py`** — fundamental red flags detection: earnings quality (cash conversion, accruals, DSO, inventory turnover), balance sheet health (current ratio, D/E, goodwill, short-term debt), governance (auditor changes, related-party, pledging, independent directors).
+- **`analysis/screener.py`** — stock screener dengan template technical, momentum, dan value.
+- **`data/idx_scraper.py`** — IDX.co.id scraper untuk foreign flow data per stock.
+
+### Tests
+
+- 37 new tests untuk ported modules (regime, kelly, tax, red_flags, screener).
+- 5 tests untuk ArchiveAdapter.
+- Total: 235 tests, semua passing.
+
+---
+
 ## [0.1.4] — 2026-07-31
 
 Implementasi Sprint 2 dari `docs/SARAN_PENGEMBANGAN.md` — kebenaran kuantitatif.

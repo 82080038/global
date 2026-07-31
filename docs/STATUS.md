@@ -1,8 +1,8 @@
 # Status Implementasi Sistem Trading
 
 > **Versi aplikasi:** 0.1.0  
-> **Update:** 31 Juli 2026  
-> **Total unit tests:** 198 (semua passing)
+> **Update:** 1 Agustus 2026  
+> **Total unit tests:** 235 (semua passing)
 
 ## Perbaikan Terbaru (implementasi `docs/SARAN_PENGEMBANGAN.md`)
 
@@ -24,6 +24,20 @@
 - Block bootstrap Monte Carlo: parameter `block_size` di `monte_carlo_simulation` untuk preserve autokorelasi & volatility clustering (§3.6).
 - Refresh data macro/global berbasis umur: `ensure_data` kini cek `max_age_days` (default 1 hari bursa) dan re-fetch jika data basi; `data_age_days` ditambahkan ke breakdown skor (§4.2).
 - `IDX_LOT_SIZE` (100) dan `idx_tick_size()` / `round_to_tick()` helper ditambahkan ke `config.py`.
+
+**Sprint 3 — Data archive & modul port (selesai):**
+- Export seluruh MySQL `data_pasar_modal` (60+ tabel, 1.5M baris) + `market_master` (5 tabel) + `data_ingestion` (1 tabel) + SQLite `saham.db` (3 tabel) ke Parquet archive di external HDD `K:\trading_data\raw` (total ~33 MB, 170+ files).
+- `DATA_ARCHIVE_DIR` config + env var untuk fleksibilitas lokasi archive.
+- `ArchiveAdapter` untuk baca/tulis Parquet archive dengan date filtering.
+- `scripts/export_mysql_to_parquet.py` — multi-database export dengan year partitioning.
+- `scripts/export_sqlite_to_parquet.py` — export SQLite ke Parquet.
+- Port modul dari `pasar_modal`:
+  - `analysis/regime.py` — market regime detection (trending/neutral/volatile/shock).
+  - `risk/kelly.py` — Kelly Criterion position sizing.
+  - `execution/tax.py` — Indonesia stock tax calculator (PPh, broker fee, clearing, dividend).
+  - `analysis/red_flags.py` — fundamental red flags detection (earnings quality, balance sheet, governance).
+  - `analysis/screener.py` — stock screener (technical, momentum, value templates).
+  - `data/idx_scraper.py` — IDX.co.id scraper untuk foreign flow data.
 
 **Belum dikerjakan (lihat `docs/SARAN_PENGEMBANGAN.md` untuk detail):** integrasi corporate action → `adjusted_close` (§4.3), konsolidasi ATR/fee, `DataSourceAdapter` multi-sumber, dan seluruh item P3.
 
