@@ -183,7 +183,7 @@ export default function PriceChart({
         shape: s.action === "BUY" ? "arrowUp" : "arrowDown",
         text: s.text || s.action,
       }));
-      candleSeries.setMarkers(markers);
+      (candleSeries as any).setMarkers(markers);
     }
 
     chart.timeScale().fitContent();

@@ -697,7 +697,7 @@ export default function Dashboard() {
                 <XAxis dataKey="date" stroke="#666" fontSize={9} tickFormatter={(d: string) => d.slice(5)} />
                 <YAxis stroke="#666" fontSize={9} domain={["auto", "auto"]} />
                 <Tooltip
-                  formatter={(value: number) => `Rp ${value.toLocaleString("id-ID", { maximumFractionDigits: 0 })}`}
+                  formatter={(value: any) => `Rp ${Number(value).toLocaleString("id-ID", { maximumFractionDigits: 0 })}`}
                   contentStyle={{ background: "#18181b", border: "1px solid #27272a" }}
                   itemStyle={{ color: "#e4e4e7" }}
                 />
