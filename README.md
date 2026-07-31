@@ -139,14 +139,14 @@ Data persists in `./data/` volume mount.
 ## Testing
 
 ```bash
-# Unit tests (517 tests)
+# Unit tests (562 tests)
 python -m pytest tests/unit/ -v
 
 # With coverage
 python -m pytest tests/unit/ -v --cov=trading_system --cov-report=term-missing
 
-# Lint check
-python -m ruff check src/trading_system/
+# Lint check (src + tests)
+python -m ruff check src/trading_system/ tests/unit/
 
 # Type check (non-blocking)
 python -m mypy src/trading_system/ --ignore-missing-imports
@@ -154,6 +154,14 @@ python -m mypy src/trading_system/ --ignore-missing-imports
 # E2E tests (requires Playwright + running servers)
 python -m pytest tests/e2e/ -v
 ```
+
+## Documentation
+
+- **[docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)** — Panduan lengkap untuk memahami, menggunakan, dan mengembangkan aplikasi (START HERE)
+- **[docs/API_REFERENCE.md](docs/API_REFERENCE.md)** — Detail semua 63 API endpoints
+- **[docs/STATUS.md](docs/STATUS.md)** — Status proyek dan metrik
+- **[docs/SARAN_PENGEMBANGAN.md](docs/SARAN_PENGEMBANGAN.md)** — Roadmap pengembangan
+- **[CHANGELOG.md](CHANGELOG.md)** — Version history
 
 ## Key Features
 
