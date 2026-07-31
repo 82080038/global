@@ -95,9 +95,8 @@ export default function TerminalLayout({
           >
             Audit Log
           </a>
-          <div className="mt-6 px-2 py-1 text-zinc-500">MARKET</div>
-          <div className="px-2 py-1 text-zinc-400">BBCA.JK ▲ 1.2%</div>
-          <div className="px-2 py-1 text-zinc-400">TLKM.JK ▼ 0.4%</div>
+          <div className="mt-6 px-2 py-1 text-zinc-500">SYSTEM</div>
+          <div className="px-2 py-1 text-zinc-400">v0.1.7</div>
         </aside>
 
         <section className="flex flex-1 flex-col overflow-auto p-4">

@@ -151,6 +151,7 @@ export default function Dashboard() {
   const [performanceData, setPerformanceData] = useState<PerformanceData | null>(null);
   const [performancePeriod, setPerformancePeriod] = useState("1M");
   const [watchlist, setWatchlist] = useState<string[]>([]);
+  const [rebalanceError, setRebalanceError] = useState("");
 
   const fetchPerformance = useCallback(async (period: string) => {
     try {
@@ -260,16 +261,17 @@ export default function Dashboard() {
 
   const triggerRebalance = async () => {
     setRebalanceLoading(true);
+    setRebalanceError("");
     try {
       const res = await fetch(`${API_BASE}/api/rebalance`, { method: "POST" });
       const data = await res.json();
       if (res.ok) {
         await Promise.all([fetchExecutionLogs(), fetchRebalanceStatus()]);
       } else {
-        alert(`Rebalance failed: ${data.detail || "Unknown error"}`);
+        setRebalanceError(`Rebalance failed: ${data.detail || "Unknown error"}`);
       }
     } catch (e) {
-      alert(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      setRebalanceError(`Error: ${e instanceof Error ? e.message : String(e)}`);
     }
     setRebalanceLoading(false);
   };
@@ -861,6 +863,11 @@ export default function Dashboard() {
               <div className="text-zinc-600">No target weights configured.</div>
             )}
           </div>
+          {rebalanceError && (
+            <div className="mt-2 border border-red-800 bg-red-900/30 p-2 text-[10px] text-red-400">
+              {rebalanceError}
+            </div>
+          )}
           <button
             onClick={triggerRebalance}
             disabled={rebalanceLoading}

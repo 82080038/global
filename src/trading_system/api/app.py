@@ -155,7 +155,7 @@ async def rate_limit(request: Request, call_next):
 
 @app.get("/")
 def root():
-    return {"status": "ok", "version": "0.1.0"}
+    return {"status": "ok", "version": app.version}
 
 
 @app.get("/api/health")

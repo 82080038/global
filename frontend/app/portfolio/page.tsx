@@ -60,11 +60,20 @@ export default function PortfolioPage() {
 
   return (
     <TerminalLayout active="portfolio">
-      <div className="mb-4">
-        <h1 className="mb-2 text-lg font-bold text-zinc-100">Portfolio</h1>
-        <p className="text-xs text-zinc-500">
-          Current positions and portfolio exposure
-        </p>
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h1 className="mb-2 text-lg font-bold text-zinc-100">Portfolio</h1>
+          <p className="text-xs text-zinc-500">
+            Current positions and portfolio exposure
+          </p>
+        </div>
+        <button
+          onClick={fetchPortfolio}
+          disabled={loading}
+          className="rounded bg-zinc-800 px-4 py-1 text-xs font-bold text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
+        >
+          {loading ? "Loading..." : "Refresh"}
+        </button>
       </div>
 
       {loading && <div className="text-xs text-zinc-500">Loading...</div>}

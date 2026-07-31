@@ -22,9 +22,10 @@ interface EnginesResponse {
 
 type ConnStatus = "connecting" | "open" | "closed" | "error";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 const WS_URL =
   typeof window !== "undefined"
-    ? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:8000/ws/live`
+    ? `${API_BASE.replace(/^http/, "ws")}/ws/live`
     : "ws://localhost:8000/ws/live";
 
 export default function EnginesPage() {

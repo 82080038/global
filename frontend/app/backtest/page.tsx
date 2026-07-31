@@ -17,6 +17,7 @@ interface BacktestResult {
 
 export default function BacktestPage() {
   const [ticker, setTicker] = useState("BBCA.JK");
+  const [strategy, setStrategy] = useState("buy_and_hold");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +29,7 @@ export default function BacktestPage() {
       const res = await fetch(`${API_BASE}/api/backtest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker, strategy: "buy_and_hold" }),
+        body: JSON.stringify({ ticker, strategy }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -57,6 +58,15 @@ export default function BacktestPage() {
           placeholder="e.g. BBCA.JK"
           className="rounded border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100"
         />
+        <select
+          value={strategy}
+          onChange={(e) => setStrategy(e.target.value)}
+          className="rounded border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100"
+        >
+          <option value="buy_and_hold">Buy & Hold</option>
+          <option value="ma_crossover">MA Crossover</option>
+          <option value="conviction">Conviction</option>
+        </select>
         <button
           onClick={runBacktest}
           disabled={loading}
