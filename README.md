@@ -6,22 +6,22 @@ Sistem operasi pengambilan keputusan investasi berbasis Multi-Factor Analysis, R
 
 ```
 src/trading_system/
-  data/           # Acquisition, Validation, Storage, Seeder, Contracts
-  analysis/       # Technical, Fundamental, Macro, Global Market, Pipeline, Market Relationship
-  sentiment/      # Engine (NLP), Foreign Flow, Broker Summary, Social Media, Google Trends
+  data/           # Acquisition, Validation, Storage (78 tables), Extended Storage, Archive, Rate Limit, IDX Scraper
+  analysis/       # Technical, Advanced Technical, Fundamental (+fallback), Macro, Global Market, Pipeline, Relationship, Regime, Enhanced Regime, Red Flags, Screener, Factor Screener, Factor Engine, Manipulation, No-Trade, Order Book, World Monitor, Liquidity Filter, Pattern Reliability, Attribution, Alpha Composer/Validation, Cross-Asset, Lead-Lag
+  sentiment/      # Engine (6 sumber: NLP, Foreign Flow, Broker, Social Media, Google Trends, IDX Historical)
   corporate/      # Corporate Actions (split, dividend)
-  backtest/       # Engine, Strategies, Metrics (Monte Carlo, Walk-Forward)
-  risk/           # Risk Engine (VaR, CVaR, position sizing, drawdown)
+  backtest/       # Engine, Strategies (Buy&Hold, MA, Conviction), Metrics (Monte Carlo, Walk-Forward)
+  risk/           # Risk Engine, Enhanced Risk, Circuit Breaker, Slippage Model, Correlation Sizing, Kelly, Cost Model, Expectancy
   portfolio/      # Engine, Performance Analytics, Rebalancer
-  execution/      # Manual + Automated Execution Engine (robot trader)
+  execution/      # Manual + Automated Execution Engine, Broker Adapter (Mock + Sinarmas/BNI), Tax
   decision/       # Decision Engine (multi-factor weighted scoring)
-  ai_learning/    # AI Learning Engine (Linear Regression weight optimization)
+  ai_learning/    # AI Learning Engine, Deep Learning (LSTM), Ensemble, Labeling, Model Registry, Purged TSS, Walk-Forward
   xai/            # Explainable AI Engine
   monitoring/     # System Health Monitor
   paper_trading/  # Paper Trading Simulator
-  api/            # FastAPI REST API + WebSocket
+  api/            # FastAPI REST API (78 endpoints) + WebSocket
   utils/          # Telegram Notifier
-  cli.py          # CLI runner
+  cli.py          # CLI runner (15 subcommands)
   config.py       # Global configuration
 ```
 
@@ -137,6 +137,26 @@ Endpoints:
 - `POST /api/backtest/monte-carlo` — Monte Carlo simulation
 - `POST /api/backtest/walk-forward` — walk-forward analysis
 - `GET /api/audit` — audit log entries
+- `GET /api/engines` — engine registry (54 engines)
+- `GET /api/system-state/{key}` — system state value
+- `PUT /api/system-state/{key}` — set system state value
+- `GET /api/extended/snapshot/{ticker}` — fundamental snapshot from MySQL import
+- `GET /api/extended/shareholders/{ticker}` — shareholders data
+- `GET /api/extended/directors/{ticker}` — directors & commissioners
+- `GET /api/extended/broker-summary` — broker activity summary
+- `GET /api/extended/pattern-reliability/{ticker}` — historical pattern win rate
+- `GET /api/extended/pattern-candidates` — detected pattern candidates
+- `GET /api/extended/advanced-features/{ticker}` — order flow, volume profile
+- `GET /api/extended/ai-scores-history/{ticker}` — historical AI scores
+- `GET /api/extended/sentiment/{ticker}` — IDX historical sentiment
+- `GET /api/extended/market-indices` — market index data (JCI, sectoral)
+- `GET /api/extended/financial-statements/{ticker}` — financial statements
+- `GET /api/extended/social-media-sentiment/{ticker}` — social media sentiment
+- `GET /api/extended/stock-splits/{ticker}` — stock split history
+- `GET /api/extended/quarterly-earnings/{ticker}` — quarterly earnings
+- `GET /api/extended/circuit-breaker` — circuit breaker status
+- `GET /api/replay/list` — list replay results
+- `GET /api/replay/{ticker}` — replay detail per ticker
 - `WS /ws/live` — WebSocket real-time engine status
 
 ## Deployment with Docker
@@ -162,7 +182,7 @@ Data persists in `./data/` volume mount.
 
 - [ ] Copy `.env.example` to `.env` and fill in API keys (Reddit, Twitter, Telegram, etc.)
 - [ ] Run `python -m trading_system.cli fetch BBCA.JK TLKM.JK ASII.JK` to seed data
-- [ ] Run `python -m pytest tests/unit/` to verify all 562 tests pass
+- [ ] Run `python -m pytest tests/unit/` to verify all 600+ tests pass
 - [ ] Start API: `uvicorn src.trading_system.api.app:app --host 0.0.0.0 --port 8000`
 - [ ] Start Execution: `python -m trading_system.cli execution --interval 15`
 - [ ] Start Scheduler: `python -m trading_system.cli schedule`
@@ -173,7 +193,7 @@ Data persists in `./data/` volume mount.
 ## Testing
 
 ```bash
-# Unit tests (562 tests)
+# Unit tests (600+ tests)
 python -m pytest tests/unit/ -v
 
 # With coverage
@@ -192,20 +212,21 @@ python -m pytest tests/e2e/ -v
 ## Documentation
 
 - **[docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)** — Panduan lengkap untuk memahami, menggunakan, dan mengembangkan aplikasi (START HERE)
-- **[docs/API_REFERENCE.md](docs/API_REFERENCE.md)** — Detail semua 63 API endpoints
+- **[docs/API_REFERENCE.md](docs/API_REFERENCE.md)** — Detail semua 63 API endpoints + 15 extended endpoints
 - **[docs/STATUS.md](docs/STATUS.md)** — Status proyek dan metrik
 - **[docs/SARAN_PENGEMBANGAN.md](docs/SARAN_PENGEMBANGAN.md)** — Roadmap pengembangan
 - **[CHANGELOG.md](CHANGELOG.md)** — Version history
 
 ## Key Features
 
-- **Multi-Factor Analysis**: Technical, Fundamental, Macro, Global Market, Sentiment, Corporate Actions, Market Relationship
-- **Sentiment Engine**: Indonesian NLP (RSS feeds), Foreign Net Flow, Broker Summary (smart money), Social Media (Reddit + X/Twitter), Google Trends
-- **Risk Management**: VaR, CVaR, Max Drawdown, position sizing, daily loss limit circuit breaker
+- **Multi-Factor Analysis**: 54 engines — Technical, Advanced Technical, Fundamental (+fallback), Macro, Global Market, Sentiment (6 sources), Corporate Actions, Market Relationship, Pattern Reliability, Liquidity Filter, Manipulation Detection, No-Trade Zone, Order Book, World Monitor, Regime Detection, Factor Engine, Screener, Alpha Composer/Validation, Cross-Asset, Lead-Lag, Performance Attribution
+- **Sentiment Engine**: 6 sources — Indonesian NLP (RSS feeds), Foreign Net Flow, Broker Summary (smart money), Social Media (Reddit + X/Twitter), Google Trends, IDX Historical Sentiment
+- **Risk Management**: VaR, CVaR, Max Drawdown, position sizing, daily loss limit, Circuit Breaker (IHSG crash halt), Slippage Model (dynamic), Kelly Criterion, Correlation Sizing, Enhanced Risk (vol-targeting, sector caps)
 - **Automated Execution**: Robot trader with stop-loss, take-profit, trailing stop, monitoring mode
 - **Portfolio Rebalancer**: Target weights with drift detection, runtime toggle via API
 - **Runtime Toggles**: Auto-trade and rebalance can be toggled on/off via API without server restart
-- **AI Learning**: Linear Regression weight optimization from historical score-return pairs
+- **AI Learning**: Linear Regression, Deep Learning (LSTM/MLP), Ensemble, Walk-Forward optimization, Purged TSS
 - **Explainable AI**: Narrative explanation with top contributing factors
-- **Backtesting**: Buy & Hold, MA Crossover, Monte Carlo simulation, Walk-forward analysis
-- **Frontend Dashboard**: Terminal-style UI with charts, scores, recommendations, execution logs, toggle switches
+- **Backtesting**: Buy & Hold, MA Crossover, Conviction strategy, Monte Carlo simulation, Walk-forward analysis
+- **Extended Data**: 14 tables imported from MySQL (saham_snapshot, idx_sentiment_data, shareholders, financial statements, pattern reliability, dll)
+- **Frontend Dashboard**: 6 pages — Dashboard, Engine Monitor, Backtest, Portfolio, Audit, Replay (terminal-style UI)

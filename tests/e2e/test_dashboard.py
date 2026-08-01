@@ -17,7 +17,7 @@ BASE_URL = "http://localhost:3000"
 def dashboard_page(page: Page):
     page.goto(f"{BASE_URL}/dashboard")
     # Wait for the app shell
-    expect(page.locator("h1")).to_contain_text("Trading System")
+    expect(page.locator("h1")).to_contain_text("TRADING SYSTEM")
     return page
 
 
@@ -56,7 +56,7 @@ def test_change_ticker_and_analyze(dashboard_page: Page):
     dashboard_page.locator("button:has-text('Analyze')").click()
 
     # Wait for ticker header to update
-    page_ticker = dashboard_page.locator("text=/TLKM\\.JK/")
+    page_ticker = dashboard_page.locator("text=/TLKM\\.JK/").first
     expect(page_ticker).to_be_visible(timeout=30_000)
 
     # Wait for the Analyze button to return to idle (analysis done)

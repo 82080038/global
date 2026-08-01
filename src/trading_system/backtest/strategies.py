@@ -89,7 +89,7 @@ class ConvictionStrategy:
         if df.empty:
             return df
         # Aggregate per as_of: weighted average of engine scores
-        df["as_of"] = pd.to_datetime(df["as_of"])
+        df["as_of"] = pd.to_datetime(df["as_of"], format="mixed", utc=True).dt.tz_localize(None)
         df = df.sort_values("as_of")
         # Group by timestamp, average the scores
         agg = df.groupby("as_of")["score"].mean().reset_index()

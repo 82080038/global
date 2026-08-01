@@ -202,15 +202,41 @@ class SentimentEngine:
             "articles": [],
         }
 
+    def _idx_sentiment(self, ticker: str) -> dict | None:
+        """Use imported idx_sentiment_data (212K rows from MySQL) as sentiment source."""
+        try:
+            from trading_system.data.extended_storage import ExtendedStorage
+            ext = ExtendedStorage(self.storage.db_path if hasattr(self.storage, 'db_path') else None)
+            symbol = ticker if ".JK" in ticker else f"{ticker}.JK"
+            latest = ext.get_latest_sentiment(symbol)
+            if not latest:
+                return None
+            score = (latest["sentiment_score"] + 1) * 50 if latest.get("sentiment_score") is not None else 50.0
+            return {
+                "score": round(score, 2),
+                "sentiment": round(latest.get("sentiment_score", 0) or 0, 4),
+                "signal": latest.get("sentiment_label", "neutral"),
+                "detail": {
+                    "news_count": latest.get("news_count", 0),
+                    "social_media": latest.get("social_media_sentiment"),
+                    "analyst": latest.get("analyst_sentiment"),
+                    "date": latest.get("date"),
+                },
+            }
+        except Exception as e:
+            logger.debug("idx_sentiment error: %s", e)
+            return None
+
     def compute(self, ticker: str) -> dict:
         """Compute sentiment score for a ticker.
 
         Aggregates multiple sentiment sources with weighted scoring:
-        1. Foreign Net Flow (weight: 0.30) — institutional accumulation/distribution
-        2. Broker Summary / Smart Money (weight: 0.25) — broker-level flow tracking
-        3. Social Media (weight: 0.20) — Reddit + Twitter real-time sentiment
-        4. Google Trends (weight: 0.15) — leading indicator from search interest
+        1. Foreign Net Flow (weight: 0.25) — institutional accumulation/distribution
+        2. Broker Summary / Smart Money (weight: 0.20) — broker-level flow tracking
+        3. Social Media (weight: 0.15) — Reddit + Twitter real-time sentiment
+        4. Google Trends (weight: 0.10) — leading indicator from search interest
         5. News NLP (weight: 0.10) — Indonesian news lexicon (lagging but confirms)
+        6. IDX Historical Sentiment (weight: 0.20) — pre-computed sentiment from idx_sentiment_data
 
         Falls back to price/volume proxy if no real-time sources available.
         """
@@ -234,11 +260,12 @@ class SentimentEngine:
 
         # Weights for each source (sum = 1.0)
         weights = {
-            "foreign_flow": 0.30,
-            "broker_summary": 0.25,
-            "social_media": 0.20,
-            "google_trends": 0.15,
+            "foreign_flow": 0.25,
+            "broker_summary": 0.20,
+            "social_media": 0.15,
+            "google_trends": 0.10,
             "news_nlp": 0.10,
+            "idx_historical": 0.20,
         }
 
         # Collect results from each source
@@ -251,6 +278,12 @@ class SentimentEngine:
             if result is not None:
                 results[name] = result
                 active_weights[name] = weights[name]
+
+        # IDX historical sentiment (from imported idx_sentiment_data)
+        idx_result = self._idx_sentiment(ticker)
+        if idx_result is not None:
+            results["idx_historical"] = idx_result
+            active_weights["idx_historical"] = weights["idx_historical"]
 
         # News NLP (lagging but useful as confirmation)
         news_result = self._news_sentiment(ticker)

@@ -215,16 +215,18 @@ python -m scripts.export_mysql_to_parquet --tables chart_patterns saham_historic
 
 ## Estimasi Total Data Setelah Integrasi Penuh
 
-| Kategori | Estimasi Baris | Estimasi Parquet |
-|----------|---------------|-----------------|
-| OHLCV (stock_history + saham_historical) | ~1.4M | ~25 MB |
-| Chart patterns | 43K | ~2 MB |
-| Multi-asset (forex, crypto, commodity, index, bond) | 3.3K | ~0.5 MB |
-| Broker flow + foreign flow | 75K | ~5 MB |
-| Sentiment + fear/greed | 1.4K | ~0.1 MB |
-| Macro + global market | 10K | ~0.5 MB |
-| Fundamental + ESG + governance | 1.2K | ~0.1 MB |
-| Event eksternal + kebijakan regulasi | 300 | ~0.05 MB |
-| AI scores + stock personality | 60 | ~0.01 MB |
-| Master data (saham, sektor, IPO) | 720 | ~0.05 MB |
+> **Update 2 Agustus 2026:** Phase 6 selesai. 14 tabel unik dari MySQL `data_pasar_modal` dan `idx_complete_data` telah diimport ke SQLite via `scripts/import_mysql_to_sqlite.py`. Akses read-only via `ExtendedStorage` (`data/extended_storage.py`). Total 95 tabel di SQLite (33 core + 14 import MySQL + 48 tambahan). 15 endpoint `/api/extended/*` tersedia untuk query data import.
+
+| Kategori | Estimasi Baris | Estimasi Parquet | Status |
+|----------|---------------|-----------------|--------|
+| OHLCV (stock_history + saham_historical) | ~1.4M | ~25 MB | ✅ Di SQLite |
+| Chart patterns | 43K | ~2 MB | ✅ Di SQLite |
+| Multi-asset (forex, crypto, commodity, index, bond) | 3.3K | ~0.5 MB | ✅ Di SQLite |
+| Broker flow + foreign flow | 75K | ~5 MB | ✅ Di SQLite |
+| Sentiment + fear/greed | 1.4K | ~0.1 MB | ✅ Di SQLite |
+| Macro + global market | 10K | ~0.5 MB | ✅ Di SQLite |
+| Fundamental + ESG + governance | 1.2K | ~0.1 MB | ✅ Di SQLite |
+| Event eksternal + kebijakan regulasi | 300 | ~0.05 MB | ✅ Di SQLite |
+| AI scores + stock personality | 60 | ~0.01 MB | ✅ Di SQLite |
+| Master data (saham, sektor, IPO) | 720 | ~0.05 MB | ✅ Di SQLite |
 | **Total** | **~1.53M** | **~33 MB** |

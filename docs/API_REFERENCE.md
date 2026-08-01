@@ -14,7 +14,7 @@
 Status dan versi aplikasi.
 
 ```json
-{"status": "ok", "version": "0.1.8"}
+{"status": "ok", "version": "0.1.10"}
 ```
 
 ### GET `/api/health`
@@ -784,3 +784,111 @@ Delete corporate actions for a ticker.
 ### DELETE `/api/news`
 
 Delete news entries, optionally filtered by source and/or date.
+
+---
+
+## Extended Data (Phase 6 — Import MySQL)
+
+Endpoint-endpoint berikut menyediakan akses ke 14 tabel yang diimport dari MySQL (`data_pasar_modal`, `idx_complete_data`). Semua endpoint bersifat read-only (GET).
+
+### GET `/api/extended/snapshot/{ticker}`
+
+Snapshot harga + fundamental (PER/PBV/ROE/DER/market_cap) dari `saham_snapshot`.
+
+```json
+{
+  "ticker": "BBCA",
+  "data": {"kode": "BBCA", "tanggal": "2026-07-31", "harga": 9050, "per": 15.2, "pbv": 3.1, "roe": 22.5, "der": 0.8, "market_cap": 1120000000000}
+}
+```
+
+### GET `/api/extended/shareholders/{ticker}`
+
+Data pemegang saham dari `shareholders`.
+
+```json
+{
+  "ticker": "BBCA",
+  "data": [{"nama_pemegang": "PT Dwimuria Investama", "jumlah": 1670000000, "persentase": 54.94, "kategori": "Pengendali"}]
+}
+```
+
+### GET `/api/extended/directors/{ticker}`
+
+Data direksi & komisaris dari `company_directors`.
+
+### GET `/api/extended/broker-summary`
+
+Ringkasan aktivitas broker dari `broker_summary`.
+
+### GET `/api/extended/pattern-reliability/{ticker}`
+
+Win rate historis pola chart dari `pattern_reliability`.
+
+```json
+{
+  "ticker": "BBCA",
+  "data": [{"pattern": "double_bottom", "win_rate": 0.72, "avg_return": 0.035, "sample_size": 25}]
+}
+```
+
+### GET `/api/extended/pattern-candidates`
+
+Kandidat pola terdeteksi dari `pattern_candidates`.
+
+### GET `/api/extended/advanced-features/{ticker}`
+
+Order flow, volume profile, anomali dari `advanced_features`.
+
+### GET `/api/extended/ai-scores-history/{ticker}`
+
+Historis skor AI dengan breakdown faktor dari `ai_scores_history`.
+
+### GET `/api/extended/sentiment/{ticker}`
+
+Sentimen historis IDX dari `idx_sentiment_data`.
+
+### GET `/api/extended/market-indices`
+
+Data indeks pasar (JCI, sektoral) dari `idx_market_indices`.
+
+### GET `/api/extended/financial-statements/{ticker}`
+
+Laporan keuangan dari `idx_financial_statements`.
+
+### GET `/api/extended/social-media-sentiment/{ticker}`
+
+Post media sosial + sentimen dari `idx_social_media_sentiment`.
+
+### GET `/api/extended/stock-splits/{ticker}`
+
+Riwayat stock split dari `idx_stock_splits`.
+
+### GET `/api/extended/quarterly-earnings/{ticker}`
+
+Data laba kuartalan dari `idx_quarterly_earnings`.
+
+### GET `/api/extended/circuit-breaker`
+
+Status circuit breaker saat ini.
+
+```json
+{
+  "status": "ok",
+  "should_trade": true,
+  "action": "NORMAL",
+  "reason": "No circuit breaker triggered"
+}
+```
+
+---
+
+## Replay Simulation
+
+### GET `/api/replay/list`
+
+Daftar hasil replay tersedia.
+
+### GET `/api/replay/{ticker}`
+
+Hasil replay detail per ticker.

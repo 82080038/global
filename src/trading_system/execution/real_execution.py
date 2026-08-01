@@ -1,7 +1,8 @@
 """Real Execution Engine - Broker API integration.
 
 Implements TradingInterface for real trading via broker APIs.
-Currently uses database persistence as the "broker" for production safety.
+Uses BrokerAdapter abstraction for pluggable broker integration.
+Falls back to database persistence when no broker API is configured.
 """
 
 from __future__ import annotations
@@ -13,6 +14,11 @@ from typing import Any
 
 from trading_system.config import TRADING_CAPITAL
 from trading_system.data.storage import DataStorage
+from trading_system.execution.broker_adapter import (
+    BrokerOrder,
+    BrokerOrderResult,
+    get_broker_adapter,
+)
 from trading_system.execution.engine import ExecutionEngine
 from trading_system.execution.interface import TradingInterface
 from trading_system.risk.costs import get_default_cost_model
@@ -23,8 +29,9 @@ logger = logging.getLogger(__name__)
 class RealExecutionEngine(TradingInterface):
     """Real trading execution engine using broker APIs.
 
-    For production safety, currently uses database persistence as the broker.
-    In production, this would integrate with actual broker APIs (Sekuritas, etc.).
+    Uses BrokerAdapter for pluggable broker integration.
+    Set BROKER_ADAPTER env var to choose broker (default: "mock" for safety).
+    Set AUTO_TRADE_ENABLED=true to enable real execution.
     """
 
     name = "real_execution"
@@ -34,6 +41,16 @@ class RealExecutionEngine(TradingInterface):
         self.capital = capital
         self.execution = ExecutionEngine()
         self.auto_trade_enabled = os.getenv("AUTO_TRADE_ENABLED", "false").lower() == "true"
+        self.broker_name = os.getenv("BROKER_ADAPTER", "mock")
+
+        # Initialize broker adapter
+        try:
+            self.broker = get_broker_adapter(self.broker_name)
+            self.broker.authenticate()
+            logger.info(f"Broker adapter initialized: {self.broker_name}")
+        except Exception as e:
+            logger.warning(f"Broker adapter init failed ({self.broker_name}): {e}. Falling back to DB persistence.")
+            self.broker = None
 
         if not self.auto_trade_enabled:
             logger.warning("AUTO_TRADE_ENABLED=false. Real execution DISABLED (monitoring mode).")
@@ -66,6 +83,100 @@ class RealExecutionEngine(TradingInterface):
                 "order": order,
             }
 
+        # Try broker adapter first (if available)
+        if self.broker is not None:
+            try:
+                broker_order = BrokerOrder(
+                    ticker=ticker,
+                    action=action,
+                    shares=int(shares),
+                    price=float(target_price),
+                    order_type=order.get("order_type", "limit"),
+                    stop_loss=order.get("stop_loss"),
+                    take_profit=order.get("take_profit"),
+                )
+                result = self.broker.place_order(broker_order)
+
+                if result.status == "ok":
+                    # Save order to database for audit trail
+                    order_id = self.storage.save_order(
+                        ticker=ticker,
+                        order_type=action.upper(),
+                        quantity=shares,
+                        price=result.filled_price or target_price,
+                        fee=result.fees,
+                        trigger=f"BROKER:{self.broker_name}",
+                    )
+
+                    # Update position in DB
+                    if action == "buy":
+                        self.storage.save_position(
+                            ticker=ticker,
+                            quantity=shares,
+                            avg_entry_price=result.filled_price or target_price,
+                            stop_loss=order.get("stop_loss"),
+                            take_profit=order.get("take_profit"),
+                        )
+                    elif action == "sell":
+                        position = self.storage.get_open_position(ticker)
+                        if position:
+                            entry_price = position.get("avg_entry_price", 0)
+                            realized_pnl = (result.filled_price - entry_price) * shares
+                            remaining = position.get("quantity", 0) - shares
+                            if remaining <= 0:
+                                self.storage.update_position(
+                                    position["id"],
+                                    status="CLOSED",
+                                    quantity=0,
+                                    current_price=result.filled_price,
+                                    realized_pnl=realized_pnl,
+                                )
+                            else:
+                                self.storage.update_position(
+                                    position["id"],
+                                    quantity=remaining,
+                                    current_price=result.filled_price,
+                                    realized_pnl=realized_pnl,
+                                )
+
+                    self.storage.audit("real_execution.broker_order", {
+                        "broker": self.broker_name,
+                        "broker_order_id": result.broker_order_id,
+                        "order_id": order_id,
+                        "ticker": ticker,
+                        "action": action,
+                        "shares": shares,
+                        "filled_price": result.filled_price,
+                        "fees": result.fees,
+                    })
+
+                    logger.info(
+                        f"Broker execution: {action.upper()} {shares} {ticker} @ {result.filled_price} "
+                        f"(broker={self.broker_name}, id={result.broker_order_id})"
+                    )
+                    return {
+                        "status": "ok",
+                        "order_id": order_id,
+                        "broker_order_id": result.broker_order_id,
+                        "filled_price": result.filled_price,
+                        "filled_shares": result.filled_shares,
+                        "fees": result.fees,
+                        "broker": self.broker_name,
+                        "message": result.message,
+                    }
+                else:
+                    return {
+                        "status": "error",
+                        "message": result.message or "Broker order failed",
+                        "broker": self.broker_name,
+                        "order": order,
+                    }
+            except NotImplementedError as e:
+                logger.warning(f"Broker {self.broker_name} not implemented, falling back to DB: {e}")
+            except Exception as e:
+                logger.error(f"Broker execution failed, falling back to DB: {e}")
+
+        # Fallback: DB persistence mode (original behavior)
         # Get latest price from market
         df = self.storage.load_ohlcv(ticker)
         if df.empty:
@@ -144,7 +255,7 @@ class RealExecutionEngine(TradingInterface):
             "fees": fill.get("total_fees"),
         })
 
-        logger.info(f"Real execution: {action.upper()} {shares} {ticker} @ {fill.get('filled_price')}")
+        logger.info(f"Real execution (DB fallback): {action.upper()} {shares} {ticker} @ {fill.get('filled_price')}")
 
         return {
             "status": "ok",
@@ -152,7 +263,7 @@ class RealExecutionEngine(TradingInterface):
             "filled_price": fill.get("filled_price"),
             "filled_shares": fill.get("filled_shares"),
             "fees": fill.get("total_fees"),
-            "message": f"Order executed successfully",
+            "message": f"Order executed successfully (DB fallback)",
         }
 
     def get_position(self, ticker: str) -> dict | None:

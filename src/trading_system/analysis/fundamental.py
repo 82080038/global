@@ -167,25 +167,80 @@ class FundamentalAnalysisEngine:
 
         return float(score), breakdown, data_coverage
 
+    def _fallback_from_snapshot(self, ticker: str) -> dict | None:
+        """Fallback: get valuation ratios from saham_snapshot table."""
+        try:
+            from trading_system.data.extended_storage import ExtendedStorage
+            ext = ExtendedStorage()
+            kode = ticker.replace(".JK", "")
+            snap = ext.get_latest_snapshot(kode)
+            if not snap:
+                return None
+            return {
+                "PER": snap.get("per") if snap.get("per") and snap["per"] > 0 else None,
+                "PBV": snap.get("pbv") if snap.get("pbv") and snap["pbv"] > 0 else None,
+                "ROE": snap.get("roe") if snap.get("roe") else None,
+                "DER": snap.get("der") if snap.get("der") else None,
+                "market_cap": snap.get("market_cap"),
+            }
+        except Exception:
+            return None
+
+    def _fallback_from_idx_financials(self, ticker: str) -> dict | None:
+        """Fallback: get financial data from idx_financial_statements table."""
+        try:
+            from trading_system.data.extended_storage import ExtendedStorage
+            ext = ExtendedStorage()
+            symbol = ticker if ".JK" in ticker else f"{ticker}.JK"
+            df = ext.get_financial_statements(symbol, period_type="annual")
+            if df.empty:
+                return None
+            row = df.iloc[0]
+            return {
+                "PER": row.get("pe_ratio"),
+                "PBV": row.get("pb_ratio"),
+                "ROE": row.get("roe"),
+                "DER": row.get("debt_to_equity"),
+                "revenue": row.get("total_revenue") or row.get("revenue"),
+                "net_income": row.get("net_income"),
+                "total_assets": row.get("total_assets"),
+                "total_equity": row.get("total_equity"),
+                "profit_margin": row.get("profit_margin"),
+                "period_date": row.get("period_date"),
+            }
+        except Exception:
+            return None
+
     def analyze(self) -> dict:
         if not self.ticker:
             return {"status": "error", "message": "No ticker"}
         self.fetch(self.ticker)
 
-        if not self.info:
+        ratios = {}
+        if self.info:
+            ratios.update(self.get_valuation())
+            ratios.update(self.get_profitability())
+            ratios.update(self.get_leverage())
+            ratios.update(self.get_growth())
+
+        # Fallback to imported MySQL data if yfinance data is insufficient
+        if not ratios or not any(ratios.values()):
+            snap_data = self._fallback_from_snapshot(self.ticker)
+            if snap_data:
+                ratios.update({k: v for k, v in snap_data.items() if v is not None})
+
+            fin_data = self._fallback_from_idx_financials(self.ticker)
+            if fin_data:
+                ratios.update({k: v for k, v in fin_data.items() if v is not None and k not in ratios})
+
+        if not ratios or not any(v is not None for v in ratios.values()):
             return {
                 "status": "failed",
-                "message": f"No fundamental data for {self.ticker} from yfinance",
+                "message": f"No fundamental data for {self.ticker}",
                 "engine": self.name,
                 "score": None,
                 "weight_multiplier": 0.0,
             }
-
-        ratios = {}
-        ratios.update(self.get_valuation())
-        ratios.update(self.get_profitability())
-        ratios.update(self.get_leverage())
-        ratios.update(self.get_growth())
 
         score, breakdown, coverage = self.compute_score(ratios)
 

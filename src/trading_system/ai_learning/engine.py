@@ -214,13 +214,19 @@ class AILearningEngine:
                 continue
 
             # Compute next-day returns
+            # load_ohlcv sets timestamp as index — reset to column for processing
+            price_df = price_df.reset_index()
             price_df = price_df.sort_values("timestamp")
             price_df["next_close"] = price_df["close"].shift(-1)
             price_df["forward_return"] = (price_df["next_close"] / price_df["close"] - 1)
             price_df["date"] = pd.to_datetime(price_df["timestamp"]).dt.date
 
             # Pivot scores: one row per date, columns = engine scores
-            scores_df["date"] = pd.to_datetime(scores_df["timestamp"]).dt.date
+            # scores table uses 'as_of' column (mixed ISO datetime formats with/without tz)
+            scores_df["date"] = pd.to_datetime(scores_df["as_of"], utc=True, errors="coerce").dt.date
+            scores_df = scores_df.dropna(subset=["date"])
+            if scores_df.empty:
+                continue
             pivot = scores_df.pivot_table(index="date", columns="engine", values="score", aggfunc="first")
             pivot = pivot.reset_index()
 

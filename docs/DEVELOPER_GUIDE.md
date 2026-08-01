@@ -28,14 +28,15 @@
 
 Sistem trading otomatis untuk **saham Indonesia (IDX/Bursa Efek Indonesia)** yang menggabungkan:
 
-- **Multi-Factor Analysis** — 7 engine analisis (teknikal, fundamental, makro, global, sentimen, corporate actions, market relationship)
-- **Risk Management** — VaR, CVaR, position sizing, daily loss limit, circuit breaker
+- **Multi-Factor Analysis** — 54 engine analisis (teknikal, fundamental, makro, global, sentimen, corporate actions, market relationship, pattern reliability, liquidity filter, dll)
+- **Risk Management** — VaR, CVaR, position sizing, daily loss limit, circuit breaker, slippage model, Kelly criterion, correlation sizing
 - **Automated Execution** — Robot trader dengan stop-loss, take-profit, trailing stop
 - **Explainable AI** — Rekomendasi BUY/HOLD/SELL dengan narasi penjelasan
-- **AI Learning** — Optimasi bobot faktor via Linear Regression dari historikal data
-- **Backtesting** — Buy & Hold, MA Crossover, Monte Carlo, Walk-Forward Analysis
-- **Frontend Dashboard** — UI terminal-style dengan chart, skor, rekomendasi, execution log
+- **AI Learning** — Optimasi bobot faktor via Linear Regression, Deep Learning (LSTM), Ensemble, Walk-Forward
+- **Backtesting** — Buy & Hold, MA Crossover, Conviction, Monte Carlo, Walk-Forward Analysis
+- **Frontend Dashboard** — 6 halaman: dashboard, engines, backtest, portfolio, audit, replay
 - **Portfolio Rebalancer** — Target weights dengan drift detection
+- **Extended Data** — 14 tabel import MySQL (saham_snapshot, idx_sentiment_data, shareholders, dll)
 
 **Target pengguna:** Trader individu Indonesia yang ingin otomatisasi analisis dan eksekusi saham IDX.
 
@@ -136,27 +137,45 @@ Data Layer                Analysis Layer              Decision Layer
 ```
 global/
 ├── src/trading_system/          # BACKEND (Python)
-│   ├── data/                    # Data layer
-│   │   ├── acquisition.py       #   Yahoo Finance adapter
+│   ├── data/                    # Data layer (12 modul)
+│   │   ├── acquisition.py       #   Yahoo Finance adapter + rate limiting
 │   │   ├── validation.py        #   Data quality validator (tier A/B/C)
-│   │   ├── storage.py           #   SQLite storage (32 tables, full CRUD)
+│   │   ├── storage.py           #   SQLite storage (78 tables, full CRUD)
+│   │   ├── extended_storage.py  #   Read-only access ke 14 tabel import MySQL
 │   │   ├── archive.py           #   Parquet archive adapter
+│   │   ├── rate_limit.py        #   YFinance rate limiter + circuit breaker
+│   │   ├── idx_scraper.py       #   IDX.co.id scraper (cloudscraper)
 │   │   ├── import_legacy.py     #   Import dari legacy DB
+│   │   ├── quality.py           #   Data quality utilities
 │   │   ├── seeder.py            #   Database seeder
 │   │   └── contracts.py         #   Data contracts
-│   ├── analysis/                # Analysis engines
+│   ├── analysis/                # Analysis engines (24 modul)
 │   │   ├── technical.py         #   RSI, MACD, MA, Bollinger Bands
-│   │   ├── fundamental.py       #   P/E, P/B, ROE, debt ratio
+│   │   ├── advanced_technical.py #  Ichimoku, Williams %R, Stochastic
+│   │   ├── fundamental.py       #   P/E, P/B, ROE + fallback ke saham_snapshot
 │   │   ├── macro.py             #   Interest rate, inflation, GDP
 │   │   ├── global_market.py     #   S&P500, Nikkei, Hang Seng correlation
 │   │   ├── relationship.py     #   Cross-asset correlation, lag analysis
 │   │   ├── pipeline.py          #   Orchestrator untuk semua analysis
 │   │   ├── regime.py            #   Market regime detection
+│   │   ├── enhanced_regime.py   #   Enhanced regime with HMM
 │   │   ├── red_flags.py         #   Fundamental red flags
 │   │   ├── screener.py          #   Stock screener
-│   │   └── technical_indicators.py
-│   ├── sentiment/               # Sentiment analysis
-│   │   ├── engine.py            #   NLP engine (Indonesian news)
+│   │   ├── factor_screener.py   #   Factor-based screener
+│   │   ├── factor_engine.py     #   Factor engine (momentum, value, quality)
+│   │   ├── manipulation.py      #   Market manipulation detection
+│   │   ├── no_trade.py          #   No-trade zone detection
+│   │   ├── order_book.py        #   Order book analysis
+│   │   ├── attribution.py       #   Performance attribution
+│   │   ├── alpha_composer.py    #   Alpha composition
+│   │   ├── alpha_validation.py  #   Alpha validation
+│   │   ├── cross_asset.py       #   Cross-asset analysis
+│   │   ├── lead_lag.py          #   Lead-lag analysis
+│   │   ├── world_monitor.py     #   Global market monitor
+│   │   ├── liquidity_filter.py  #   Liquidity filter (avg daily volume)
+│   │   └── pattern_reliability.py # Pattern reliability scoring
+│   ├── sentiment/               # Sentiment analysis (6 sumber)
+│   │   ├── engine.py            #   NLP engine + aggregator (6 sumber)
 │   │   ├── foreign_flow.py      #   Foreign net buy/sell
 │   │   ├── broker_summary.py    #   Broker summary (smart money)
 │   │   ├── social_media.py      #   Reddit + X/Twitter
@@ -167,21 +186,36 @@ global/
 │   │   ├── engine.py            #   Backtest engine (next-bar-open execution)
 │   │   ├── strategies.py        #   BuyAndHold, MA Crossover, Conviction
 │   │   └── metrics.py           #   Monte Carlo, Walk-Forward
-│   ├── risk/                    # Risk management
+│   ├── risk/                    # Risk management (9 modul)
 │   │   ├── engine.py            #   VaR, CVaR, position sizing
-│   │   └── kelly.py             #   Kelly Criterion sizing
+│   │   ├── enhanced_risk.py     #   Vol-targeting, sector caps, guards
+│   │   ├── circuit_breaker.py   #   Halt trading saat IHSG crash
+│   │   ├── slippage.py          #   Slippage model (order size, volume, time)
+│   │   ├── corr_sizing.py       #   Correlation-based position sizing
+│   │   ├── costs.py             #   Transaction cost model
+│   │   ├── kelly.py             #   Kelly Criterion sizing
+│   │   └── expectancy.py        #   Trading expectancy
 │   ├── portfolio/               # Portfolio management
 │   │   ├── engine.py            #   Portfolio state
 │   │   ├── performance.py       #   Equity curve, Sharpe, drawdown
 │   │   └── rebalancer.py        #   Target weights + drift detection
 │   ├── execution/               # Order execution
+│   │   ├── engine.py            #   Manual execution
 │   │   ├── automated.py         #   Robot trader (auto-trade)
-│   │   ├── manual.py            #   Manual order
-│   │   └── tax.py               #   Indonesia tax calculator
+│   │   ├── broker_adapter.py    #   Broker adapter (Mock + Sinarmas/BNI)
+│   │   ├── paper.py             #   Paper execution
+│   │   ├── tax.py               #   Indonesia tax calculator
+│   │   └── interface.py         #   Execution interface
 │   ├── decision/                # Decision engine
 │   │   └── engine.py            #   Multi-factor weighted scoring
-│   ├── ai_learning/             # AI weight optimization
-│   │   └── engine.py            #   Linear Regression on score-return pairs
+│   ├── ai_learning/             # AI weight optimization (7 modul)
+│   │   ├── engine.py            #   Linear Regression on score-return pairs
+│   │   ├── deep_learning.py     #   LSTM, MLP, Transformer
+│   │   ├── ensemble.py          #   Voting/weighted/stacking ensemble
+│   │   ├── labeling.py          #   Forward return, triple barrier labeling
+│   │   ├── model_registry.py    #   Versioned model storage
+│   │   ├── purged_tss.py        #   Purged time-series split
+│   │   └── walk_forward.py      #   Walk-forward optimization
 │   ├── xai/                     # Explainable AI
 │   │   └── engine.py            #   Narrative explanation
 │   ├── monitoring/              # System monitoring
@@ -189,11 +223,11 @@ global/
 │   ├── paper_trading/           # Paper trading simulator
 │   │   └── engine.py
 │   ├── api/                     # REST API
-│   │   └── app.py               #   FastAPI app (64 endpoints + 1 WS)
+│   │   └── app.py               #   FastAPI app (78 endpoints + 1 WS)
 │   ├── utils/                   # Utilities
 │   │   ├── notifier.py          #   Telegram notifier
 │   │   └── logging_config.py    #   Logging setup
-│   ├── cli.py                   # CLI entry point
+│   ├── cli.py                   # CLI entry point (15 subcommands)
 │   └── config.py                # Global config (capital, fees, tick size)
 │
 ├── frontend/                    # FRONTEND (Next.js + React + Tailwind)
@@ -203,7 +237,8 @@ global/
 │   │   ├── audit/page.tsx       #   Audit log viewer
 │   │   ├── backtest/page.tsx    #   Backtest runner + results
 │   │   ├── portfolio/page.tsx   #   Portfolio positions + exposure
-│   │   ├── engines/page.tsx     #   Engine registry (18 engines)
+│   │   ├── engines/page.tsx     #   Engine registry (54 engines)
+│   │   ├── replay/page.tsx      #   Replay simulation viewer
 │   │   ├── components/
 │   │   │   ├── TerminalLayout.tsx  # Shared layout (sidebar nav)
 │   │   │   └── PriceChart.tsx      # Candlestick chart (lightweight-charts)
@@ -216,50 +251,57 @@ global/
 │   └── .env.local               #   NEXT_PUBLIC_API_BASE=http://localhost:8000
 │
 ├── tests/                       # TEST SUITE
-│   ├── unit/                    #   562 unit tests (pytest)
+│   ├── unit/                    #   600+ unit tests (43 file, pytest)
 │   │   ├── test_api.py          #   39 API endpoint tests
 │   │   ├── test_crud_operations.py  # CRUD delete tests
+│   │   ├── test_broker_adapter.py   # Broker adapter tests
 │   │   ├── conftest.py          #   Shared fixtures
-│   │   └── ...                  #   Engine-specific tests
+│   │   └── ...                  #   39+ file test lainnya
 │   └── e2e/                     #   Playwright E2E tests
 │       ├── test_dashboard.py    #   Dashboard UI tests
+│       ├── comprehensive_test.py # Comprehensive E2E suite
+│       ├── run_simulation.py    #   Simulation runner
+│       ├── run_all.py           #   Full simulation suite
+│       ├── report.py            #   HTML report generator
 │       └── record_demo.py       #   Demo recorder
 │
 ├── scripts/                     # UTILITY SCRIPTS
 │   ├── daily_runner.py          #   Cron-style daily job (fetch + compute + trade)
-│   ├── import_legacy_data.py    #   Import dari legacy SQLite DB
+│   ├── import_mysql_to_sqlite.py  # Import 14 tabel unik dari MySQL
+│   ├── sync_parquet_flashdisk.py  # Backup & sync SQLite ↔ Parquet
+│   ├── batch_replay.py          #   Batch replay simulation
 │   ├── export_mysql_to_parquet.py  # Export MySQL → Parquet
-│   ├── export_sqlite_to_parquet.py # Export SQLite → Parquet
 │   ├── test_end_to_end.py       #   E2E pipeline test
 │   ├── start_production.sh      #   Linux startup script
 │   └── start_production.bat     #   Windows startup script
 │
 ├── data/                        # DATA (gitignored, kecuali .gitkeep)
-│   ├── trading_system.db        #   SQLite database (32 tables)
+│   ├── trading_system.db        #   SQLite database (78 tables)
 │   ├── raw/                     #   Raw data zone
 │   ├── clean/                   #   Clean data zone
 │   └── archive/                 #   Parquet archive (permanent storage)
 │
 ├── alembic/                     # DATABASE MIGRATIONS
 │   └── versions/
-│       └── 0001_initial.py      #   Initial schema
+│       ├── 0001_initial.py      #   Initial schema
+│       └── 0002_d1_d31_tables.py # D1-D31 tables migration
 │
 ├── docs/                        # DOCUMENTATION
 │   ├── DEVELOPER_GUIDE.md       #   ← YOU ARE HERE
-│   ├── API_REFERENCE.md         #   Detailed API docs (all 64 endpoints)
+│   ├── API_REFERENCE.md         #   Detailed API docs (all 78 endpoints + 15 extended)
 │   ├── STATUS.md                #   Current project status
-│   ├── SARAN_PENGEMBANGAN.md    #   Development roadmap (1197 lines)
+│   ├── SARAN_PENGEMBANGAN.md    #   Development roadmap (1233 lines)
 │   ├── TEST_PLAN.md             #   Test strategy
 │   ├── ANALISIS_SUMBER_DATA.md  #   Data source analysis
 │   ├── MAPPING_PARQUET_SQLITE.md #  Parquet → SQLite column mapping
 │   ├── TIP_BLUEPRINT_EXTRACTION.md # TIP blueprint
 │   ├── arsitektur-sistem-trading.md # Architecture deep-dive (58K)
-│   └── buku-sistem-trading.md   #   Trading system book (86K)
+│   └── buku-sistem-trading.md   #   Trading system book (93K)
 │
 ├── .github/workflows/ci.yml     # CI: ruff + mypy + pytest + frontend lint + build + Docker
 ├── .env.example                 # Environment template (copy to .env)
 ├── .gitignore                   # Git ignore rules
-├── CHANGELOG.md                 # Version history (0.1.0 → 0.1.8)
+├── CHANGELOG.md                 # Version history (0.1.0 → 0.1.10)
 ├── README.md                    # Project overview
 ├── Dockerfile                   # Backend Docker image
 ├── docker-compose.yml           # Backend + Frontend containers
@@ -271,7 +313,7 @@ global/
 
 ## 5. Backend — Cara Kerja Engine
 
-### Engine Registry (18 engines)
+### Engine Registry (54 engines)
 
 Semua engine analisis mengikuti interface yang sama:
 
@@ -288,23 +330,59 @@ class SomeEngine:
 | # | Engine | File | Fungsi |
 |---|--------|------|--------|
 | 1 | Technical | `analysis/technical.py` | RSI, MACD, MA20/50, Bollinger Bands |
-| 2 | Fundamental | `analysis/fundamental.py` | P/E, P/B, ROE, debt ratio, growth |
-| 3 | Macro | `analysis/macro.py` | Interest rate, inflation, GDP growth |
-| 4 | Global Market | `analysis/global_market.py` | S&P500, Nikkei, Hang Seng correlation |
-| 5 | Sentiment | `sentiment/engine.py` | Indonesian NLP dari RSS news |
-| 6 | Foreign Flow | `sentiment/foreign_flow.py` | Net buy/sell asing |
-| 7 | Broker Summary | `sentiment/broker_summary.py` | Smart money tracking |
-| 8 | Social Media | `sentiment/social_media.py` | Reddit + X/Twitter sentiment |
-| 9 | Google Trends | `sentiment/google_trends.py` | Search volume trend |
-| 10 | Market Relationship | `analysis/relationship.py` | Cross-asset correlation + lag |
-| 11 | Corporate Actions | `corporate/actions.py` | Split, dividend, adjustment factor |
-| 12 | Regime Detection | `analysis/regime.py` | Trending/neutral/volatile/shock |
-| 13 | Red Flags | `analysis/red_flags.py` | Earnings quality, governance, balance sheet |
-| 14 | Screener | `analysis/screener.py` | Technical/momentum/value templates |
-| 15 | Risk Engine | `risk/engine.py` | VaR, CVaR, position sizing |
-| 16 | Kelly Criterion | `risk/kelly.py` | Half/quarter Kelly position sizing |
-| 17 | Decision Engine | `decision/engine.py` | Weighted multi-factor scoring |
-| 18 | AI Learning | `ai_learning/engine.py` | Linear Regression weight optimization |
+| 2 | Advanced Technical | `analysis/advanced_technical.py` | Ichimoku, Williams %R, Stochastic |
+| 3 | Fundamental | `analysis/fundamental.py` | P/E, P/B, ROE + fallback ke saham_snapshot |
+| 4 | Macro | `analysis/macro.py` | Interest rate, inflation, GDP growth |
+| 5 | Global Market | `analysis/global_market.py` | S&P500, Nikkei, Hang Seng correlation |
+| 6 | Sentiment | `sentiment/engine.py` | 6 sumber: NLP, Foreign Flow, Broker, Social, Trends, IDX Historical |
+| 7 | Market Relationship | `analysis/relationship.py` | Cross-asset correlation + lag |
+| 8 | Corporate Actions | `corporate/actions.py` | Split, dividend, adjustment factor |
+| 9 | Regime Detection | `analysis/regime.py` | Trending/neutral/volatile/shock |
+| 10 | Enhanced Regime | `analysis/enhanced_regime.py` | Enhanced regime with HMM |
+| 11 | Red Flags | `analysis/red_flags.py` | Earnings quality, governance, balance sheet |
+| 12 | Screener | `analysis/screener.py` | Technical/momentum/value templates |
+| 13 | Factor Screener | `analysis/factor_screener.py` | Factor-based screening |
+| 14 | Factor Engine | `analysis/factor_engine.py` | Momentum, low_vol, quality, beta, size, value |
+| 15 | Manipulation | `analysis/manipulation.py` | Market manipulation detection |
+| 16 | No-Trade Zone | `analysis/no_trade.py` | 9-gate no-trade detection |
+| 17 | Order Book | `analysis/order_book.py` | Gap detection, support/resistance |
+| 18 | World Monitor | `analysis/world_monitor.py` | 7-signal market composite + CII |
+| 19 | Liquidity Filter | `analysis/liquidity_filter.py` | Filter saham tidak likuid |
+| 20 | Pattern Reliability | `analysis/pattern_reliability.py` | Historical win rate scoring |
+| 21 | Attribution | `analysis/attribution.py` | Performance attribution |
+| 22 | Alpha Composer | `analysis/alpha_composer.py` | Alpha composition |
+| 23 | Alpha Validation | `analysis/alpha_validation.py` | VALID/WATCH/REJECT validation |
+| 24 | Cross-Asset | `analysis/cross_asset.py` | Cross-asset analysis |
+| 25 | Lead-Lag | `analysis/lead_lag.py` | Lead-lag analysis |
+| 26 | Risk Engine | `risk/engine.py` | VaR, CVaR, position sizing |
+| 27 | Enhanced Risk | `risk/enhanced_risk.py` | Vol-targeting, sector caps, guards |
+| 28 | Circuit Breaker | `risk/circuit_breaker.py` | Halt trading saat IHSG crash |
+| 29 | Slippage Model | `risk/slippage.py` | Dynamic slippage estimation |
+| 30 | Correlation Sizing | `risk/corr_sizing.py` | Correlation-based position sizing |
+| 31 | Cost Model | `risk/costs.py` | Transaction cost model |
+| 32 | Kelly Criterion | `risk/kelly.py` | Half/quarter Kelly position sizing |
+| 33 | Expectancy | `risk/expectancy.py` | Trading expectancy calculation |
+| 34 | Decision Engine | `decision/engine.py` | Weighted multi-factor scoring |
+| 35 | AI Learning | `ai_learning/engine.py` | Linear Regression weight optimization |
+| 36 | Deep Learning | `ai_learning/deep_learning.py` | LSTM, MLP, Transformer |
+| 37 | Ensemble | `ai_learning/ensemble.py` | Voting/weighted/stacking ensemble |
+| 38 | Labeling | `ai_learning/labeling.py` | Forward return, triple barrier |
+| 39 | Model Registry | `ai_learning/model_registry.py` | Versioned model storage |
+| 40 | Purged TSS | `ai_learning/purged_tss.py` | Purged time-series split |
+| 41 | Walk-Forward | `ai_learning/walk_forward.py` | Walk-forward optimization |
+| 42 | Extended Storage | `data/extended_storage.py` | Read-only 14 tabel import MySQL |
+| 43 | IDX Scraper | `data/idx_scraper.py` | IDX.co.id scraper |
+| 44 | Archive | `data/archive.py` | Parquet archive adapter |
+| 45 | Rate Limiter | `data/rate_limit.py` | YFinance rate limiter + circuit breaker |
+| 46 | Broker Adapter | `execution/broker_adapter.py` | Mock + Sinarmas/BNI stubs |
+| 47 | Backtest | `backtest/engine.py` | Backtest engine |
+| 48 | Paper Trading | `paper_trading/engine.py` | Paper trading simulator |
+| 49 | Monitoring | `monitoring/engine.py` | Health check + alerts |
+| 50 | XAI | `xai/engine.py` | Narrative explanation |
+| 51 | Portfolio | `portfolio/engine.py` | Portfolio state |
+| 52 | Performance | `portfolio/performance.py` | Equity curve, Sharpe, drawdown |
+| 53 | Rebalancer | `portfolio/rebalancer.py` | Target weights + drift detection |
+| 54 | Execution | `execution/engine.py` | Order execution engine |
 
 ### Decision Engine — Cara Kerja
 
@@ -409,7 +487,7 @@ const res = await apiFetch(`/api/scores/${ticker}`);
 
 ## 7. Database — Skema & Tabel
 
-Database: **SQLite** (`data/trading_system.db`), 32 tabel.
+Database: **SQLite** (`data/trading_system.db`), 95 tabel (33 core + 14 import MySQL + 48 tambahan).
 
 ### Tabel Utama
 
@@ -438,6 +516,18 @@ Database: **SQLite** (`data/trading_system.db`), 32 tabel.
 `stock_personality`, `technical_indicators`, `trade_journal`,
 `valuation_cache`
 
+### Tabel Import MySQL (14 tabel)
+
+Diimport dari `data_pasar_modal` dan `idx_complete_data` via `scripts/import_mysql_to_sqlite.py`. Akses read-only via `ExtendedStorage` (`data/extended_storage.py`).
+
+`saham_snapshot`, `idx_sentiment_data`, `shareholders`, `company_directors`, `idx_financial_statements`, `idx_market_indices`, `broker_summary`, `pattern_reliability`, `pattern_candidates`, `advanced_features`, `ai_scores_history`, `idx_social_media_sentiment`, `idx_stock_splits`, `idx_quarterly_earnings`
+
+### Tabel Tambahan (31 tabel)
+
+Dibuat oleh Alembic migrations, seeder, atau modul tambahan:
+
+`technical_indicators`, `fundamental_data`, `foreign_flow`, `pattern_analysis`, `dividends`, `instrument_master`, `macro_data`, `market_calendar`, `system_state`, `broker_flow`, `chart_patterns`, `commodity_data`, `corporate_governance`, `esg_scores`, `external_events`, `fear_greed`, `ihsg_data`, `mm_exchange`, `mm_instrument`, `mm_issuer`, `mm_listing`, `mm_security`, `multi_asset_data`, `notifications`, `policy_events`, `price_alerts`, `sector_master`, `stock_ipo`, `stock_personality`, `strategy_config`, `trade_journal`, `valuation_cache`, `ai_alerts`, `ai_auto_trade`, `ai_correlation`, `ai_portfolio`, `data_fetch_log`, `ml_config`, `ml_training_log`, `trader_saldo`, `blind_forecast`, `backtest_result_imported`, `trade_journal_imported`, `legacy_*` (4 tabel)
+
 ### CRUD Operations
 
 `DataStorage` (`src/trading_system/data/storage.py`) menyediakan:
@@ -453,7 +543,7 @@ Database: **SQLite** (`data/trading_system.db`), 32 tabel.
 
 **Base URL:** `http://localhost:8000`
 **Swagger docs:** `http://localhost:8000/docs`
-**Total:** 64 REST endpoints + 1 WebSocket
+**Total:** 63 REST endpoints (48 core + 15 extended) + 1 WebSocket
 
 ### Read (GET) — tidak butuh API key di dev mode
 
@@ -485,7 +575,7 @@ Database: **SQLite** (`data/trading_system.db`), 32 tabel.
 | `GET /api/relationship/{ticker}` | Market relationship |
 | `GET /api/risk/{ticker}` | Per-ticker risk analysis (VaR, position sizing) |
 | `GET /api/risk/daily` | Daily portfolio risk metrics |
-| `GET /api/engines` | Engine registry (18 engines) |
+| `GET /api/engines` | Engine registry (54 engines) |
 
 ### Write (POST) — butuh API key jika API_KEY set
 
@@ -530,6 +620,33 @@ Database: **SQLite** (`data/trading_system.db`), 32 tabel.
 | `DELETE /api/relationships` | Delete relationship matrix |
 | `DELETE /api/corporate-actions/{ticker}` | Delete corporate actions |
 | `DELETE /api/news` | Delete news entries |
+
+### Extended Data (GET) — Phase 6
+
+| Endpoint | Fungsi |
+|----------|--------|
+| `GET /api/extended/snapshot/{ticker}` | Snapshot harga + fundamental dari saham_snapshot |
+| `GET /api/extended/shareholders/{ticker}` | Data pemegang saham |
+| `GET /api/extended/directors/{ticker}` | Data direksi & komisaris |
+| `GET /api/extended/broker-summary` | Ringkasan aktivitas broker |
+| `GET /api/extended/pattern-reliability/{ticker}` | Win rate historis pola chart |
+| `GET /api/extended/pattern-candidates` | Kandidat pola terdeteksi |
+| `GET /api/extended/advanced-features/{ticker}` | Order flow, volume profile, anomali |
+| `GET /api/extended/ai-scores-history/{ticker}` | Historis skor AI |
+| `GET /api/extended/sentiment/{ticker}` | Sentimen historis IDX |
+| `GET /api/extended/market-indices` | Data indeks pasar (JCI, sektoral) |
+| `GET /api/extended/financial-statements/{ticker}` | Laporan keuangan |
+| `GET /api/extended/social-media-sentiment/{ticker}` | Post media sosial + sentimen |
+| `GET /api/extended/stock-splits/{ticker}` | Riwayat stock split |
+| `GET /api/extended/quarterly-earnings/{ticker}` | Data laba kuartalan |
+| `GET /api/extended/circuit-breaker` | Status circuit breaker |
+
+### Replay (GET)
+
+| Endpoint | Fungsi |
+|----------|--------|
+| `GET /api/replay/list` | Daftar hasil replay |
+| `GET /api/replay/{ticker}` | Hasil replay detail per ticker |
 
 ### WebSocket
 
@@ -633,7 +750,7 @@ Konstanta penting:
 
 ## 11. Testing
 
-### Unit Tests (562 tests)
+### Unit Tests (600+ tests)
 
 ```bash
 # Run all tests
@@ -748,7 +865,7 @@ scripts\start_production.bat
 1. Copy `.env.example` ke `.env`, isi semua API keys
 2. Set `ENV=production` dan `API_KEY=<strong-key>`
 3. Set `AUTO_TRADE_ENABLED=true` HANYA jika siap untuk real trading
-4. Run `python -m pytest tests/unit/` — pastikan 562 tests pass
+4. Run `python -m pytest tests/unit/` — pastikan 600+ tests pass
 5. Start API: `uvicorn src.trading_system.api.app:app --host 0.0.0.0 --port 8000`
 6. Start Execution: `python -m trading_system.cli execution --interval 15`
 7. Start Scheduler: `python -m trading_system.cli schedule`
@@ -830,15 +947,15 @@ type: short description
 
 | File | Isi | Kapan Baca |
 |------|-----|-----------|
-| `docs/API_REFERENCE.md` | Detail semua 64 API endpoints dengan parameter & response | Saat integrasi frontend/API |
-| `docs/STATUS.md` | Status proyek, metrik (tests, endpoints, tables) | Saat cek progress |
+| `docs/API_REFERENCE.md` | Detail semua 78 API endpoints + 15 extended dengan parameter & response | Saat integrasi frontend/API |
+| `docs/STATUS.md` | Status proyek, metrik (600+ tests, 78 endpoints, 95 tables, 54 engines) | Saat cek progress |
 | `docs/SARAN_PENGEMBANGAN.md` | Roadmap pengembangan (1197 lines) | Saat planning sprint |
 | `docs/arsitektur-sistem-trading.md` | Deep-dive arsitektur (58K) | Saat perlu memahami detail engine |
 | `docs/buku-sistem-trading.md` | Trading system book (86K) | Referensi teori trading |
 | `docs/ANALISIS_SUMBER_DATA.md` | Analisis sumber data (MySQL, SQLite, CSV) | Saat import data |
 | `docs/MAPPING_PARQUET_SQLITE.md` | Mapping kolom Parquet → SQLite | Saat import legacy data |
 | `docs/TEST_PLAN.md` | Strategi testing | Saat menulis test baru |
-| `CHANGELOG.md` | Version history (0.1.0 → 0.1.8) | Saat cek apa yang berubah |
+| `CHANGELOG.md` | Version history (0.1.0 → 0.1.10) | Saat cek apa yang berubah |
 | `.env.example` | Template environment variables | Saat setup pertama |
 
 ---
@@ -875,4 +992,4 @@ docker-compose up -d --build
 
 ---
 
-*Dokumen ini di-generate pada 1 Agustus 2026. Update jika ada perubahan arsitektur atau penambahan fitur.*
+*Dokumen ini di-generate pada 2 Agustus 2026. Update jika ada perubahan arsitektur atau penambahan fitur.*

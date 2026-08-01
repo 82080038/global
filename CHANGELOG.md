@@ -48,12 +48,55 @@ Production bug-fix audit: full codebase read (~14k lines, 80 Python files + fron
 
 ### Tests
 
-- Total: **562 unit tests**, all passing.
+- Total: **600+ unit tests**, all passing.
 - `ruff check src/ tests/` clean, `tsc --noEmit` clean, `eslint` clean, `next build` clean.
 
 ---
 
-## [0.1.8] — 2026-08-01
+## [0.1.10] — 2026-08-02
+
+Phase 6: Extended Data Layer, Risk Enhancements, Pattern Reliability Engine.
+
+### Added — Extended Data (MySQL Import)
+
+- **`scripts/import_mysql_to_sqlite.py`**: Import 14 tabel unik dari MySQL (`data_pasar_modal`, `idx_complete_data`) ke SQLite. Total ~370K rows.
+- **`data/extended_storage.py`**: `ExtendedStorage` class dengan 14 method read-only untuk akses tabel import (saham_snapshot, idx_sentiment_data, shareholders, company_directors, idx_financial_statements, idx_market_indices, broker_summary, pattern_reliability, pattern_candidates, advanced_features, ai_scores_history, idx_social_media_sentiment, idx_stock_splits, idx_quarterly_earnings).
+- **15 API endpoints** `/api/extended/*` untuk expose data import MySQL via REST API.
+- **`SanitizedJSONResponse`** — custom JSONResponse yang mengganti NaN/Inf dengan null untuk mencegah invalid JSON di production.
+
+### Added — Risk Enhancements
+
+- **`risk/circuit_breaker.py`**: Circuit breaker untuk halt trading saat IHSG crash >5% atau individual stock >±20%. Thresholds IDX-specific (HALT, CAUTION, AUTO_REJECT).
+- **`risk/slippage.py`**: `SlippageModel` — estimasi slippage dinamis berdasarkan order size relatif terhadap avg daily volume, time of day (near-close multiplier), dan order type.
+- **`analysis/liquidity_filter.py`**: `LiquidityFilter` — filter saham tidak likuid berdasarkan avg daily volume 20 hari. `liquidity_score()` menghitung skor 0-100 (volume 50%, consistency 30%, trading days 20%).
+
+### Added — Pattern Reliability Engine
+
+- **`analysis/pattern_reliability.py`**: `PatternReliabilityEngine` — scoring pola chart berdasarkan historical win rate dari `pattern_reliability` (421 rows) dan `pattern_candidates` (208 rows). Method `enrich_technical_signals()` menambahkan reliability_score, recommendation (strong_buy/buy/hold/avoid), win_rate, sample_size ke sinyal teknikal.
+
+### Added — Sentiment Engine Enhancement
+
+- **Sentiment Engine sumber ke-6**: Integrasi `idx_sentiment_data` (212K rows) sebagai sumber sentimen historis IDX. Weight 20% dalam agregasi sentiment. Total 6 sumber: NLP News, Foreign Flow, Broker Summary, Social Media, Google Trends, IDX Historical.
+
+### Added — Fundamental Fallback
+
+- **`analysis/fundamental.py`**: Fallback ke `saham_snapshot` dan `idx_financial_statements` saat yfinance tidak menyediakan data fundamental. Method `_fallback_from_snapshot()` dan `_fallback_from_idx_financials()`.
+
+### Added — Frontend
+
+- **`frontend/app/replay/page.tsx`**: Halaman replay simulation viewer (halaman ke-6).
+
+### Changed
+
+- Database: 32 → 95 tabel (33 core + 14 import MySQL + 48 tambahan).
+- API: 48 → 78 endpoints (63 core + 15 extended).
+- Engine registry: 18 → 54 engines.
+- Unit tests: 562 → 600+.
+- Frontend pages: 5 → 6 (tambah replay).
+
+---
+
+## [0.1.9] — 2026-08-01
 
 Deep audit: frontend-backend integration, CLI gaps, Docker/CI fixes, code quality bugs, missing API endpoints.
 

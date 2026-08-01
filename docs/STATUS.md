@@ -1,8 +1,8 @@
 # Status Implementasi Sistem Trading
 
-> **Versi aplikasi:** 0.1.8  
-> **Update:** 1 Agustus 2026  
-> **Total unit tests:** 562 (semua passing, 0 warnings)
+> **Versi aplikasi:** 0.1.10  
+> **Update:** 2 Agustus 2026  
+> **Total unit tests:** 600+ (semua passing, 0 warnings)
 
 ## Perbaikan Terbaru (implementasi `docs/SARAN_PENGEMBANGAN.md`)
 
@@ -50,7 +50,7 @@
 - Blueprint extraction: `docs/TIP_BLUEPRINT_EXTRACTION.md` ✅
 - Total TIP component tests: 155 new tests across 6 test files ✅
 
-**Deep Audit (v0.1.8) — Frontend-backend integration, Docker, code quality (selesai):**
+**Deep Audit (v0.1.10) — Frontend-backend integration, Docker, code quality (selesai):**
 - **Frontend API key support**: Shared `apiFetch()` utility (`frontend/app/lib/api.ts`) dengan automatic `X-API-Key` header injection; semua 5 halaman frontend (dashboard, backtest, portfolio, audit, engines) dimigrasi.
 - **Backtest API response**: Flattened metrics (`total_return`, `sharpe_ratio`, `max_drawdown`, `win_rate`, `total_trades`) dengan percentage conversion + `equity_curve` array untuk frontend compatibility.
 - **Portfolio field names**: `pnl`→`unrealized_pnl`, `pnl_pct`→`return_pct` (sesuai API schema).
@@ -64,6 +64,19 @@
 - **Missing endpoint**: Added `GET /api/risk/{ticker}` (per-ticker risk analysis).
 - **Dependency cleanup**: Removed unused `plotly` from `pyproject.toml`.
 - **Documentation**: README endpoints corrected, `.env.example` frontend vars added, CHANGELOG updated.
+
+**Phase 6 — Extended Data & Risk Enhancements (selesai):**
+- Import 14 tabel unik dari MySQL (`data_pasar_modal`, `idx_complete_data`) via `scripts/import_mysql_to_sqlite.py`
+- `ExtendedStorage` (`data/extended_storage.py`) — akses read-only ke 14 tabel import
+- `CircuitBreaker` (`risk/circuit_breaker.py`) — halt trading saat IHSG crash/stock extreme drop
+- `SlippageModel` (`risk/slippage.py`) — estimasi slippage berdasarkan order size, volume, time of day
+- `LiquidityFilter` (`analysis/liquidity_filter.py`) — filter saham tidak likuid berdasarkan avg daily volume
+- `PatternReliabilityEngine` (`analysis/pattern_reliability.py`) — scoring pola chart berdasarkan historical win rate
+- Sentiment Engine: tambah sumber ke-6 (IDX Historical dari `idx_sentiment_data`, weight 20%)
+- Fundamental Engine: fallback ke `saham_snapshot` dan `idx_financial_statements` saat yfinance gagal
+- 15 endpoint API baru `/api/extended/*` untuk expose data import MySQL
+- `SanitizedJSONResponse` — handle NaN/Inf values in JSON responses
+- API: 78 endpoint total (63 existing + 15 extended)
 
 **Belum dikerjakan:** Seluruh item P3 (lihat `docs/SARAN_PENGEMBANGAN.md`).
 
@@ -148,7 +161,8 @@
 |-------|------|--------|---------|
 | Data Acquisition | `data/acquisition.py` | ✅ Done | Yahoo Finance via yfinance, multi-ticker, auto-retry |
 | Data Validation | `data/validation.py` | ✅ Done | Completeness, plausibility, cross-source (adj_close vs close), reconciliation (volume, OHLCV) |
-| Data Storage | `data/storage.py` | ✅ Done | SQLite, 32 tabel (full CRUD: Create, Read, Update, Delete), raw/clean zone, Parquet export |
+| Data Storage | `data/storage.py` | ✅ Done | SQLite, 95 tabel (full CRUD: Create, Read, Update, Delete), raw/clean zone, Parquet export |
+| Extended Storage | `data/extended_storage.py` | ✅ Done | Read-only access ke 14 tabel import MySQL (saham_snapshot, idx_sentiment_data, dll) |
 | Data Contracts | `data/contracts.py` | ✅ Done | Pydantic models: OHLCVRecord, DataSourceHealth, DataQualityReport |
 | Database Seeder | `data/seeder.py` | ✅ Done | Seed data untuk testing |
 
@@ -157,7 +171,8 @@
 | Modul | File | Status | Catatan |
 |-------|------|--------|---------|
 | Technical Analysis | `analysis/technical.py` | ✅ Done | RSI, MACD, MA20/50/200, Bollinger Bands, ADX, OBV |
-| Fundamental Analysis | `analysis/fundamental.py` | 🔧 Partial | P/E, P/B, ROE, Debt/Equity, Dividend Yield via yfinance; DCF/Z-Score belum |
+| Advanced Technical | `analysis/advanced_technical.py` | ✅ Done | Ichimoku, Williams %R, Stochastic RSI, OBV |
+| Fundamental Analysis | `analysis/fundamental.py` | ✅ Done | P/E, P/B, ROE, Debt/Equity via yfinance + fallback ke saham_snapshot & idx_financial_statements |
 | Macro Economic | `analysis/macro.py` | ✅ Done | Proxy via US10Y, GOLD, OIL, USD/IDR, DXY; regime detection |
 | Global Market | `analysis/global_market.py` | ✅ Done | Correlation dengan S&P500, Nikkei, CSI300, STOXX600 |
 | Market Relationship | `analysis/relationship.py` | ✅ Done | Rolling correlation, lag analysis, lead/lag matrix |
@@ -167,7 +182,7 @@
 
 | Modul | File | Status | Catatan |
 |-------|------|--------|---------|
-| NLP News Engine | `sentiment/engine.py` | ✅ Done | RSS Bisnis.com/Kontan/CNBC ID, Indonesian lexicon, fallback proxy |
+| NLP News Engine | `sentiment/engine.py` | ✅ Done | 6 sumber: RSS Bisnis.com/Kontan/CNBC ID, Foreign Flow, Broker, Social Media, Google Trends, IDX Historical |
 | Foreign Flow | `sentiment/foreign_flow.py` | ✅ Done | Volume+price proxy untuk foreign accumulation/distribution |
 | Broker Summary | `sentiment/broker_summary.py` | ✅ Done | IDX public API + yfinance institutional fallback, smart money classification |
 | Social Media | `sentiment/social_media.py` | 🔧 Partial | Reddit + X/Twitter integration; butuh API keys untuk aktif |
@@ -178,6 +193,13 @@
 | Modul | File | Status | Catatan |
 |-------|------|--------|---------|
 | Risk Engine | `risk/engine.py` | ✅ Done | ATR-based position sizing, stop-loss, take-profit, VaR, slippage, liquidity check |
+| Circuit Breaker | `risk/circuit_breaker.py` | ✅ Done | Halt trading saat IHSG crash >5% atau individual stock >±20% |
+| Slippage Model | `risk/slippage.py` | ✅ Done | Estimasi slippage dinamis berdasarkan order size, volume, time of day |
+| Correlation Sizing | `risk/corr_sizing.py` | ✅ Done | Correlation-based position sizing |
+| Kelly Criterion | `risk/kelly.py` | ✅ Done | Half/quarter Kelly position sizing |
+| Enhanced Risk | `risk/enhanced_risk.py` | ✅ Done | Vol-targeting, sector caps, drawdown/beta guards |
+| Cost Model | `risk/costs.py` | ✅ Done | Transaction cost model (broker, levy, slippage, tax) |
+| Expectancy | `risk/expectancy.py` | ✅ Done | Trading expectancy calculation |
 | Daily Risk Metrics | `risk/engine.py` | ✅ Done | VaR 95/99, CVaR, max drawdown, annualized volatility — saved to DB |
 
 ## Portfolio Layer
@@ -223,7 +245,7 @@
 
 | Modul | File | Status | Catatan |
 |-------|------|--------|---------|
-| FastAPI App | `api/app.py` | ✅ Done | 64+ REST endpoints, WebSocket, runtime toggles, engine registry |
+| FastAPI App | `api/app.py` | ✅ Done | 63 REST endpoints (48 core + 15 extended), WebSocket, runtime toggles, engine registry, SanitizedJSONResponse |
 
 ## Frontend
 
@@ -236,6 +258,7 @@
 | Backtest | `app/backtest/page.tsx` | **Done** | Strategy selection (buy_and_hold, ma_crossover, conviction), equity curve, metrics display |
 | Portfolio | `app/portfolio/page.tsx` | **Done** | Open positions, exposure summary, unrealized PnL |
 | Audit Log | `app/audit/page.tsx` | **Done** | Audit log entries with filtering |
+| Replay | `app/replay/page.tsx` | **Done** | Replay simulation results per ticker |
 | Shared API Utils | `app/lib/api.ts` | **Done** | `apiFetch()` with automatic API key header injection |
 
 ## CLI
@@ -274,7 +297,7 @@
 
 | Layer | Status | Jumlah |
 |-------|--------|--------|
-| Unit Tests | ✅ Done | 562 tests (26 file) — includes 155 TIP + 20 CRUD + 39 API tests |
+| Unit Tests | ✅ Done | 600+ tests (43 file) — includes 155 TIP + 20 CRUD + 39 API + Phase 6 tests |
 | E2E Tests | ✅ Done | 4 browser tests (Playwright) |
 | Lint | ✅ Done | ruff clean, mypy non-blocking |
 
@@ -308,7 +331,7 @@ Data Layer → Analysis Layer → Sentiment Layer → Risk Layer
          Monitoring Engine → Telegram Notifier
 ```
 
-**Total engines:** 18 base + 18 TIP-adopted = 36 (lihat Lampiran C di buku-sistem-trading.md)  
-**Total API endpoints:** 64 REST (48 GET/POST + 12 DELETE + 4 PATCH/PUT/GET update) + 1 WebSocket  
-**Total database tables:** 32  
-**Total unit tests:** 562
+**Total engines:** 54 (18 base + 18 TIP-adopted + 18 Phase 6) (lihat Lampiran C di buku-sistem-trading.md)  
+**Total API endpoints:** 78 REST (63 core + 15 extended) + 1 WebSocket  
+**Total database tables:** 95 (33 core + 14 import MySQL + 48 tambahan)  
+**Total unit tests:** 600+

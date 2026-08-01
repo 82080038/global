@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"
-RAW_ZONE = DATA_DIR / "raw"
+RAW_ZONE = Path(os.getenv("DATA_RAW_DIR", str(DATA_DIR / "raw")))
 CLEAN_ZONE = DATA_DIR / "clean"
 DB_PATH = DATA_DIR / "trading_system.db"
 

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Exec(grep)",
+      "Exec(head)",
+      "Exec(find)"
+    ]
+  }
+}

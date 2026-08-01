@@ -14,10 +14,11 @@ Terminal-style dashboard untuk Sistem Trading Profesional (IDX).
 
 - `/` — Home (redirect ke `/dashboard`)
 - `/dashboard` — Main dashboard (charts, scores, recommendation, execution logs, rebalance panel, toggle switches, performance analytics, watchlist)
-- `/engines` — Engine registry monitor (18 engines)
+- `/engines` — Engine registry monitor (54 engines)
 - `/audit` — Audit log viewer (filter by event_type, actor)
 - `/backtest` — Backtest runner (POST, tampilkan metrics + equity curve)
 - `/portfolio` — Portfolio positions + exposure summary
+- `/replay` — Replay simulation viewer (hasil backtest per ticker)
 
 ## Dashboard Features
 
@@ -50,7 +51,7 @@ Frontend menggunakan environment variable `NEXT_PUBLIC_API_BASE` untuk koneksi k
 NEXT_PUBLIC_API_BASE=http://localhost:8000
 ```
 
-Semua fetch calls menggunakan `${API_BASE}/api/...` pattern.
+Semua fetch calls menggunakan shared `apiFetch()` utility (`frontend/app/lib/api.ts`) yang otomatis meng-inject `X-API-Key` header.
 
 ## Build
 

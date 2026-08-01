@@ -2,12 +2,15 @@
 
 import asyncio
 import importlib
+import json
 import logging
+import math
 import os
 import secrets
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
@@ -16,6 +19,29 @@ from datetime import UTC
 from fastapi import Body, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
+
+def _sanitize_nan(obj):
+    """Recursively replace NaN/Inf with None for JSON compliance."""
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_nan(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_nan(v) for v in obj]
+    return obj
+
+
+class SanitizedJSONResponse(JSONResponse):
+    def render(self, content: Any) -> bytes:
+        return json.dumps(
+            _sanitize_nan(content),
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=None,
+        ).encode("utf-8")
 
 from trading_system.ai_learning.engine import AILearningEngine
 from trading_system.analysis.pipeline import AnalysisPipeline
@@ -32,7 +58,32 @@ from trading_system.monitoring.engine import MonitoringEngine
 from trading_system.paper_trading.engine import PaperTradingEngine
 from trading_system.xai.engine import ExplainableAIEngine
 
-app = FastAPI(title="Trading System API", version="0.1.8")
+app = FastAPI(title="Trading System API", version="0.1.8", default_response_class=SanitizedJSONResponse)
+
+# Global exception handlers
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler for unexpected errors."""
+    logging.error(f"Unexpected error: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "status": "error",
+            "message": "Internal server error",
+            "detail": str(exc) if os.getenv("ENV") == "development" else "An unexpected error occurred",
+        },
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handler for HTTP exceptions."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "status": "error",
+            "message": exc.detail,
+        },
+    )
 
 # CORS middleware — allow frontend (port 3000) and any origin in dev
 app.add_middleware(
@@ -157,6 +208,24 @@ def _clamp_pagination(page: int, limit: int, max_limit: int = 1000) -> tuple[int
     if limit > max_limit:
         limit = max_limit
     return page, limit
+
+
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    """Add correlation ID to every request for observability and audit trail.
+
+    Reads X-Correlation-ID header if present, otherwise generates a new UUID.
+    The correlation ID is added to response headers and stored in request state
+    so downstream handlers can include it in logs and audit entries.
+    """
+    import uuid as _uuid
+
+    correlation_id = request.headers.get("X-Correlation-ID") or str(_uuid.uuid4())
+    request.state.correlation_id = correlation_id
+
+    response = await call_next(request)
+    response.headers["X-Correlation-ID"] = correlation_id
+    return response
 
 
 @app.middleware("http")
@@ -796,7 +865,7 @@ ENGINE_REGISTRY = [
     {"name": "fundamental", "module": "trading_system.analysis.fundamental", "cls": "FundamentalAnalysisEngine"},
     {"name": "macro", "module": "trading_system.analysis.macro", "cls": "MacroEconomicEngine"},
     {"name": "global_market", "module": "trading_system.analysis.global_market", "cls": "GlobalMarketEngine"},
-    {"name": "relationship", "module": "trading_system.intelligence.relationship", "cls": "MarketRelationshipEngine"},
+    {"name": "relationship", "module": "trading_system.analysis.relationship", "cls": "MarketRelationshipEngine"},
     {"name": "sentiment", "module": "trading_system.sentiment.engine", "cls": "SentimentEngine"},
     {"name": "corporate", "module": "trading_system.corporate.actions", "cls": "CorporateActionEngine"},
     {"name": "decision", "module": "trading_system.decision.engine", "cls": "DecisionEngine"},
@@ -1182,6 +1251,177 @@ def get_replay_result(ticker: str):
         raise HTTPException(status_code=404, detail=f"No replay result for {ticker}")
     with open(result_file) as f:
         return _json.load(f)
+
+
+# ====================== EXTENDED DATA (imported from MySQL) ======================
+@app.get("/api/extended/snapshot/{ticker}")
+def get_snapshot(ticker: str):
+    """Get latest saham_snapshot (price + PER/PBV/ROE/DER/market_cap)."""
+    from trading_system.data.extended_storage import ExtendedStorage
+    ext = ExtendedStorage()
+    kode = ticker.replace(".JK", "")
+    result = ext.get_latest_snapshot(kode)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"No snapshot for {ticker}")
+    return result
+
+
+@app.get("/api/extended/shareholders/{ticker}")
+def get_shareholders(ticker: str):
+    """Get shareholder data for a ticker."""
+    from trading_system.data.extended_storage import ExtendedStorage
+    ext = ExtendedStorage()
+    kode = ticker.replace(".JK", "")
+    df = ext.get_shareholders(kode)
+    if df.empty:
+        raise HTTPException(status_code=404, detail=f"No shareholders for {ticker}")
+    return {"ticker": ticker, "shareholders": df.to_dict(orient="records"), "count": len(df)}
+
+
+@app.get("/api/extended/directors/{ticker}")
+def get_directors(ticker: str):
+    """Get company directors for a ticker."""
+    from trading_system.data.extended_storage import ExtendedStorage
+    ext = ExtendedStorage()
+    kode = ticker.replace(".JK", "")
+    df = ext.get_directors(kode)
+    if df.empty:
+        raise HTTPException(status_code=404, detail=f"No directors for {ticker}")
+    return {"ticker": ticker, "directors": df.to_dict(orient="records"), "count": len(df)}
+
+
+@app.get("/api/extended/broker-summary")
+def get_broker_summary_api(tanggal: str | None = None, limit: int = 50):
+    """Get broker summary (top brokers by value)."""
+    from trading_system.data.extended_storage import ExtendedStorage
+    ext = ExtendedStorage()
+    df = ext.get_broker_summary(tanggal=tanggal, limit=limit)
+    return {"data": df.to_dict(orient="records"), "count": len(df)}
+
+
+@app.get("/api/extended/pattern-reliability/{ticker}")
+def get_pattern_reliability_api(ticker: str):
+    """Get pattern reliability data for a ticker."""
+    from trading_system.analysis.pattern_reliability import PatternReliabilityEngine
+    engine = PatternReliabilityEngine()
+    kode = ticker.replace(".JK", "")
+    df = engine.get_reliable_patterns(kode=kode, min_win_rate=0, min_rating="average")
+    if df.empty:
+        raise HTTPException(status_code=404, detail=f"No pattern reliability for {ticker}")
+    return {"ticker": ticker, "patterns": df.to_dict(orient="records"), "count": len(df)}
+
+
+@app.get("/api/extended/pattern-candidates")
+def get_pattern_candidates_api(ticker: str | None = None):
+    """Get pattern candidates (detected but not yet verified)."""
+    from trading_system.data.extended_storage import ExtendedStorage
+    ext = ExtendedStorage()
+    kode = ticker.replace(".JK", "") if ticker else None
+    df = ext.get_pattern_candidates(kode=kode, status="candidate")
+    return {"data": df.to_dict(orient="records"), "count": len(df)}
+
+
+@app.get("/api/extended/advanced-features/{ticker}")
+def get_advanced_features_api(ticker: str):
+    """Get advanced features (order flow, volume profile, anomalies) for a ticker."""
+    from trading_system.data.extended_storage import ExtendedStorage
+    ext = ExtendedStorage()
+    kode = ticker.replace(".JK", "")
+    result = ext.get_advanced_features_parsed(kode)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"No advanced features for {ticker}")
+    return result
+
+
+@app.get("/api/extended/ai-scores-history/{ticker}")
+def get_ai_scores_history_api(ticker: str, start: str | None = None, end: str | None = None):
+    """Get historical AI scores with factor breakdown."""
+    from trading_system.data.extended_storage import ExtendedStorage
+    ext = ExtendedStorage()
+    kode = ticker.replace(".JK", "")
+    df = ext.get_ai_scores_history(kode=kode, start=start, end=end)
+    if df.empty:
+        raise HTTPException(status_code=404, detail=f"No AI scores history for {ticker}")
+    return {"ticker": ticker, "history": df.to_dict(orient="records"), "count": len(df)}
+
+
+@app.get("/api/extended/sentiment/{ticker}")
+def get_idx_sentiment_api(ticker: str):
+    """Get IDX historical sentiment data for a ticker."""
+    from trading_system.data.extended_storage import ExtendedStorage
+    ext = ExtendedStorage()
+    symbol = ticker if ".JK" in ticker else f"{ticker}.JK"
+    result = ext.get_latest_sentiment(symbol)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"No sentiment data for {ticker}")
+    return result
+
+
+@app.get("/api/extended/market-indices")
+def get_market_indices_api(index_name: str | None = None, start: str | None = None, end: str | None = None):
+    """Get market index data (JCI, sectoral indices, etc.)."""
+    from trading_system.data.extended_storage import ExtendedStorage
+    ext = ExtendedStorage()
+    df = ext.get_market_indices(index_name=index_name, start=start, end=end)
+    if df.empty:
+        raise HTTPException(status_code=404, detail="No market index data")
+    return {"data": df.to_dict(orient="records"), "count": len(df)}
+
+
+@app.get("/api/extended/financial-statements/{ticker}")
+def get_financial_statements_api(ticker: str, period_type: str = "annual"):
+    """Get financial statements for a ticker."""
+    from trading_system.data.extended_storage import ExtendedStorage
+    ext = ExtendedStorage()
+    symbol = ticker if ".JK" in ticker else f"{ticker}.JK"
+    df = ext.get_financial_statements(symbol=symbol, period_type=period_type)
+    if df.empty:
+        raise HTTPException(status_code=404, detail=f"No financial statements for {ticker}")
+    return {"ticker": ticker, "statements": df.to_dict(orient="records"), "count": len(df)}
+
+
+@app.get("/api/extended/social-media-sentiment/{ticker}")
+def get_social_media_sentiment_api(ticker: str, platform: str | None = None, limit: int = 50):
+    """Get social media sentiment posts for a ticker."""
+    from trading_system.data.extended_storage import ExtendedStorage
+    ext = ExtendedStorage()
+    symbol = ticker if ".JK" in ticker else f"{ticker}.JK"
+    df = ext.get_social_media_sentiment(symbol=symbol, platform=platform, limit=limit)
+    if df.empty:
+        raise HTTPException(status_code=404, detail=f"No social media sentiment for {ticker}")
+    return {"ticker": ticker, "posts": df.to_dict(orient="records"), "count": len(df)}
+
+
+@app.get("/api/extended/stock-splits/{ticker}")
+def get_stock_splits_api(ticker: str):
+    """Get stock split history for a ticker."""
+    from trading_system.data.extended_storage import ExtendedStorage
+    ext = ExtendedStorage()
+    symbol = ticker if ".JK" in ticker else f"{ticker}.JK"
+    df = ext.get_stock_splits(symbol=symbol)
+    if df.empty:
+        raise HTTPException(status_code=404, detail=f"No stock splits for {ticker}")
+    return {"ticker": ticker, "splits": df.to_dict(orient="records"), "count": len(df)}
+
+
+@app.get("/api/extended/quarterly-earnings/{ticker}")
+def get_quarterly_earnings_api(ticker: str):
+    """Get quarterly earnings data for a ticker."""
+    from trading_system.data.extended_storage import ExtendedStorage
+    ext = ExtendedStorage()
+    symbol = ticker if ".JK" in ticker else f"{ticker}.JK"
+    df = ext.get_quarterly_earnings(symbol=symbol)
+    if df.empty:
+        raise HTTPException(status_code=404, detail=f"No quarterly earnings for {ticker}")
+    return {"ticker": ticker, "earnings": df.to_dict(orient="records"), "count": len(df)}
+
+
+@app.get("/api/extended/circuit-breaker")
+def get_circuit_breaker_status():
+    """Get circuit breaker status."""
+    from trading_system.risk.circuit_breaker import CircuitBreaker
+    cb = CircuitBreaker()
+    return cb.status()
 
 
 if __name__ == "__main__":

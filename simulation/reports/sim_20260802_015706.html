@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trading System Simulation Report</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; padding: 24px; }
+h1 { font-size: 1.8rem; margin-bottom: 4px; }
+h2 { font-size: 1.3rem; margin: 24px 0 12px; }
+.meta { color: #94a3b8; font-size: 0.9rem; margin-bottom: 24px; }
+.summary { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+.stat { background: #1e293b; border-radius: 12px; padding: 16px 24px; min-width: 120px; text-align: center; }
+.stat .num { font-size: 2rem; font-weight: 700; }
+.stat .label { font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; }
+.stat-pass .num { color: #22c55e; }
+.stat-fail .num { color: #ef4444; }
+.stat-warn .num { color: #f59e0b; }
+.stat-skip .num { color: #6b7280; }
+.stat-total .num { color: #38bdf8; }
+.modules { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.card { background: #1e293b; border-radius: 10px; padding: 14px; }
+.card h3 { font-size: 0.95rem; margin-bottom: 8px; color: #38bdf8; }
+.card p { font-size: 0.85rem; color: #94a3b8; }
+.bar-container { background: #334155; border-radius: 4px; height: 6px; margin-bottom: 6px; }
+.bar { height: 100%; border-radius: 4px; }
+.bar-pass { background: #22c55e; }
+table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 12px; overflow: hidden; }
+th { background: #334155; padding: 10px 14px; text-align: left; font-size: 0.85rem; text-transform: uppercase; color: #94a3b8; }
+td { padding: 8px 14px; border-top: 1px solid #334155; font-size: 0.9rem; }
+tr:hover { background: #334155; }
+.badge { display: inline-block; width: 24px; height: 24px; border-radius: 50%; text-align: center; line-height: 24px; font-weight: 700; color: #fff; font-size: 0.75rem; }
+</style>
+</head>
+<body>
+<h1>Trading System &mdash; Simulation Report</h1>
+<div class="meta">
+    2026-08-02T01:57:06.286220 &middot; Ticker: <b>BBCA.JK</b> &middot; Capital: Rp 100,000,000 &middot; Elapsed: 42.57s
+</div>
+
+<div class="summary">
+    <div class="stat stat-total"><div class="num">28</div><div class="label">Total</div></div>
+    <div class="stat stat-pass"><div class="num">27</div><div class="label">Pass</div></div>
+    <div class="stat stat-fail"><div class="num">0</div><div class="label">Fail</div></div>
+    <div class="stat stat-warn"><div class="num">1</div><div class="label">Warn</div></div>
+    <div class="stat stat-skip"><div class="num">0</div><div class="label">Skip</div></div>
+</div>
+
+<h2>Module Breakdown</h2>
+<div class="modules">
+    
+        <div class="card">
+            <h3>data</h3>
+            <div class="bar-container">
+                <div class="bar bar-pass" style="width:100.0%"></div>
+            </div>
+            <p>4/4 passed</p>
+        </div>
+        <div class="card">
+            <h3>analysis</h3>
+            <div class="bar-container">
+                <div class="bar bar-pass" style="width:100.0%"></div>
+            </div>
+            <p>3/3 passed</p>
+        </div>
+        <div class="card">
+            <h3>decision</h3>
+            <div class="bar-container">
+                <div class="bar bar-pass" style="width:100.0%"></div>
+            </div>
+            <p>3/3 passed</p>
+        </div>
+        <div class="card">
+            <h3>risk</h3>
+            <div class="bar-container">
+                <div class="bar bar-pass" style="width:100.0%"></div>
+            </div>
+            <p>2/2 passed</p>
+        </div>
+        <div class="card">
+            <h3>backtest</h3>
+            <div class="bar-container">
+                <div class="bar bar-pass" style="width:100.0%"></div>
+            </div>
+            <p>5/5 passed</p>
+        </div>
+        <div class="card">
+            <h3>paper_trading</h3>
+            <div class="bar-container">
+                <div class="bar bar-pass" style="width:100.0%"></div>
+            </div>
+            <p>1/1 passed</p>
+        </div>
+        <div class="card">
+            <h3>execution</h3>
+            <div class="bar-container">
+                <div class="bar bar-pass" style="width:100.0%"></div>
+            </div>
+            <p>2/2 passed</p>
+        </div>
+        <div class="card">
+            <h3>portfolio</h3>
+            <div class="bar-container">
+                <div class="bar bar-pass" style="width:100.0%"></div>
+            </div>
+            <p>2/2 passed</p>
+        </div>
+        <div class="card">
+            <h3>ai_learning</h3>
+            <div class="bar-container">
+                <div class="bar bar-pass" style="width:50.0%"></div>
+            </div>
+            <p>1/2 passed</p>
+        </div>
+        <div class="card">
+            <h3>xai</h3>
+            <div class="bar-container">
+                <div class="bar bar-pass" style="width:100.0%"></div>
+            </div>
+            <p>1/1 passed</p>
+        </div>
+        <div class="card">
+            <h3>monitoring</h3>
+            <div class="bar-container">
+                <div class="bar bar-pass" style="width:100.0%"></div>
+            </div>
+            <p>1/1 passed</p>
+        </div>
+        <div class="card">
+            <h3>corporate</h3>
+            <div class="bar-container">
+                <div class="bar bar-pass" style="width:100.0%"></div>
+            </div>
+            <p>1/1 passed</p>
+        </div>
+        <div class="card">
+            <h3>sentiment</h3>
+            <div class="bar-container">
+                <div class="bar bar-pass" style="width:100.0%"></div>
+            </div>
+            <p>1/1 passed</p>
+        </div>
+</div>
+
+<h2>Detailed Results</h2>
+<table>
+<thead><tr><th></th><th>Module</th><th>Test</th><th>Detail</th></tr></thead>
+<tbody>
+    
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>data</td>
+                <td>list_tickers</td>
+                <td>1019 tickers in DB</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>data</td>
+                <td>load_ohlcv</td>
+                <td>5606 rows for BBCA.JK</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>data</td>
+                <td>validation</td>
+                <td>quality=84.03 tier=silver action=flag</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>data</td>
+                <td>watchlist</td>
+                <td>10 items</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>analysis</td>
+                <td>pipeline_compute</td>
+                <td>6 scores computed</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>analysis</td>
+                <td>technical_indicators</td>
+                <td>7 indicators: ['ma_20', 'ma_50', 'rsi', 'macd', 'macd_signal', 'bb_upper', 'bb_lower']</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>analysis</td>
+                <td>relationship</td>
+                <td>score=5.78, 13 relationships</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>decision</td>
+                <td>recommend_BBCA.JK</td>
+                <td>action=WATCHLIST conviction=69.98</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>decision</td>
+                <td>recommend_TLKM.JK</td>
+                <td>action=WATCHLIST conviction=63.5</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>decision</td>
+                <td>recommend_ASII.JK</td>
+                <td>action=WATCHLIST conviction=66.21</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>risk</td>
+                <td>analyze</td>
+                <td>VaR=N/A CVaR=N/A</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>risk</td>
+                <td>transaction_costs</td>
+                <td>Rp 10M buy fees: Rp 15,043 (brokerage=15000.0 levy=43.0 tax=0)</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>backtest</td>
+                <td>buy_and_hold</td>
+                <td>return=6492.28% sharpe=0.5959 maxDD=-61.02% trades=1</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>backtest</td>
+                <td>ma_crossover</td>
+                <td>return=1184.51% sharpe=0.4154 maxDD=-61.66% trades=74</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>backtest</td>
+                <td>conviction</td>
+                <td>return=0.00% sharpe=0.0000 maxDD=0.00% trades=0</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>backtest</td>
+                <td>monte_carlo</td>
+                <td>500 runs | prob_profit=58.4% worst_DD=-92.32%</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>backtest</td>
+                <td>walk_forward</td>
+                <td>OOS mean return=0.00% consistency=0.0%</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>paper_trading</td>
+                <td>simulate</td>
+                <td>final_equity=N/A trades=N/A</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>execution</td>
+                <td>mock_broker_place_order</td>
+                <td>status=ok filled_price=8000 fees=1200.0</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>execution</td>
+                <td>automated_run_once</td>
+                <td>0 results</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>portfolio</td>
+                <td>performance_1M</td>
+                <td>equity=N/A return=N/A%</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>portfolio</td>
+                <td>rebalancer_status</td>
+                <td>enabled=None drift=N/A</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>ai_learning</td>
+                <td>train_lr</td>
+                <td>r2=N/A weights={}</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#f59e0b">&#9888;</span></td>
+                <td>ai_learning</td>
+                <td>get_weights</td>
+                <td>No trained weights found</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>xai</td>
+                <td>explain</td>
+                <td>narrative_len=180 top_factors=3</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>monitoring</td>
+                <td>health_check</td>
+                <td>status=ok tickers=1019</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>corporate</td>
+                <td>fetch_actions</td>
+                <td>48 actions for BBCA.JK</td>
+            </tr>
+            <tr>
+                <td><span class="badge" style="background:#22c55e">&#10003;</span></td>
+                <td>sentiment</td>
+                <td>compute</td>
+                <td>score=69.2 label=N/A</td>
+            </tr>
+</tbody>
+</table>
+
+</body>
+</html>
