@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pandas as pd
+
 from trading_system.analysis.fundamental import FundamentalAnalysisEngine
 from trading_system.analysis.global_market import GlobalMarketEngine
 from trading_system.analysis.macro import MacroEconomicEngine
 from trading_system.analysis.technical import TechnicalAnalysisEngine
 from trading_system.corporate.actions import CorporateActionEngine
 from trading_system.data.acquisition import YahooFinanceAdapter, normalize_ohlcv
+from trading_system.data.archive import ArchiveAdapter
 from trading_system.data.storage import DataStorage
 from trading_system.data.validation import DataQualityValidator
 from trading_system.intelligence.relationship import MarketRelationshipEngine
@@ -26,12 +29,38 @@ class AnalysisPipeline:
         self.relationship = MarketRelationshipEngine(self.storage)
         self.corporate = CorporateActionEngine(self.storage)
         self.sentiment = SentimentEngine(self.storage)
+        self.archive = ArchiveAdapter()
 
     def ensure_ohlcv(self, ticker: str, period: str = "2y") -> bool:
         df = self.storage.load_ohlcv(ticker)
         if not df.empty:
             # Incremental fetch: only get data newer than last timestamp (§4.1)
-            last_ts = str(df.index[-1])
+            last_ts = str(df.index[-1])[:10]
+            # Cek apakah data sudah cukup baru (hari ini atau kemarin)
+            from datetime import datetime
+            today = datetime.now().strftime("%Y-%m-%d")
+            if last_ts >= today:
+                return True  # Data sudah mutakhir, tidak perlu fetch
+            # Coba Parquet archive dulu sebelum Yahoo Finance
+            arch_df = self.archive.load_ohlcv(ticker, start=last_ts)
+            if not arch_df.empty:
+                new_df = arch_df[arch_df.index > pd.Timestamp(last_ts)]
+                if not new_df.empty:
+                    new_df = new_df.reset_index()
+                    new_df["ticker"] = ticker
+                    new_df["asset_class"] = "equity"
+                    new_df["exchange"] = "INDO" if ticker.endswith(".JK") else "GLOBAL"
+                    new_df["timeframe"] = "1d"
+                    new_df["source"] = "archive"
+                    new_df["ingested_at"] = datetime.now(UTC).isoformat()
+                    new_df["data_quality_score"] = None
+                    validator = DataQualityValidator()
+                    raw = normalize_ohlcv(new_df)
+                    clean, report = validator.validate(raw)
+                    if report.action != "pause":
+                        self.storage.save_ohlcv(clean)
+                    return True
+            # Fallback ke Yahoo Finance untuk data terbaru
             adapter = YahooFinanceAdapter()
             result = adapter.fetch_incremental(ticker, last_timestamp=last_ts)
             if result["status"] == "ok":
@@ -41,6 +70,24 @@ class AnalysisPipeline:
                 if report.action != "pause":
                     self.storage.save_ohlcv(clean)
             return True
+        # SQLite kosong — coba Parquet archive dulu
+        arch_df = self.archive.load_ohlcv(ticker)
+        if not arch_df.empty:
+            arch_df = arch_df.reset_index()
+            arch_df["ticker"] = ticker
+            arch_df["asset_class"] = "equity"
+            arch_df["exchange"] = "INDO" if ticker.endswith(".JK") else "GLOBAL"
+            arch_df["timeframe"] = "1d"
+            arch_df["source"] = "archive"
+            arch_df["ingested_at"] = datetime.now(UTC).isoformat()
+            arch_df["data_quality_score"] = None
+            validator = DataQualityValidator()
+            raw = normalize_ohlcv(arch_df)
+            clean, report = validator.validate(raw)
+            if report.action != "pause":
+                self.storage.save_ohlcv(clean)
+            return True
+        # Fallback terakhir: Yahoo Finance
         adapter = YahooFinanceAdapter()
         result = adapter.fetch(ticker, period=period)
         if result["status"] == "ok":

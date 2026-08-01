@@ -16,14 +16,22 @@ def compute_metrics(trade_history: pd.DataFrame, equity_curve: pd.Series, benchm
         return {}
 
     # Total & CAGR
-    total_return = equity_curve.iloc[-1] / equity_curve.iloc[0] - 1
-    n_days = len(equity_curve)
-    years = max(n_days / 252, 1e-6)
-    cagr = (equity_curve.iloc[-1] / equity_curve.iloc[0]) ** (1 / years) - 1
+    start_equity = equity_curve.iloc[0]
+    end_equity = equity_curve.iloc[-1]
+    if start_equity == 0:
+        # Avoid division by zero / inf when the curve starts at zero capital.
+        total_return = 0.0
+        cagr = 0.0
+    else:
+        total_return = end_equity / start_equity - 1
+        n_days = len(equity_curve)
+        years = max(n_days / 252, 1e-6)
+        cagr = (end_equity / start_equity) ** (1 / years) - 1
 
     # Drawdown
     rolling_max = equity_curve.cummax()
-    drawdown = (equity_curve - rolling_max) / rolling_max
+    # Guard against rolling_max == 0 (all-zero equity) producing inf.
+    drawdown = (equity_curve - rolling_max) / rolling_max.replace(0, pd.NA)
     max_drawdown = drawdown.min()
 
     # Volatility & Ratios

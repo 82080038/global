@@ -37,13 +37,43 @@ class ArchiveAdapter:
         return d
 
     def list_archived_tickers(self) -> list[str]:
-        """List semua ticker yang ada di archive."""
+        """List semua ticker yang ada di archive (per-ticker + file tahunan)."""
         ohlcv_dir = self._ohlcv_dir()
         tickers = set()
         for f in ohlcv_dir.glob("*.parquet"):
-            ticker = f.stem.split("_")[0]
-            tickers.add(ticker)
+            stem = f.stem
+            # Per-ticker file: BBCA.JK_20260801.parquet
+            if "_" in stem and not stem.startswith("ohlcv_"):
+                ticker = stem.split("_")[0]
+                tickers.add(ticker)
+            # File tahunan: ohlcv_2025.parquet — baca kolom kode
+            elif stem.startswith("ohlcv_"):
+                try:
+                    df = pd.read_parquet(f, columns=None)
+                    col = "kode" if "kode" in df.columns else "ticker"
+                    for t in df[col].dropna().unique():
+                        tickers.add(str(t))
+                except Exception:
+                    pass
         return sorted(tickers)
+
+    def _load_yearly_files(self, ticker: str) -> list[pd.DataFrame]:
+        """Baca file tahunan ohlcv_YYYY.parquet yang berisi multiple ticker."""
+        ohlcv_dir = self._ohlcv_dir()
+        base = ticker.replace(".JK", "")
+        dfs = []
+        for f in sorted(ohlcv_dir.glob("ohlcv_*.parquet")):
+            try:
+                df = pd.read_parquet(f)
+                col = "kode" if "kode" in df.columns else "ticker"
+                if col not in df.columns:
+                    continue
+                subset = df[df[col].astype(str) == base]
+                if not subset.empty:
+                    dfs.append(subset)
+            except Exception:
+                continue
+        return dfs
 
     def load_ohlcv(
         self,
@@ -63,58 +93,52 @@ class ArchiveAdapter:
         """
         ohlcv_dir = self._ohlcv_dir()
 
+        # 1. Cari file per-ticker: BBCA.JK_*.parquet
         files = sorted(ohlcv_dir.glob(f"{ticker}*.parquet"))
         if not files:
             base = ticker.replace(".JK", "")
             files = sorted(ohlcv_dir.glob(f"{base}*.parquet"))
-
-        if not files:
-            return pd.DataFrame()
 
         dfs = []
         for f in files:
             df = pd.read_parquet(f)
             dfs.append(df)
 
-        df = pd.concat(dfs, ignore_index=True)
+        # 2. Cari file tahunan: ohlcv_YYYY.parquet (multi-ticker)
+        dfs.extend(self._load_yearly_files(ticker))
 
-        date_col = None
-        for candidate in ("tanggal", "date", "timestamp", "Date"):
-            if candidate in df.columns:
-                date_col = candidate
-                break
-
-        if date_col is None:
+        if not dfs:
             return pd.DataFrame()
 
-        df[date_col] = pd.to_datetime(df[date_col])
-        df = df.sort_values(date_col)
+        # Normalisasi nama kolom tanggal sebelum concat (sumber berbeda punya
+        # kolom berbeda: tanggal/date/timestamp/Date)
+        for i, df in enumerate(dfs):
+            for c in ("tanggal", "date", "Date"):
+                if c in df.columns:
+                    df = df.rename(columns={c: "timestamp"})
+                    break
+            if "timestamp" in df.columns:
+                df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+            dfs[i] = df
+
+        df = pd.concat(dfs, ignore_index=True)
+
+        if "timestamp" not in df.columns:
+            return pd.DataFrame()
+
+        df = df.dropna(subset=["timestamp"])
+        df = df.sort_values("timestamp")
+        df = df.drop_duplicates(subset=["timestamp"])
 
         if start:
-            df = df[df[date_col] >= pd.Timestamp(start)]
+            df = df[df["timestamp"] >= pd.Timestamp(start)]
         if end:
-            df = df[df[date_col] <= pd.Timestamp(end)]
+            df = df[df["timestamp"] <= pd.Timestamp(end)]
 
-        col_map = {
-            "tanggal": "timestamp",
-            "date": "timestamp",
-            "Date": "timestamp",
-            "open": "open",
-            "Open": "open",
-            "high": "high",
-            "High": "high",
-            "low": "low",
-            "Low": "low",
-            "close": "close",
-            "Close": "close",
-            "volume": "volume",
-            "Volume": "volume",
-        }
-        df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
+        if "adj_close" in df.columns:
+            df = df.rename(columns={"adj_close": "adjusted_close"})
 
-        if "timestamp" in df.columns:
-            df.set_index("timestamp", inplace=True)
-
+        df.set_index("timestamp", inplace=True)
         return df
 
     def save_ohlcv(self, ticker: str, df: pd.DataFrame) -> Path:

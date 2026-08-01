@@ -13,7 +13,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from datetime import UTC
 
-import pandas as pd
 from fastapi import Body, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -88,6 +87,78 @@ def _valid_api_key(provided: str) -> bool:
     return bool(_API_KEY) and secrets.compare_digest(provided, _API_KEY)
 
 
+def _cors_error_response(status_code: int, detail: str, request: Request) -> JSONResponse:
+    """Build JSONResponse with CORS headers for middleware-level error responses.
+
+    Middleware `api_key_auth` dan `rate_limit` berada di luar CORSMiddleware
+    (di-insert setelahnya via @app.middleware), sehingga response yang di-return
+    langsung dari middleware tidak melewati CORSMiddleware dan tidak mendapat
+    header Access-Control-Allow-Origin. Browser lalu memblokir response dengan
+    CORS error, menyembunyikan pesan error sebenarnya (§3.5).
+    """
+    origin = request.headers.get("origin", "")
+    allowed_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+    headers = {}
+    if origin in allowed_origins:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Access-Control-Allow-Methods"] = "*"
+        headers["Access-Control-Allow-Headers"] = "*"
+    return JSONResponse(status_code=status_code, content={"detail": detail}, headers=headers)
+
+
+def _finite_or_none(v):
+    """Convert a numeric value to float, returning None for NaN/inf.
+
+    Python's stdlib JSON serializer emits `NaN`/`Infinity` tokens which are
+    invalid JSON per RFC 8259 and rejected by strict parsers (and the browser
+    `fetch().json()` in some cases). Pandas `pd.isna()` returns False for inf,
+    so callers that only check `pd.isna` still leak inf into responses.
+    """
+    import math
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
+
+
+def _sanitize_records(records: list) -> list:
+    """Replace NaN/inf floats in a list of dict records with None.
+
+    Used for endpoints that serialize pandas DataFrames via `to_dict` — those
+    can contain NaN (from missing indicators) or inf (from division by zero in
+    indicator math) which would produce invalid JSON.
+    """
+    import math
+    out = []
+    for rec in records:
+        clean = {}
+        for k, v in rec.items():
+            if isinstance(v, float) and not math.isfinite(v):
+                clean[k] = None
+            else:
+                clean[k] = v
+        out.append(clean)
+    return out
+
+
+def _clamp_pagination(page: int, limit: int, max_limit: int = 1000) -> tuple[int, int]:
+    """Validate and clamp pagination params to prevent negative offsets and DoS
+    via huge limits. Negative `page` would yield negative `iloc` offsets (which
+    in pandas counts from the end of the frame, silently returning wrong data);
+    a zero/negative `limit` produces an empty slice or division-by-zero in page
+    count math.
+    """
+    if page < 1:
+        page = 1
+    if limit < 1:
+        limit = 500
+    if limit > max_limit:
+        limit = max_limit
+    return page, limit
+
+
 @app.middleware("http")
 async def api_key_auth(request: Request, call_next):
     """Validate API key if API_KEY env var is set. Skip for health/root.
@@ -97,7 +168,10 @@ async def api_key_auth(request: Request, call_next):
     """
     path = request.url.path
     method = request.method
-    if path in ("/", "/api/health") or path.startswith("/ws/"):
+    # Skip auth for health/root and CORS preflight (OPTIONS) requests.
+    # Preflight requests don't carry credentials and must be allowed to reach
+    # CORSMiddleware, otherwise the browser blocks the actual request (§3.5).
+    if path in ("/", "/api/health") or path.startswith("/ws/") or method == "OPTIONS":
         return await call_next(request)
 
     # DELETE methods are always sensitive (destructive operations)
@@ -116,12 +190,12 @@ async def api_key_auth(request: Request, call_next):
                 break
 
     if is_sensitive and not _API_KEY:
-        return JSONResponse(status_code=503, content={"detail": "API_KEY belum dikonfigurasi di server; endpoint ini dinonaktifkan demi keamanan."})
+        return _cors_error_response(503, "API_KEY belum dikonfigurasi di server; endpoint ini dinonaktifkan demi keamanan.", request)
 
     if _API_KEY:
         provided = request.headers.get("X-API-Key", "")
         if not _valid_api_key(provided):
-            return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key"})
+            return _cors_error_response(401, "Invalid or missing API key", request)
     return await call_next(request)
 
 # Rate limiting (in-memory, per-IP). NOTE: tidak bekerja lintas proses untuk
@@ -159,7 +233,7 @@ async def rate_limit(request: Request, call_next):
     # Remove old entries
     _rate_limit_store[client_ip] = [t for t in _rate_limit_store[client_ip] if now - t < _RATE_LIMIT_WINDOW]
     if len(_rate_limit_store[client_ip]) >= _RATE_LIMIT_MAX:
-        return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Try again later."})
+        return _cors_error_response(429, "Rate limit exceeded. Try again later.", request)
     _rate_limit_store[client_ip].append(now)
     return await call_next(request)
 
@@ -181,10 +255,12 @@ def get_data(category: str, ticker: str, start: str | None = None, end: str | No
     df = storage.load_ohlcv(ticker, start=start, end=end)
     if df.empty:
         raise HTTPException(status_code=404, detail="Data not found")
+    page, limit = _clamp_pagination(page, limit)
     total = len(df)
     offset = (page - 1) * limit
     df_page = df.iloc[offset:offset + limit]
-    return {"ticker": ticker, "count": total, "page": page, "limit": limit, "pages": (total + limit - 1) // limit, "data": df_page.reset_index().to_dict(orient="records")}
+    records = _sanitize_records(df_page.reset_index().to_dict(orient="records"))
+    return {"ticker": ticker, "count": total, "page": page, "limit": limit, "pages": (total + limit - 1) // limit, "data": records}
 
 
 @app.get("/api/indicators/{ticker}")
@@ -202,26 +278,17 @@ def get_indicators(ticker: str):
     for idx, row in df_with_indicators.iterrows():
         record = {
             "time": str(idx).split("T")[0] if hasattr(idx, "split") else str(idx),
-            "open": row["open"],
-            "high": row["high"],
-            "low": row["low"],
-            "close": row["close"],
-            "volume": row["volume"],
+            "open": _finite_or_none(row["open"]),
+            "high": _finite_or_none(row["high"]),
+            "low": _finite_or_none(row["low"]),
+            "close": _finite_or_none(row["close"]),
+            "volume": _finite_or_none(row["volume"]),
         }
-        if "rsi" in row and not pd.isna(row.get("rsi")):
-            record["rsi"] = float(row["rsi"])
-        if "macd" in row and not pd.isna(row.get("macd")):
-            record["macd"] = float(row["macd"])
-        if "macd_signal" in row and not pd.isna(row.get("macd_signal")):
-            record["macd_signal"] = float(row["macd_signal"])
-        if "ma_20" in row and not pd.isna(row.get("ma_20")):
-            record["ma_20"] = float(row["ma_20"])
-        if "ma_50" in row and not pd.isna(row.get("ma_50")):
-            record["ma_50"] = float(row["ma_50"])
-        if "bb_upper" in row and not pd.isna(row.get("bb_upper")):
-            record["bb_upper"] = float(row["bb_upper"])
-        if "bb_lower" in row and not pd.isna(row.get("bb_lower")):
-            record["bb_lower"] = float(row["bb_lower"])
+        for col in ("rsi", "macd", "macd_signal", "ma_20", "ma_50", "bb_upper", "bb_lower"):
+            if col in row.index:
+                val = _finite_or_none(row.get(col))
+                if val is not None:
+                    record[col] = val
         records.append(record)
     return {"ticker": ticker, "count": len(records), "data": records}
 
@@ -357,6 +424,8 @@ def run_backtest(payload: dict):
     ticker = payload.get("ticker")
     strategy_name = payload.get("strategy", "buy_and_hold")
     capital = payload.get("capital", TRADING_CAPITAL)
+    start = payload.get("start")
+    end = payload.get("end")
     engine = BacktestEngine(storage=storage)
     if strategy_name == "buy_and_hold":
         strategy = BuyAndHold()
@@ -366,7 +435,7 @@ def run_backtest(payload: dict):
         strategy = ConvictionStrategy(storage=storage, ticker=ticker)
     else:
         raise HTTPException(status_code=400, detail="Unknown strategy")
-    result = engine.run(ticker, strategy, initial_capital=capital)
+    result = engine.run(ticker, strategy, initial_capital=capital, start=start, end=end)
     if result["status"] == "error":
         raise HTTPException(status_code=404, detail=result["message"])
     metrics = result.get("metrics", {})
@@ -401,10 +470,12 @@ def run_monte_carlo(payload: dict):
     n_periods = payload.get("n_periods", 252)
     capital = payload.get("capital", TRADING_CAPITAL)
     block_size = payload.get("block_size")
+    start = payload.get("start")
+    end = payload.get("end")
     if not ticker:
         raise HTTPException(status_code=400, detail="ticker required")
 
-    df = storage.load_ohlcv(ticker)
+    df = storage.load_ohlcv(ticker, start=start, end=end)
     if df.empty:
         raise HTTPException(status_code=404, detail="Data not found")
 
@@ -423,10 +494,12 @@ def run_walk_forward(payload: dict):
     n_splits = payload.get("n_splits", 5)
     train_size = payload.get("train_size", 252)
     test_size = payload.get("test_size", 63)
+    start = payload.get("start")
+    end = payload.get("end")
     if not ticker:
         raise HTTPException(status_code=400, detail="ticker required")
 
-    df = storage.load_ohlcv(ticker)
+    df = storage.load_ohlcv(ticker, start=start, end=end)
     if df.empty:
         raise HTTPException(status_code=404, detail="Data not found")
 
@@ -547,30 +620,32 @@ def get_execution_logs(limit: int = 20):
     import sqlite3
 
     from trading_system.config import DB_PATH
+    audit_rows = []
+    # Use a context manager so the connection is always closed even if the
+    # query raises (prevents a file-descriptor/connection leak under load).
     try:
-        conn = sqlite3.connect(DB_PATH)
-        audit_rows = conn.execute(
-            "SELECT event_type, payload, timestamp FROM audit_log WHERE event_type LIKE 'decision.%' ORDER BY rowid DESC LIMIT 10"
-        ).fetchall()
-        conn.close()
+        with sqlite3.connect(DB_PATH) as conn:
+            audit_rows = conn.execute(
+                "SELECT event_type, payload, timestamp FROM audit_log WHERE event_type LIKE 'decision.%' ORDER BY rowid DESC LIMIT 10"
+            ).fetchall()
+    except sqlite3.Error:
+        audit_rows = []
 
-        import json
-        for event_type, payload_str, ts in audit_rows:
-            try:
-                payload = json.loads(payload_str)
-                logs.append({
-                    "type": "SIGNAL",
-                    "ticker": payload.get("ticker", ""),
-                    "action": payload.get("action", ""),
-                    "conviction": payload.get("conviction_score", 0),
-                    "status": "GENERATED",
-                    "timestamp": ts,
-                    "details": f"Conviction: {payload.get('conviction_score', 'N/A')}",
-                })
-            except Exception:
-                pass
-    except Exception:
-        pass
+    import json
+    for event_type, payload_str, ts in audit_rows:
+        try:
+            payload = json.loads(payload_str)
+            logs.append({
+                "type": "SIGNAL",
+                "ticker": payload.get("ticker", ""),
+                "action": payload.get("action", ""),
+                "conviction": payload.get("conviction_score", 0),
+                "status": "GENERATED",
+                "timestamp": ts,
+                "details": f"Conviction: {payload.get('conviction_score', 'N/A')}",
+            })
+        except Exception:
+            pass
 
     # Sort by timestamp descending
     logs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
@@ -1051,6 +1126,62 @@ def delete_news(source: str | None = None, before_date: str | None = None):
     deleted = storage.delete_news(source=source, before_date=before_date)
     storage.audit("delete.news", {"source": source, "before_date": before_date, "rows": deleted})
     return {"deleted": deleted}
+
+
+# ====================== REPLAY SIMULATION ======================
+@app.get("/api/replay/list")
+def list_replay_results():
+    """List all available replay result files."""
+    import json as _json
+    from pathlib import Path as _Path
+    results_dir = _Path(__file__).resolve().parents[3] / "scripts" / "replay_results"
+    if not results_dir.exists():
+        return {"tickers": []}
+    tickers = []
+    for f in sorted(results_dir.glob("replay_*.json")):
+        try:
+            with open(f) as fh:
+                data = _json.load(fh)
+            tickers.append({
+                "ticker": data.get("ticker", ""),
+                "total_return_pct": data.get("total_return_pct", 0),
+                "final_equity": data.get("final_equity", 0),
+                "sharpe_ratio": data.get("sharpe_ratio", 0),
+                "max_drawdown_pct": data.get("max_drawdown_pct", 0),
+                "n_buys": data.get("n_buys", 0),
+                "n_sells": data.get("n_sells", 0),
+                "n_trading_days": data.get("n_trading_days", 0),
+            })
+        except Exception:
+            pass
+    return {"tickers": tickers}
+
+
+@app.get("/api/replay/{ticker}")
+def get_replay_result(ticker: str):
+    """Get full replay result for a ticker, including day-by-day detail."""
+    import json as _json
+    import re
+    from pathlib import Path as _Path
+    # Sanitize ticker: keep only chars valid in IDX symbols (A-Z, 0-9, ., -).
+    # This prevents path traversal (e.g. a ticker like "a/../../etc/passwd"
+    # would otherwise escape the replay_results directory) and rejects any
+    # path separators that Path would interpret as directory components.
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", ticker):
+        raise HTTPException(status_code=400, detail="Invalid ticker format")
+    ticker_safe = ticker.replace(".", "_")
+    results_dir = _Path(__file__).resolve().parents[3] / "scripts" / "replay_results"
+    result_file = results_dir / f"replay_{ticker_safe}.json"
+    # Defense-in-depth: confirm the resolved path is still inside results_dir
+    # (guards against any remaining traversal edge cases).
+    try:
+        result_file.resolve().relative_to(results_dir.resolve())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid ticker path") from exc
+    if not result_file.exists():
+        raise HTTPException(status_code=404, detail=f"No replay result for {ticker}")
+    with open(result_file) as f:
+        return _json.load(f)
 
 
 if __name__ == "__main__":

@@ -172,13 +172,17 @@ class DecisionEngine:
         has_position = self.storage.get_open_position(ticker) is not None
         action = self.decide_action(conviction, risk.get("risk_flags", []), has_position=has_position)
 
+        last_price = risk.get("last_price")
+        if last_price is None or not isinstance(last_price, (int, float)):
+            return {"status": "error", "message": "Risk engine did not return a valid last_price."}
+
         recommendation = {
             "recommendation_id": f"{ticker}_{datetime.now(UTC).isoformat()}",
             "ticker": ticker,
             "action": action,
             "conviction_score": round(conviction, 2),
             "position_size": risk.get("position_size"),
-            "entry_price_range": [round(risk["last_price"] * 0.99, 2), round(risk["last_price"] * 1.01, 2)],
+            "entry_price_range": [round(last_price * 0.99, 2), round(last_price * 1.01, 2)],
             "stop_loss": risk.get("stop_loss"),
             "take_profit": risk.get("take_profit"),
             "expected_hold_period": "1-3 months",

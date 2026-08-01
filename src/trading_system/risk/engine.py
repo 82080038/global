@@ -30,14 +30,25 @@ class RiskEngine:
         volume = df["volume"]
 
         last_price = float(close.iloc[-1])
+        if not pd.isna(last_price) and last_price <= 0:
+            # Non-positive price would produce NaN/inf in position sizing and
+            # nonsensical stop/take-profit levels. Treat as unusable data.
+            return {"status": "error", "message": f"Invalid last_price for {ticker}: {last_price}"}
         atr = self._atr(df, 14)
         avg_volume_raw = float(volume.rolling(20).mean().iloc[-1]) if len(volume) >= 20 else float(volume.mean()) if not volume.empty else 0
         avg_volume = avg_volume_raw if not pd.isna(avg_volume_raw) else 0
         volatility_raw = float(close.pct_change().rolling(20).std().iloc[-1] * np.sqrt(252)) if len(close) >= 20 else 0.2
         volatility = volatility_raw if not pd.isna(volatility_raw) else 0.2
 
-        # Position sizing: target risk 1% of capital, stop = 1.5 ATR
-        stop_distance = 1.5 * atr if not pd.isna(atr) and atr > 0 else last_price * 0.05
+        # Position sizing: target risk 1% of capital, stop = 1.5 ATR.
+        # Fallback stop uses a fraction of last_price; guard against zero price
+        # so stop_distance is never 0 (which would divide by zero below).
+        if not pd.isna(atr) and atr > 0:
+            stop_distance = 1.5 * atr
+        elif last_price > 0:
+            stop_distance = last_price * 0.05
+        else:
+            return {"status": "error", "message": f"Cannot compute stop distance for {ticker}: ATR and price unusable"}
         stop_loss = last_price - stop_distance
         take_profit = last_price + 2 * stop_distance
 

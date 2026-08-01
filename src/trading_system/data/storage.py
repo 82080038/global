@@ -535,6 +535,7 @@ class DataStorage:
         start: str | None = None,
         end: str | None = None,
         timeframe: str = "1d",
+        limit: int | None = None,
     ) -> pd.DataFrame:
         """Memuat OHLCV sebagai DataFrame."""
         sql = "SELECT * FROM ohlcv WHERE ticker = ? AND timeframe = ?"
@@ -545,7 +546,14 @@ class DataStorage:
         if end:
             sql += " AND timestamp <= ?"
             params.append(end)
-        sql += " ORDER BY timestamp"
+        if limit is not None:
+            # Ambil N baris terbaru (ORDER BY timestamp DESC LIMIT ?), lalu
+            # bungkus dalam subquery agar hasil akhir tetap urut ascending.
+            sql += " ORDER BY timestamp DESC LIMIT ?"
+            sql = f"SELECT * FROM ({sql}) sub ORDER BY timestamp"
+            params.append(int(limit))
+        else:
+            sql += " ORDER BY timestamp"
         with self._connect() as conn:
             df = pd.read_sql_query(sql, conn, params=params)
         if not df.empty:
@@ -656,11 +664,26 @@ class DataStorage:
                 return dict(zip(cols, row))
             return None
 
+    # Allowlist of columns that may be updated on the positions table.
+    # Defends against SQL injection via kwarg keys (identifiers cannot be
+    # parameterized in SQLite, so they are interpolated into the query string).
+    _POSITION_COLUMNS = {
+        "ticker", "quantity", "avg_entry_price", "current_price", "status",
+        "stop_loss", "take_profit", "trailing_stop_pct",
+        "highest_price_since_entry", "realized_pnl", "unrealized_pnl",
+        "return_pct", "opened_at", "closed_at", "created_at",
+    }
+
     def update_position(self, position_id: int, **kwargs):
         """Update position fields."""
         from datetime import datetime
         if "closed_at" not in kwargs and kwargs.get("status") == "CLOSED":
             kwargs["closed_at"] = datetime.now(UTC).isoformat()
+        # Reject any column name not in the allowlist to prevent SQL injection
+        # via identifier interpolation.
+        bad = set(kwargs) - self._POSITION_COLUMNS
+        if bad:
+            raise ValueError(f"Invalid position columns: {sorted(bad)}")
         sets = ", ".join(f"{k} = ?" for k in kwargs)
         vals = list(kwargs.values()) + [position_id]
         with self._connect() as conn:

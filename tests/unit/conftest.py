@@ -13,6 +13,24 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 
+@pytest.fixture(autouse=True)
+def _reset_api_key():
+    """Reset API key to empty for deterministic tests regardless of .env file.
+
+    The .env file may set API_KEY for local dev, which leaks into the test
+    process via utils/notifier.py's .env loader (imported transitively when
+    the API app is imported). Without this reset, unauthenticated `client`
+    fixtures receive 401 because the module-level `_API_KEY` picks up the dev
+    value. Tests that need auth set the key explicitly (authed_client fixture
+    or monkeypatch), which run after this autouse setup.
+    """
+    import trading_system.api.app as app_module
+    old = app_module._API_KEY
+    app_module._API_KEY = ""
+    yield
+    app_module._API_KEY = old
+
+
 @pytest.fixture
 def mock_ohlcv_df():
     """Generate a realistic OHLCV DataFrame for testing (250 trading days)."""

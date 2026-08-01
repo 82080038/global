@@ -41,17 +41,36 @@ def idx_tick_size(price: float) -> float:
 
 def round_to_tick(price: float) -> float:
     """Bulatkan harga ke tick size IDX terdekat."""
+    import math
+    if price is None or not math.isfinite(price):
+        return float("nan")
     tick = idx_tick_size(price)
     return round(price / tick) * tick
+
+
+def _safe_float(env_key: str, default: str) -> float:
+    """Parse env var to float, falling back to default on invalid/empty value.
+
+    Prevents a startup crash if the env var is set to a non-numeric string
+    (e.g. a typo in .env). The default is always a valid numeric literal.
+    """
+    raw = os.getenv(env_key, default)
+    if raw is None or raw.strip() == "":
+        raw = default
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return float(default)
+
 
 # Satu sumber kebenaran untuk modal trading (§3.3 SARAN_PENGEMBANGAN.md).
 # Semua engine (risk, decision, execution, backtest CLI, API) HARUS membaca
 # nilai ini alih-alih hard-code angka modal sendiri-sendiri.
-TRADING_CAPITAL = float(os.getenv("TRADING_CAPITAL", "100000000"))
+TRADING_CAPITAL = _safe_float("TRADING_CAPITAL", "100000000")
 
 # Ambang konviksi di bawah mana posisi terbuka harus di-exit (SELL), meskipun
 # harga belum menyentuh stop-loss/take-profit (§2.3 SARAN_PENGEMBANGAN.md).
-EXIT_CONVICTION_THRESHOLD = float(os.getenv("EXIT_CONVICTION_THRESHOLD", "40"))
+EXIT_CONVICTION_THRESHOLD = _safe_float("EXIT_CONVICTION_THRESHOLD", "40")
 
 # YFinance rate limiting
 YFINANCE_RATE_LIMIT_CALLS = 1

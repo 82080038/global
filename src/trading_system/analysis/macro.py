@@ -62,8 +62,8 @@ class MacroEconomicEngine:
         try:
             us10y_now, us10y_prev = rates["US10Y"] if rates["US10Y"] else (None, None)
             gold_now, _ = rates["GOLD"] if rates["GOLD"] else (None, None)
-            oil_now, _ = rates["OIL"] if rates["OIL"] else (None, None)
-            usd_idr_now, _ = rates["USD_IDR"] if rates["USD_IDR"] else (None, None)
+            oil_now, oil_prev = rates["OIL"] if rates["OIL"] else (None, None)
+            usd_idr_now, usd_idr_prev = rates["USD_IDR"] if rates["USD_IDR"] else (None, None)
 
             if us10y_now is None:
                 return "unknown"
@@ -72,8 +72,15 @@ class MacroEconomicEngine:
                 return "tightening"
             if us10y_now < us10y_prev:
                 return "easing"
-            if oil_now is not None and usd_idr_now is not None:
-                return "growth" if oil_now > 0 else "slowdown"
+            # Yield unchanged: use commodity/FX drift as tiebreaker.
+            # Comparing to previous value (not sign of price) — oil price is
+            # always positive, so the old `oil_now > 0` check always returned
+            # "growth" and never detected a slowdown.
+            if oil_now is not None and oil_prev is not None:
+                return "growth" if oil_now > oil_prev else "slowdown"
+            if usd_idr_now is not None and usd_idr_prev is not None:
+                # USD/IDR falling = risk_on (growth), rising = risk_off (slowdown)
+                return "growth" if usd_idr_now < usd_idr_prev else "slowdown"
             return "neutral"
         except Exception:
             return "unknown"

@@ -17,6 +17,9 @@ interface BacktestResult {
 export default function BacktestPage() {
   const [ticker, setTicker] = useState("BBCA.JK");
   const [strategy, setStrategy] = useState("buy_and_hold");
+  const [capital, setCapital] = useState("10000000");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -25,10 +28,17 @@ export default function BacktestPage() {
     setLoading(true);
     setError(null);
     try {
+      const payload: Record<string, unknown> = {
+        ticker,
+        strategy,
+        capital: parseFloat(capital) || 10000000,
+      };
+      if (startDate) payload.start = startDate;
+      if (endDate) payload.end = endDate;
       const res = await apiFetch("/api/backtest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker, strategy }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -49,7 +59,7 @@ export default function BacktestPage() {
         </p>
       </div>
 
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         <input
           type="text"
           value={ticker}
@@ -66,6 +76,27 @@ export default function BacktestPage() {
           <option value="ma_crossover">MA Crossover</option>
           <option value="conviction">Conviction</option>
         </select>
+        <input
+          type="number"
+          value={capital}
+          onChange={(e) => setCapital(e.target.value)}
+          placeholder="Capital (IDR)"
+          className="rounded border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100"
+        />
+        <input
+          type="date"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          placeholder="Start date"
+          className="rounded border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100"
+        />
+        <input
+          type="date"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
+          placeholder="End date"
+          className="rounded border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100"
+        />
         <button
           onClick={runBacktest}
           disabled={loading}

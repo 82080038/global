@@ -6,6 +6,53 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dan
 
 ---
 
+## [0.1.9] — 2026-08-01
+
+Production bug-fix audit: full codebase read (~14k lines, 80 Python files + frontend), 5 parallel subagent audits, verified fixes for security, resource leaks, crashes, invalid JSON, and logic errors.
+
+### Fixed — Security
+
+- **Path traversal** (`api/app.py` `/api/replay/{ticker}`): Ticker like `a/../../etc/passwd` could escape `replay_results/` directory. Added regex validation `^[A-Za-z0-9._-]+$` + `relative_to` check after resolve.
+- **SQL injection** (`data/storage.py` `update_position`): Column names from `**kwargs` were interpolated into SQL (identifiers can't be parameterized in SQLite). Added `_POSITION_COLUMNS` allowlist matching the table schema; unknown keys raise `ValueError`.
+
+### Fixed — Resource Leak
+
+- **SQLite connection leak** (`api/app.py` execution/logs endpoint): Connection not closed if query raised. Replaced with `with sqlite3.connect(...)` context manager + `except sqlite3.Error`.
+
+### Fixed — Invalid JSON / Production Crashes
+
+- **NaN/inf in JSON responses** (`api/app.py`): `to_dict()` and indicator endpoints could emit `NaN`/`Infinity` tokens (invalid JSON per RFC 8259, rejected by strict parsers). Added `_finite_or_none` and `_sanitize_records` helpers; `pd.isna(inf)` returns `False` so the old guard leaked inf. Applied to `/api/data/{category}` and `/api/indicators/{ticker}`.
+- **Pagination validation** (`api/app.py`): Negative `page` produced negative `iloc` offsets (pandas counts from end = wrong data); zero/negative `limit` caused empty slices or division-by-zero in page count; unbounded `limit` enabled DoS. Added `_clamp_pagination(page, limit, max_limit=1000)`.
+- **Env var crash on startup** (`config.py`): `float(os.getenv(...))` crashed if env var was a typo/non-numeric. Added `_safe_float` with fallback to default. `round_to_tick` now handles NaN/inf.
+- **KeyError on `last_price`** (`decision/engine.py`): `risk["last_price"]` raised if risk engine didn't return the key. Switched to `.get` + type validation with explicit error return.
+- **Division by zero in position sizing** (`risk/engine.py`): `last_price <= 0` produced `stop_distance=0` → division by zero. Added guard with explicit error return; fallback stop now requires `last_price > 0`.
+- **Inf in backtest metrics** (`backtest/metrics.py`): `equity_curve.iloc[0] == 0` produced inf in total_return/CAGR/drawdown. Added guard + `rolling_max.replace(0, pd.NA)`.
+
+### Fixed — Logic Bugs
+
+- **Broker summary `% Out` always 0** (`sentiment/broker_summary.py`): `"%" in row` checked for index label `"%"` (always False since column is `"% Out"`), so `pct` was always 0. Fixed to `"% Out" in row.index`.
+- **Macro regime never detected slowdown** (`analysis/macro.py`): Tiebreaker `oil_now > 0` was always True (oil price is always positive) → always returned `"growth"`. Fixed to compare `oil_now` vs `oil_prev`, with USD/IDR drift fallback.
+
+### Fixed — Frontend (Next.js 16 / React 19)
+
+- **`react-hooks/set-state-in-effect`** (`frontend/app/replay/page.tsx`): 4 eslint errors — synchronous `setState` in effect body causes cascading renders and violates Rules of React (React Compiler skips optimization). Wrapped in async callback + `queueMicrotask`. Replaced `any[]` with `TradeRecord`/`EquityPoint` types. Removed unused `useCallback` import. Fixed missing `selectedTicker` dependency.
+
+### Fixed — Test Determinism
+
+- **API key leakage from `.env`** (`tests/unit/conftest.py`): 11 tests failed (401) because `notifier.py`'s `.env` loader set `_API_KEY` from dev config on import. Added autouse fixture resetting `_API_KEY` to `""` so unauthenticated `client` fixtures are deterministic; tests needing auth set the key explicitly.
+
+### Fixed — Lint
+
+- **Unused import** (`analysis/pipeline.py`): Removed unused `timedelta` import (ruff F401).
+- **Unused import** (`api/app.py`): Removed unused `pandas` import after refactor.
+
+### Tests
+
+- Total: **562 unit tests**, all passing.
+- `ruff check src/ tests/` clean, `tsc --noEmit` clean, `eslint` clean, `next build` clean.
+
+---
+
 ## [0.1.8] — 2026-08-01
 
 Deep audit: frontend-backend integration, CLI gaps, Docker/CI fixes, code quality bugs, missing API endpoints.

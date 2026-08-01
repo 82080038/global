@@ -107,7 +107,7 @@ class BrokerSummarySentiment:
             for _, row in holders.head(10).iterrows():
                 broker_name = str(row.get("Holder", ""))
                 shares = float(row.get("Shares", 0))
-                pct = float(row.get("% Out", 0)) if "%" in row else 0
+                pct = float(row.get("% Out", 0)) if "% Out" in row.index else 0
                 # Use shares as proxy for buy_value, 0 for sell
                 brokers.append({
                     "broker": broker_name[:10].upper(),

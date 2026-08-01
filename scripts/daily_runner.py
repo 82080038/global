@@ -16,6 +16,8 @@ import os
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 # Add src to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -35,20 +37,75 @@ def get_watchlist() -> list[str]:
 
 
 def fetch_and_validate(tickers: list[str]) -> dict:
-    """Fetch OHLCV data for all tickers."""
+    """Fetch OHLCV data for all tickers (Parquet-first, fallback Yahoo Finance)."""
     from trading_system.data.acquisition import YahooFinanceAdapter, normalize_ohlcv
+    from trading_system.data.archive import ArchiveAdapter
     from trading_system.data.storage import DataStorage
     from trading_system.data.validation import DataQualityValidator
+    from datetime import datetime
 
     adapter = YahooFinanceAdapter()
+    archive = ArchiveAdapter()
     storage = DataStorage()
     validator = DataQualityValidator()
     results = {}
+    today = datetime.now().strftime("%Y-%m-%d")
 
     for ticker in tickers:
         try:
             logger.info(f"Fetching {ticker}...")
-            result = adapter.fetch(ticker, period="2y")
+            # 1. Cek SQLite dulu — apakah data sudah mutakhir?
+            existing = storage.load_ohlcv(ticker)
+            if not existing.empty:
+                last_ts = str(existing.index[-1])[:10]
+                if last_ts >= today:
+                    logger.info(f"  {ticker}: Already up to date ({last_ts})")
+                    results[ticker] = {"status": "ok", "rows": 0, "reason": "up_to_date"}
+                    continue
+                # 2. Coba Parquet archive untuk data incremental
+                arch_df = archive.load_ohlcv(ticker, start=last_ts)
+                if not arch_df.empty:
+                    new_df = arch_df[arch_df.index > pd.Timestamp(last_ts)].copy()
+                    if not new_df.empty:
+                        new_df = new_df.reset_index()
+                        new_df["ticker"] = ticker
+                        new_df["asset_class"] = "equity"
+                        new_df["exchange"] = "INDO" if ticker.endswith(".JK") else "GLOBAL"
+                        new_df["timeframe"] = "1d"
+                        new_df["source"] = "archive"
+                        new_df["ingested_at"] = datetime.now().isoformat()
+                        new_df["data_quality_score"] = None
+                        raw = normalize_ohlcv(new_df)
+                        clean, report = validator.validate(raw)
+                        if report.action != "pause":
+                            n = storage.save_ohlcv(clean)
+                            logger.info(f"  {ticker}: Loaded {n} rows from Parquet archive. Quality={report.data_quality_score}")
+                            results[ticker] = {"status": "ok", "rows": n, "source": "archive"}
+                            continue
+                # 3. Fallback: Yahoo Finance untuk data terbaru
+                result = adapter.fetch_incremental(ticker, last_timestamp=last_ts)
+            else:
+                # SQLite kosong — coba Parquet archive dulu
+                arch_df = archive.load_ohlcv(ticker)
+                if not arch_df.empty:
+                    arch_df = arch_df.reset_index()
+                    arch_df["ticker"] = ticker
+                    arch_df["asset_class"] = "equity"
+                    arch_df["exchange"] = "INDO" if ticker.endswith(".JK") else "GLOBAL"
+                    arch_df["timeframe"] = "1d"
+                    arch_df["source"] = "archive"
+                    arch_df["ingested_at"] = datetime.now().isoformat()
+                    arch_df["data_quality_score"] = None
+                    raw = normalize_ohlcv(arch_df)
+                    clean, report = validator.validate(raw)
+                    if report.action != "pause":
+                        n = storage.save_ohlcv(clean)
+                        logger.info(f"  {ticker}: Loaded {n} rows from Parquet archive. Quality={report.data_quality_score}")
+                        results[ticker] = {"status": "ok", "rows": n, "source": "archive"}
+                        continue
+                # 4. Fallback terakhir: Yahoo Finance full fetch
+                result = adapter.fetch(ticker, period="2y")
+
             if result["status"] == "ok":
                 raw = normalize_ohlcv(result["records"])
                 clean, report = validator.validate(raw)
@@ -57,8 +114,8 @@ def fetch_and_validate(tickers: list[str]) -> dict:
                     results[ticker] = {"status": "failed", "reason": "quality_pause"}
                     continue
                 n = storage.save_ohlcv(clean)
-                logger.info(f"  {ticker}: Saved {n} rows. Quality={report.data_quality_score} tier={report.tier}")
-                results[ticker] = {"status": "ok", "rows": n, "quality": report.data_quality_score}
+                logger.info(f"  {ticker}: Saved {n} rows from Yahoo Finance. Quality={report.data_quality_score} tier={report.tier}")
+                results[ticker] = {"status": "ok", "rows": n, "source": "yahoo", "quality": report.data_quality_score}
             else:
                 logger.error(f"  {ticker}: {result['message']}")
                 results[ticker] = {"status": "error", "reason": result["message"]}

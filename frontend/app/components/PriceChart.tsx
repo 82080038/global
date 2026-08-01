@@ -50,7 +50,13 @@ export default function PriceChart({
   useEffect(() => {
     if (!containerRef.current || data.length === 0) return;
 
-    const sorted = [...data].sort(
+    // Normalize time format: lightweight-charts expects 'yyyy-mm-dd' (no time component)
+    const normalized = data.map((d) => ({
+      ...d,
+      time: d.time ? d.time.split("T")[0].split(" ")[0] : d.time,
+    }));
+
+    const sorted = [...normalized].sort(
       (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()
     );
 
