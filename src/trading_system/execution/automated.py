@@ -17,6 +17,7 @@ from datetime import UTC
 from trading_system.config import TRADING_CAPITAL
 from trading_system.data.storage import DataStorage
 from trading_system.decision.engine import DecisionEngine
+from trading_system.execution import get_execution_engine
 from trading_system.execution.engine import ExecutionEngine
 from trading_system.risk.costs import get_default_cost_model, get_latest_atr
 from trading_system.risk.engine import RiskEngine
@@ -38,7 +39,8 @@ class AutomatedExecutionEngine:
         self.storage = storage or DataStorage()
         self.decision = DecisionEngine(self.storage)
         self.risk = RiskEngine(self.storage)
-        self.execution = ExecutionEngine()
+        self.execution = ExecutionEngine()  # Keep for cost calculations
+        self.trading_executor = get_execution_engine(storage)  # New shared interface
         self.auto_trade_enabled = os.getenv("AUTO_TRADE_ENABLED", "false").lower() == "true"
         self.capital = TRADING_CAPITAL
         self.risk_per_trade = float(os.getenv("RISK_PER_TRADE", "0.01"))

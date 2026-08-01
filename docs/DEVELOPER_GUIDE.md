@@ -62,7 +62,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 # Linux/macOS:
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 
 # 3. Setup environment
 cp .env.example .env
@@ -149,6 +149,7 @@ global/
 │   │   ├── fundamental.py       #   P/E, P/B, ROE, debt ratio
 │   │   ├── macro.py             #   Interest rate, inflation, GDP
 │   │   ├── global_market.py     #   S&P500, Nikkei, Hang Seng correlation
+│   │   ├── relationship.py     #   Cross-asset correlation, lag analysis
 │   │   ├── pipeline.py          #   Orchestrator untuk semua analysis
 │   │   ├── regime.py            #   Market regime detection
 │   │   ├── red_flags.py         #   Fundamental red flags
@@ -160,8 +161,6 @@ global/
 │   │   ├── broker_summary.py    #   Broker summary (smart money)
 │   │   ├── social_media.py      #   Reddit + X/Twitter
 │   │   └── google_trends.py     #   Search trend analysis
-│   ├── intelligence/            # Cross-asset intelligence
-│   │   └── relationship.py      #   Rolling correlation, lag analysis
 │   ├── corporate/               # Corporate actions
 │   │   └── actions.py           #   Split, dividend, adjustment factor
 │   ├── backtest/                # Backtesting
@@ -264,8 +263,7 @@ global/
 ├── README.md                    # Project overview
 ├── Dockerfile                   # Backend Docker image
 ├── docker-compose.yml           # Backend + Frontend containers
-├── pyproject.toml               # Python project config (ruff, pytest)
-├── requirements.txt             # Python dependencies
+├── pyproject.toml               # Python project config (dependencies, ruff, pytest)
 └── alembic.ini                  # Alembic config
 ```
 
@@ -298,7 +296,7 @@ class SomeEngine:
 | 7 | Broker Summary | `sentiment/broker_summary.py` | Smart money tracking |
 | 8 | Social Media | `sentiment/social_media.py` | Reddit + X/Twitter sentiment |
 | 9 | Google Trends | `sentiment/google_trends.py` | Search volume trend |
-| 10 | Market Relationship | `intelligence/relationship.py` | Cross-asset correlation + lag |
+| 10 | Market Relationship | `analysis/relationship.py` | Cross-asset correlation + lag |
 | 11 | Corporate Actions | `corporate/actions.py` | Split, dividend, adjustment factor |
 | 12 | Regime Detection | `analysis/regime.py` | Trending/neutral/volatile/shock |
 | 13 | Red Flags | `analysis/red_flags.py` | Earnings quality, governance, balance sheet |

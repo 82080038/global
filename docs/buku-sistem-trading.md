@@ -150,8 +150,7 @@ Sistem ini dibangun di atas enam prinsip arsitektur yang memandu setiap keputusa
 ```
 global/
 ├── README.md
-├── pyproject.toml
-├── requirements.txt
+├── pyproject.toml                # Python project config (dependencies, tools)
 ├── .env.example                  # Template environment variables
 ├── .gitignore
 ├── Dockerfile                    # Backend container
@@ -185,8 +184,7 @@ global/
 │       │   ├── technical.py
 │       │   ├── fundamental.py
 │       │   ├── macro.py
-│       │   └── global_market.py
-│       ├── intelligence/
+│       │   ├── global_market.py
 │       │   └── relationship.py
 │       ├── sentiment/             # Sentiment Layer (modular sources)
 │       │   ├── engine.py          # NLP engine (Indonesian RSS feeds)

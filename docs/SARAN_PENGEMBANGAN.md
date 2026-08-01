@@ -414,7 +414,7 @@ Dibanding platform di atas, **diferensiasi** sistem ini adalah: fokus IDX end-to
 
 - **Sumber:** `C:\xampp\htdocs\data_pasar_modal\ai_engine\scrape_idx_foreign_flow.py`
 - **Mengapa perlu diambil:** Saat ini `sentiment/foreign_flow.py` di aplikasi ini hanya **proxy** dari harga+volume (diakui di §4.1 dan §8.2). Scraper ini mengambil **data riil** foreign buy/sell per saham dari endpoint `idx.co.id/primary/TradingSummary/getStockSummary` — gratis, resmi, dan tersedia dari Jan 2020.
-- **Cara adopsi:** Convert dari MySQL/subprocess → SQLite/Python murni. Buat sebagai implementasi `DataSourceAdapter` (§4.1). Ganti `cloudscraper` dengan `httpx` (sudah di `requirements.txt`). Simpan ke tabel `foreign_flow` di SQLite (tambahkan via Alembic migration). Rate limiting 0.3s/request sudah sesuai.
+- **Cara adopsi:** Convert dari MySQL/subprocess → SQLite/Python murni. Buat sebagai implementasi `DataSourceAdapter` (§4.1). Ganti `cloudscraper` dengan `httpx` (sudah di `pyproject.toml`). Simpan ke tabel `foreign_flow` di SQLite (tambahkan via Alembic migration). Rate limiting 0.3s/request sudah sesuai.
 - **Estimasi usaha:** Rendah–Sedang (convert DB layer + integrasi ke pipeline)
 - **Mengatasi:** §4.1 (sumber data tunggal), §8.2 (foreign flow proxy), §8.3 (sumber data IDX)
 
@@ -468,7 +468,7 @@ Dibanding platform di atas, **diferensiasi** sistem ini adalah: fokus IDX end-to
 
 - **Sumber:** `C:\xampp\htdocs\data_pasar_modal\ai_engine\scrape_idx_fundamental.py` (475 baris)
 - **Mengapa perlu diambil:** Data fundamental `.JK` dari yfinance sangat terbatas (§4.1, diakui di `fundamental.py`). Scraper ini mengunduh **laporan tahunan PDF dari idx.co.id**, mengekstrak **5-year financial summary** (revenue, net income, total assets, equity, dll) menggunakan `pdfplumber`. Satuh PDF mencakup 5 tahun data, jadi download report 2024/2019/2014/2009 → coverage 2004–2024 (~20 tahun).
-- **Cara adopsi:** Convert MySQL → SQLite. Tambah `pdfplumber` ke `requirements.txt` (opsional — hanya untuk fetch fundamental mendalam). Buat sebagai method di `DataSourceAdapter` atau modul terpisah `data/idx_fundamental_scraper.py`. Sebagai fallback bila yfinance fundamental minim, ini sumber paling lengkap untuk IDX.
+- **Cara adopsi:** Convert MySQL → SQLite. Tambah `pdfplumber` ke `pyproject.toml` (opsional — hanya untuk fetch fundamental mendalam). Buat sebagai method di `DataSourceAdapter` atau modul terpisah `data/idx_fundamental_scraper.py`. Sebagai fallback bila yfinance fundamental minim, ini sumber paling lengkap untuk IDX.
 - **Estimasi usaha:** Sedang (PDF parsing + convert DB + integrasi)
 - **Mengatasi:** §4.1 (fundamental .JK terbatas), §8.2 (IDX Screener fundamental resmi)
 
@@ -478,15 +478,15 @@ Dibanding platform di atas, **diferensiasi** sistem ini adalah: fokus IDX end-to
 
 - **Sumber:** `K:\xampp\htdocs\swing\modules\performance_attribution.py` (375 baris)
 - **Mengapa perlu diambil:** Aplikasi ini punya `portfolio/performance.py` tapi tidak ada **performance attribution** — dekomposisi return berdasarkan: (1) stock selection (top/bottom performers per ticker), (2) sector allocation (PnL per sektor), (3) timing (entry timing: pagi/siang, holding period: winning vs losing days), (4) risk management (efektivitas SL/TP: berapa loss dicegah, berapa profit direalisasi).
-- **Cara adopsi:** Convert dari swing's `trade_history` table ke `global`'s `orders` table. Gunakan `intelligence/relationship.py` untuk sector mapping (atau buat mapping sektor JASICA). Output sebagai endpoint API `GET /api/attribution` dan tampilkan di dashboard.
+- **Cara adopsi:** Convert dari swing's `trade_history` table ke `global`'s `orders` table. Gunakan `analysis/relationship.py` untuk sector mapping (atau buat mapping sektor JASICA). Output sebagai endpoint API `GET /api/attribution` dan tampilkan di dashboard.
 - **Estimasi usaha:** Sedang
 - **Mengatasi:** §5.4 (strategy versioning & leaderboard), fitur baru tidak ada di roadmap
 
 #### I. Correlation-Based Position Sizing
 
 - **Sumber:** `K:\xampp\htdocs\swing\modules\correlation_manager.py` (341 baris)
-- **Mengapa perlu diambil:** Aplikasi ini sudah punya `intelligence/relationship.py` (matriks korelasi) tapi **tidak dipakai untuk position sizing** (§3.6). Modul swing ini: (1) hitung matriks korelasi return antar saham, (2) temukan pasangan highly correlated (threshold 0.7), (3) reduksi position size untuk saham yang berkorelasi tinggi (max 20% allocation untuk correlated group).
-- **Cara adopsi:** Integrasikan ke `risk/engine.py::analyze` — setelah hitung position size individual, terapkan correlation penalty. Gunakan data dari `intelligence/relationship.py` yang sudah ada. Tambah parameter `correlation_threshold` dan `max_correlated_allocation` ke `config.py`.
+- **Mengapa perlu diambil:** Aplikasi ini sudah punya `analysis/relationship.py` (matriks korelasi) tapi **tidak dipakai untuk position sizing** (§3.6). Modul swing ini: (1) hitung matriks korelasi return antar saham, (2) temukan pasangan highly correlated (threshold 0.7), (3) reduksi position size untuk saham yang berkorelasi tinggi (max 20% allocation untuk correlated group).
+- **Cara adopsi:** Integrasikan ke `risk/engine.py::analyze` — setelah hitung position size individual, terapkan correlation penalty. Gunakan data dari `analysis/relationship.py` yang sudah ada. Tambah parameter `correlation_threshold` dan `max_correlated_allocation` ke `config.py`.
 - **Estimasi usaha:** Sedang
 - **Mengatasi:** §3.6 (portfolio VaR dengan korelasi), §4.5 (konsolidasi ATR/indikator)
 
@@ -542,7 +542,7 @@ Dibanding platform di atas, **diferensiasi** sistem ini adalah: fokus IDX end-to
 
 - **Sumber:** `https://github.com/82080038/trading-otomatis-indonesia/blob/main/python/ai_components/advanced_deep_learning_models.py`
 - **Mengapa perlu diambil:** AI Learning saat ini hanya memakai `LinearRegression` (§2.4) — tidak ada deep learning. Modul ini mengimplementasikan: (1) **LSTM** multi-layer dengan dropout untuk sequence prediction, (2) **GRU** (lebih ringan dari LSTM, cocok untuk dataset kecil), (3) **Transformer** dengan MultiHeadAttention untuk time series, (4) **Ensemble model** yang menggabungkan LSTM + GRU + Transformer dalam satu model multi-input. Semua dengan `prepare_data()` (MinMaxScaler, sequence windowing) dan training callbacks (EarlyStopping, ReduceLROnPlateau).
-- **Cara adopsi:** Convert ke `src/trading_system/ai_learning/deep_learning.py`. Tambah `tensorflow` ke `requirements.txt` (opsional — gunakan flag `DL_AVAILABLE` seperti `HAS_ML` di swing). Gunakan sebagai model alternatif di `train_linear_regression` — jika TF available, latih DL model sebagai comparator. Integrasi dengan Purged CV (komponen C) untuk validasi.
+- **Cara adopsi:** Convert ke `src/trading_system/ai_learning/deep_learning.py`. Tambah `tensorflow` ke `pyproject.toml` (opsional — gunakan flag `DL_AVAILABLE` seperti `HAS_ML` di swing). Gunakan sebagai model alternatif di `train_linear_regression` — jika TF available, latih DL model sebagai comparator. Integrasi dengan Purged CV (komponen C) untuk validasi.
 - **Estimasi usaha:** Sedang (convert + integrasi + dependency management)
 - **Mengatasi:** §2.4 (AI Learning hanya LinearRegression), §5.4 (DL models)
 
@@ -574,7 +574,7 @@ Dibanding platform di atas, **diferensiasi** sistem ini adalah: fokus IDX end-to
 
 - **Sumber:** `https://github.com/82080038/worldmonitor` (fork dari `koala73/worldmonitor`)
 - **Mengapa perlu diambil:** Aplikasi ini punya `analysis/global_market.py` dan `analysis/macro.py` yang terbatas. WorldMonitor adalah dashboard intelligence real-time dengan: (1) **500+ news feeds** across 15 kategori, AI-synthesized into briefs, (2) **Country Instability Index (CII)** — stress scoring untuk 31 negara, (3) **Finance radar** — 29 bursa saham, komoditas, crypto, 7-signal market composite, (4) **Cross-stream correlation** — military, economic, disaster, escalation signal convergence, (5) **Local AI** (Ollama, no API keys), (6) **6 site variants** (world, tech, finance, commodity, happy, energy).
-- **Cara adopsi:** **Referensi arsitektur**, bukan raw copy (Next.js + Tauri, beda stack dengan `global` yang Python/Next.js). Yang bernilai: (a) konsep 7-signal market composite untuk `macro.py`, (b) CII scoring untuk risk assessment geopolitik, (c) news feed aggregation pattern untuk `sentiment/engine.py`, (d) cross-stream correlation concept untuk `intelligence/relationship.py`. Pelajari algoritma CII dan 7-signal composite, implementasi ulang di Python.
+- **Cara adopsi:** **Referensi arsitektur**, bukan raw copy (Next.js + Tauri, beda stack dengan `global` yang Python/Next.js). Yang bernilai: (a) konsep 7-signal market composite untuk `macro.py`, (b) CII scoring untuk risk assessment geopolitik, (c) news feed aggregation pattern untuk `sentiment/engine.py`, (d) cross-stream correlation concept untuk `analysis/relationship.py`. Pelajari algoritma CII dan 7-signal composite, implementasi ulang di Python.
 - **Estimasi usaha:** Tinggi (reverse engineer algoritma + re-implement di Python)
 - **Mengatasi:** §4.1 (global market data), §5.4 (geopolitical risk), fitur baru macro intelligence
 
@@ -614,9 +614,9 @@ Dibanding platform di atas, **diferensiasi** sistem ini adalah: fokus IDX end-to
 
 - **Sumber:** `C:\xampp\htdocs\TIP\python\engines\lead_lag.py` (166 baris)
 - **Mengapa perlu diambil:** Tidak ada analisis lead-lag di `global`. Modul ini: (1) **Cross-correlation** antar instrumen pada berbagai offset (−10 sampai +10 hari), (2) Identifikasi **leader vs follower** (saham yang bergerak lebih dulu), (3) **Significance test** (threshold korelasi 0.3), (4) Batch analysis untuk multiple pairs. Research tool untuk memahami rantai transmisi (mis: DXY → IHSG → saham individual).
-- **Cara adopsi:** **Raw copy** ke `src/trading_system/intelligence/lead_lag.py`. Murni numpy, tidak ada dependency DB. Integrasi dengan `intelligence/relationship.py` yang sudah ada. Output: pasangan leader-follower + offset hari.
+- **Cara adopsi:** **Raw copy** ke `src/trading_system/analysis/lead_lag.py`. Murni numpy, tidak ada dependency DB. Integrasi dengan `analysis/relationship.py` yang sudah ada. Output: pasangan leader-follower + offset hari.
 - **Estimasi usaha:** Rendah (raw copy, fungsi murni numpy)
-- **Mengatasi:** Fitur baru, melengkapi intelligence layer dengan analisis rantai transmisi
+- **Mengatasi:** Fitur baru, melengkapi analysis layer dengan analisis rantai transmisi
 
 #### CC. Data Quality Engine (OHLCV Validation)
 
@@ -815,7 +815,7 @@ docs/
 
 ### 9.7 Catatan Teknis Adopsi
 
-- **Konversi database:** Semua scraper di `data_pasar_modal` memakai MySQL via `subprocess.run(['/opt/lampp/bin/mysql', ...])`. Untuk adopsi ke `global` (SQLite), ganti dengan `sqlite3` atau `sqlalchemy` yang sudah dipakai di `data/storage.py`. Hapus dependency `cloudscraper`, ganti dengan `httpx` (sudah di `requirements.txt`). Tambahkan `User-Agent` header dan retry logic.
+- **Konversi database:** Semua scraper di `data_pasar_modal` memakai MySQL via `subprocess.run(['/opt/lampp/bin/mysql', ...])`. Untuk adopsi ke `global` (SQLite), ganti dengan `sqlite3` atau `sqlalchemy` yang sudah dipakai di `data/storage.py`. Hapus dependency `cloudscraper`, ganti dengan `httpx` (sudah di `pyproject.toml`). Tambahkan `User-Agent` header dan retry logic.
 - **Konversi import path:** Modul `swing` memakai `from modules.xxx import Yyy` dan `from utils.database_helper import db_helper`. Untuk adopsi, ubah ke `from trading_system.xxx import Yyy` dan gunakan `DataStorage` dari `data/storage.py`.
 - **Konversi config:** `swing` memakai `from config import STRATEGY_CONFIG, TELEGRAM_CONFIG, ...`. Ubah ke `trading_system.config` yang sudah ada, atau tambahkan key baru ke `config.py`.
 - **Dependency baru:** `pdfplumber` (untuk G, O), `mlflow` opsional (untuk L, fallback file-based sudah ada), `python-telegram-bot` (untuk P, opsional jika Telegram dua arah §8.4 #4), `tensorflow` (untuk S, opsional dengan flag `DL_AVAILABLE`), `scikit-learn` sudah ada (untuk T, U, V).
@@ -1195,7 +1195,7 @@ Layer 6: Tools & Utilities — ✅ SELESAI (independent) │
 | # | Item | Aksi | Mengapa |
 |---|------|------|---------|
 | **1** | Clone repo GitHub yang belum lokal | ✅ Selesai | `trading-otomatis-indonesia`, `AI_Trading`, `belajar_saham`, `worldmonitor` sudah ada di `C:\xampp\htdocs\` |
-| **2** | Analisa `AI_Trading` lebih dalam | ✅ Selesai | Repo hanya berisi README + requirements.txt — tidak ada folder `src/` atau kode actual. Tidak ada komponen yang bisa diekstrak. |
+| **2** | Analisa `AI_Trading` lebih dalam | ✅ Selesai | Repo hanya berisi README + pyproject.toml — tidak ada folder `src/` atau kode actual. Tidak ada komponen yang bisa diekstrak. |
 | **3** | Schema migration plan untuk tabel baru | ✅ Selesai | Alembic `0002_d1_d31_tables.py` + SCHEMA di `storage.py` — 18 tabel D1–D31 dibuat |
 | **4** | Mapping Parquet → SQLite schema | ✅ Selesai | `docs/MAPPING_PARQUET_SQLITE.md` — mapping kolom per tabel untuk 18 tabel D1–D31 + OHLCV, transformasi umum, prioritas import |
 | **5** | Test plan per komponen | ✅ Selesai | `docs/TEST_PLAN.md` — test plan untuk semua komponen A–FF, 6 layer, 155 test cases |

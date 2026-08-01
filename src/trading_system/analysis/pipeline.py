@@ -15,7 +15,7 @@ from trading_system.data.acquisition import YahooFinanceAdapter, normalize_ohlcv
 from trading_system.data.archive import ArchiveAdapter
 from trading_system.data.storage import DataStorage
 from trading_system.data.validation import DataQualityValidator
-from trading_system.intelligence.relationship import MarketRelationshipEngine
+from trading_system.analysis.relationship import MarketRelationshipEngine
 from trading_system.sentiment.engine import SentimentEngine
 
 

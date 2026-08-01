@@ -184,7 +184,7 @@ Sistem ini dirancang bukan sebagai **pembuat sinyal sederhana**, melainkan sebag
 
 - `relationship_matrix` (pasangan aset → koefisien korelasi/lag/beta, per rolling window)
 - `influence_score` per ticker/sektor (seberapa besar dipengaruhi pasar global tertentu)
-- Event `intelligence.relationship.updated`
+- Event `analysis.relationship.updated`
 
 **Fungsi Utama:**
 
@@ -683,7 +683,7 @@ Sistem ini dirancang bukan sebagai **pembuat sinyal sederhana**, melainkan sebag
 
 - **Upstream:** Semua engine di Analysis Layer & Intelligence Layer (skor), Risk Engine (filter), AI Learning Engine (bobot faktor)
 - **Downstream:** Portfolio Engine, Execution Engine, Explainable AI Engine, Presentation Layer (Dashboard/Alerts)
-- **Event Bus:** konsumsi `analysis.*.score`, `intelligence.relationship.updated`, `risk.assessment.completed`; publikasi `decision.recommendation.created`
+- **Event Bus:** konsumsi `analysis.*.score`, `analysis.relationship.updated`, `risk.assessment.completed`; publikasi `decision.recommendation.created`
 
 ---
 
@@ -1044,10 +1044,10 @@ Alur berikut menggambarkan bagaimana satu siklus keputusan terbentuk, dari data 
         │
         ▼
 [5] Market Relationship Engine (mengonsumsi data.clean.* + analysis.macro.regime)
-        │  → intelligence.relationship.updated
+        │  → analysis.relationship.updated
         ▼
 [6] Decision Engine
-        │  - collect_scores() dari semua event analysis.*.score + intelligence.relationship.updated
+        │  - collect_scores() dari semua event analysis.*.score + analysis.relationship.updated
         │  - apply_regime_filter()
         │  - kirim kandidat ke Risk Engine
         ▼

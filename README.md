@@ -7,9 +7,8 @@ Sistem operasi pengambilan keputusan investasi berbasis Multi-Factor Analysis, R
 ```
 src/trading_system/
   data/           # Acquisition, Validation, Storage, Seeder, Contracts
-  analysis/       # Technical, Fundamental, Macro, Global Market, Pipeline
+  analysis/       # Technical, Fundamental, Macro, Global Market, Pipeline, Market Relationship
   sentiment/      # Engine (NLP), Foreign Flow, Broker Summary, Social Media, Google Trends
-  intelligence/   # Market Relationship (cross-asset correlation)
   corporate/      # Corporate Actions (split, dividend)
   backtest/       # Engine, Strategies, Metrics (Monte Carlo, Walk-Forward)
   risk/           # Risk Engine (VaR, CVaR, position sizing, drawdown)
@@ -34,7 +33,7 @@ src/trading_system/
 cd C:\xampp\htdocs\global
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ### Linux / macOS
@@ -43,7 +42,16 @@ pip install -r requirements.txt
 cd /opt/lampp/htdocs/global
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
+```
+
+### Using uv (recommended - faster)
+
+```bash
+cd /opt/lampp/htdocs/global
+uv venv
+source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+uv sync
 ```
 
 ## Run

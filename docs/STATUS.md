@@ -160,7 +160,7 @@
 | Fundamental Analysis | `analysis/fundamental.py` | 🔧 Partial | P/E, P/B, ROE, Debt/Equity, Dividend Yield via yfinance; DCF/Z-Score belum |
 | Macro Economic | `analysis/macro.py` | ✅ Done | Proxy via US10Y, GOLD, OIL, USD/IDR, DXY; regime detection |
 | Global Market | `analysis/global_market.py` | ✅ Done | Correlation dengan S&P500, Nikkei, CSI300, STOXX600 |
-| Market Relationship | `intelligence/relationship.py` | ✅ Done | Rolling correlation, lag analysis, lead/lag matrix |
+| Market Relationship | `analysis/relationship.py` | ✅ Done | Rolling correlation, lag analysis, lead/lag matrix |
 | Analysis Pipeline | `analysis/pipeline.py` | ✅ Done | Orchestration semua engine, parallel execution |
 
 ## Sentiment Layer

@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 
 from trading_system.data.storage import DataStorage
 from trading_system.decision.engine import DecisionEngine
+from trading_system.execution import get_execution_engine
 from trading_system.execution.engine import ExecutionEngine
 from trading_system.portfolio.engine import PortfolioEngine
 
@@ -21,7 +22,8 @@ class PaperTradingEngine:
         self.storage = storage or DataStorage()
         self.cash = cash
         self.portfolio = PortfolioEngine(storage, cash)
-        self.execution = ExecutionEngine()
+        self.execution = ExecutionEngine()  # Keep for cost calculations
+        self.trading_executor = get_execution_engine(storage, cash, mode="paper")  # New shared interface
 
     def simulate(self, ticker: str) -> dict:
         decision = DecisionEngine(self.storage).recommend(ticker)

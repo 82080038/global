@@ -260,7 +260,7 @@ Implementasi temuan P0/P1 dari `docs/SARAN_PENGEMBANGAN.md`.
 - Database migration: Alembic setup (`alembic.ini`, `alembic/env.py`, initial migration) dengan SQLite batch mode support
 - Frontend: 3 halaman baru — Backtest (`/backtest`), Portfolio (`/portfolio`), Audit Log (`/audit`)
 - TerminalLayout: tambah nav links untuk Backtest, Portfolio, Audit Log
-- `alembic` ditambahkan ke requirements.txt
+- `alembic` ditambahkan ke pyproject.toml
 
 ### Changed
 
@@ -293,7 +293,7 @@ Implementasi temuan P0/P1 dari `docs/SARAN_PENGEMBANGAN.md`.
 
 ### Removed
 
-- `plotly` dari requirements.txt (tidak digunakan)
+- `plotly` dari pyproject.toml (tidak digunakan)
 
 ---
 

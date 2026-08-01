@@ -38,7 +38,7 @@ from trading_system.analysis.fundamental import FundamentalAnalysisEngine
 from trading_system.analysis.technical import TechnicalAnalysisEngine
 from trading_system.config import DEFAULT_BENCHMARK, DEFAULT_GLOBAL_TICKERS, DEFAULT_MACRO_TICKERS
 from trading_system.data.storage import DataStorage
-from trading_system.intelligence.relationship import MarketRelationshipEngine
+from trading_system.analysis.relationship import MarketRelationshipEngine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("precompute")

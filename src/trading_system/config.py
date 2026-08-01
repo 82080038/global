@@ -68,6 +68,10 @@ def _safe_float(env_key: str, default: str) -> float:
 # nilai ini alih-alih hard-code angka modal sendiri-sendiri.
 TRADING_CAPITAL = _safe_float("TRADING_CAPITAL", "100000000")
 
+# Mode eksekusi trading: "paper" (simulasi) atau "real" (eksekusi nyata)
+# Default: "paper" untuk keamanan. Set ke "real" untuk eksekusi via broker API.
+TRADING_MODE = os.getenv("TRADING_MODE", "paper").lower()
+
 # Ambang konviksi di bawah mana posisi terbuka harus di-exit (SELL), meskipun
 # harga belum menyentuh stop-loss/take-profit (§2.3 SARAN_PENGEMBANGAN.md).
 EXIT_CONVICTION_THRESHOLD = _safe_float("EXIT_CONVICTION_THRESHOLD", "40")

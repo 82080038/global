@@ -14,6 +14,7 @@ from trading_system.ai_learning.engine import AILearningEngine
 from trading_system.config import EXIT_CONVICTION_THRESHOLD, TRADING_CAPITAL
 from trading_system.data.storage import DataStorage
 from trading_system.risk.engine import RiskEngine
+from trading_system.xai.engine import ExplainableAIEngine
 
 DEFAULT_WEIGHTS = {
     "technical": 0.20,
@@ -32,6 +33,7 @@ class DecisionEngine:
         self.storage = storage or DataStorage()
         self.risk = RiskEngine(storage)
         self.ai_learning = AILearningEngine(storage)
+        self.xai = ExplainableAIEngine(storage)
 
     def load_latest_scores(self, ticker: str) -> dict:
         df = self.storage.load_scores(ticker)
@@ -230,6 +232,10 @@ class DecisionEngine:
                 )
             except Exception:
                 pass
+
+        # Generate XAI explanation for the recommendation
+        explanation = self.xai.explain(ticker, recommendation)
+        recommendation["explanation"] = explanation
 
         return {
             "status": "ok",

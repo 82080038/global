@@ -16,7 +16,7 @@ from trading_system.data.acquisition import YahooFinanceAdapter, normalize_ohlcv
 from trading_system.data.storage import DataStorage
 from trading_system.data.validation import DataQualityValidator
 from trading_system.decision.engine import DecisionEngine
-from trading_system.intelligence.relationship import MarketRelationshipEngine
+from trading_system.analysis.relationship import MarketRelationshipEngine
 from trading_system.monitoring.engine import MonitoringEngine
 from trading_system.paper_trading.engine import PaperTradingEngine
 from trading_system.xai.engine import ExplainableAIEngine
