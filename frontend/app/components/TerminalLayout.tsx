@@ -7,7 +7,7 @@ export default function TerminalLayout({
   children,
   ticker = "BBCA.JK",
 }: {
-  active: "dashboard" | "engines" | "backtest" | "portfolio" | "audit" | "replay";
+  active: "dashboard" | "engines" | "backtest" | "portfolio" | "audit" | "replay" | "simulation";
   children: React.ReactNode;
   ticker?: string;
 }) {
@@ -49,6 +49,16 @@ export default function TerminalLayout({
             }
           >
             ENGINES
+          </a>
+          <a
+            href="/simulation"
+            className={
+              active === "simulation"
+                ? "text-zinc-100"
+                : "text-zinc-400 hover:text-zinc-100"
+            }
+          >
+            SIMULATION
           </a>
         </div>
       </header>
@@ -109,6 +119,15 @@ export default function TerminalLayout({
               }`}
           >
             Replay Sim
+          </a>
+          <a
+            href="/simulation"
+            className={`block rounded px-2 py-1 ${active === "simulation"
+              ? "bg-zinc-800 text-zinc-100"
+              : "text-zinc-300 hover:bg-zinc-800"
+              }`}
+          >
+            Simulation
           </a>
           <div className="mt-6 px-2 py-1 text-zinc-500">SYSTEM</div>
           <div className="px-2 py-1 text-zinc-400">v0.1.7</div>

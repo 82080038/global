@@ -245,7 +245,7 @@
 
 | Modul | File | Status | Catatan |
 |-------|------|--------|---------|
-| FastAPI App | `api/app.py` | ✅ Done | 63 REST endpoints (48 core + 15 extended), WebSocket, runtime toggles, engine registry, SanitizedJSONResponse |
+| FastAPI App | `api/app.py` | ✅ Done | 78 REST endpoints (63 core + 15 extended), WebSocket, runtime toggles, engine registry, SanitizedJSONResponse |
 
 ## Frontend
 

@@ -1094,7 +1094,7 @@ Alur berikut menggambarkan bagaimana satu siklus keputusan terbentuk, dari data 
 | `analysis.global.score` | Global Market Engine | Decision Engine, Market Relationship Engine |
 | `analysis.sentiment.score` | News & Sentiment Engine | Decision Engine, XAI Engine |
 | `analysis.corporate_action.updated` | Corporate Action Engine | Fundamental/Technical Analysis Engine, Portfolio Engine |
-| `intelligence.relationship.updated` | Market Relationship Engine | Decision Engine, XAI Engine |
+| `analysis.relationship.updated` | Market Relationship Engine | Decision Engine, XAI Engine |
 | `risk.assessment.completed` | Risk Engine | Decision Engine, Portfolio Engine |
 | `decision.recommendation.created` | Decision Engine | Portfolio Engine, XAI Engine, Presentation Layer, Paper Trading Module |
 | `portfolio.rebalance.generated` | Portfolio Engine | Execution Engine |

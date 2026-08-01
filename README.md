@@ -6,7 +6,7 @@ Sistem operasi pengambilan keputusan investasi berbasis Multi-Factor Analysis, R
 
 ```
 src/trading_system/
-  data/           # Acquisition, Validation, Storage (78 tables), Extended Storage, Archive, Rate Limit, IDX Scraper
+  data/           # Acquisition, Validation, Storage (95 tables), Extended Storage, Archive, Rate Limit, IDX Scraper
   analysis/       # Technical, Advanced Technical, Fundamental (+fallback), Macro, Global Market, Pipeline, Relationship, Regime, Enhanced Regime, Red Flags, Screener, Factor Screener, Factor Engine, Manipulation, No-Trade, Order Book, World Monitor, Liquidity Filter, Pattern Reliability, Attribution, Alpha Composer/Validation, Cross-Asset, Lead-Lag
   sentiment/      # Engine (6 sumber: NLP, Foreign Flow, Broker, Social Media, Google Trends, IDX Historical)
   corporate/      # Corporate Actions (split, dividend)

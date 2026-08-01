@@ -140,7 +140,7 @@ global/
 │   ├── data/                    # Data layer (12 modul)
 │   │   ├── acquisition.py       #   Yahoo Finance adapter + rate limiting
 │   │   ├── validation.py        #   Data quality validator (tier A/B/C)
-│   │   ├── storage.py           #   SQLite storage (78 tables, full CRUD)
+│   │   ├── storage.py           #   SQLite storage (95 tables, full CRUD)
 │   │   ├── extended_storage.py  #   Read-only access ke 14 tabel import MySQL
 │   │   ├── archive.py           #   Parquet archive adapter
 │   │   ├── rate_limit.py        #   YFinance rate limiter + circuit breaker
@@ -203,9 +203,10 @@ global/
 │   │   ├── engine.py            #   Manual execution
 │   │   ├── automated.py         #   Robot trader (auto-trade)
 │   │   ├── broker_adapter.py    #   Broker adapter (Mock + Sinarmas/BNI)
-│   │   ├── paper.py             #   Paper execution
+│   │   ├── paper_execution.py   #   Paper execution engine (simulasi)
+│   │   ├── real_execution.py    #   Real execution engine via broker API
 │   │   ├── tax.py               #   Indonesia tax calculator
-│   │   └── interface.py         #   Execution interface
+│   │   └── interface.py         #   TradingInterface abstract base class
 │   ├── decision/                # Decision engine
 │   │   └── engine.py            #   Multi-factor weighted scoring
 │   ├── ai_learning/             # AI weight optimization (7 modul)
@@ -276,7 +277,7 @@ global/
 │   └── start_production.bat     #   Windows startup script
 │
 ├── data/                        # DATA (gitignored, kecuali .gitkeep)
-│   ├── trading_system.db        #   SQLite database (78 tables)
+│   ├── trading_system.db        #   SQLite database (95 tables)
 │   ├── raw/                     #   Raw data zone
 │   ├── clean/                   #   Clean data zone
 │   └── archive/                 #   Parquet archive (permanent storage)
@@ -522,7 +523,7 @@ Diimport dari `data_pasar_modal` dan `idx_complete_data` via `scripts/import_mys
 
 `saham_snapshot`, `idx_sentiment_data`, `shareholders`, `company_directors`, `idx_financial_statements`, `idx_market_indices`, `broker_summary`, `pattern_reliability`, `pattern_candidates`, `advanced_features`, `ai_scores_history`, `idx_social_media_sentiment`, `idx_stock_splits`, `idx_quarterly_earnings`
 
-### Tabel Tambahan (31 tabel)
+### Tabel Tambahan (48 tabel)
 
 Dibuat oleh Alembic migrations, seeder, atau modul tambahan:
 
@@ -543,7 +544,7 @@ Dibuat oleh Alembic migrations, seeder, atau modul tambahan:
 
 **Base URL:** `http://localhost:8000`
 **Swagger docs:** `http://localhost:8000/docs`
-**Total:** 63 REST endpoints (48 core + 15 extended) + 1 WebSocket
+**Total:** 78 REST endpoints (63 core + 15 extended) + 1 WebSocket
 
 ### Read (GET) — tidak butuh API key di dev mode
 

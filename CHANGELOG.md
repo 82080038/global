@@ -158,7 +158,7 @@ Complete CRUD operations, frontend-backend integration fixes, lint cleanup, secu
 - **PATCH `/api/positions/{position_id}`** endpoint for updating position fields (stop_loss, take_profit, status, etc.).
 - **PUT `/api/watchlist/{ticker}`** endpoint for updating watchlist notes/favorite status.
 - **PUT `/api/system-state/{key}`** + **GET `/api/system-state/{key}`** endpoints for circuit breaker flags and runtime state.
-- Total API routes: **63 REST** (47 GET/POST + 12 DELETE + 4 PATCH/PUT/GET update) + 1 WebSocket.
+- Total API routes: **78 REST** (62 GET/POST + 12 DELETE + 4 PATCH/PUT/GET update) + 1 WebSocket.
 
 ### Fixed — Security Hardening
 
