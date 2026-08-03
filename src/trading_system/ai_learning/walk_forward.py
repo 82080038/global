@@ -109,7 +109,7 @@ class WalkForwardValidator:
         if len(all_preds) > 0:
             oos_mse = float(np.mean((all_preds - all_acts) ** 2))
             oos_mae = float(np.mean(np.abs(all_preds - all_acts)))
-            correlation = float(np.corrcoef(all_preds, all_acts)[0, 1]) if np.std(all_preds) > 0 else 0.0
+            correlation = float(np.corrcoef(all_preds, all_acts)[0, 1]) if np.std(all_preds) > 0 and not np.isnan(np.std(all_preds)) else 0.0
         else:
             oos_mse = 0.0
             oos_mae = 0.0

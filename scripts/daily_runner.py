@@ -29,11 +29,24 @@ logger = logging.getLogger("daily_runner")
 
 
 def get_watchlist() -> list[str]:
-    """Load tickers from env or return default watchlist."""
+    """Load tickers from env, or return all active IDX stock tickers from DB.
+    
+    Priority:
+    1. DAILY_RUNNER_TICKERS env var (comma-separated)
+    2. All active equity tickers from instrument_master (with .JK suffix)
+    """
     env_tickers = os.getenv("DAILY_RUNNER_TICKERS")
     if env_tickers:
         return [t.strip() for t in env_tickers.split(",") if t.strip()]
-    return ["BBCA.JK", "TLKM.JK", "ASII.JK", "UNVR.JK"]
+    
+    # Load all active IDX stocks from instrument_master
+    from trading_system.data.storage import DataStorage
+    storage = DataStorage()
+    codes = storage.load_idx_stock_tickers(active_only=True)
+    # Append .JK suffix for yfinance compatibility
+    tickers = [f"{c}.JK" if "." not in c else c for c in codes]
+    logger.info(f"Loaded {len(tickers)} active IDX stock tickers from instrument_master")
+    return tickers
 
 
 def fetch_and_validate(tickers: list[str]) -> dict:
@@ -60,7 +73,7 @@ def fetch_and_validate(tickers: list[str]) -> dict:
                 last_ts = str(existing.index[-1])[:10]
                 if last_ts >= today:
                     logger.info(f"  {ticker}: Already up to date ({last_ts})")
-                    results[ticker] = {"status": "ok", "rows": 0, "reason": "up_to_date"}
+                    results[ticker] = {"status": "up_to_date", "rows": 0, "reason": "already_current"}
                     continue
                 # 2. Coba Parquet archive untuk data incremental
                 arch_df = archive.load_ohlcv(ticker, start=last_ts)
@@ -241,26 +254,36 @@ def daily_job() -> None:
     logger.info("=" * 60)
     logger.info("🔄 Memulai daily update...")
     tickers = get_watchlist()
-    logger.info(f"Watchlist: {tickers}")
+    logger.info(f"Watchlist: {len(tickers)} tickers")
+    if len(tickers) <= 10:
+        logger.info(f"  {tickers}")
 
     # Step 1: Fetch & validate OHLCV
     logger.info("─" * 40)
-    logger.info("Step 1: Fetch & Validate OHLCV")
+    logger.info(f"Step 1: Fetch & Validate OHLCV ({len(tickers)} tickers)")
     fetch_results = fetch_and_validate(tickers)
     ok_count = sum(1 for r in fetch_results.values() if r["status"] == "ok")
     logger.info(f"Fetch complete: {ok_count}/{len(tickers)} succeeded")
 
-    # Step 2: Compute scores
+    # Step 2: Compute scores (only for tickers with fresh data)
     logger.info("─" * 40)
-    logger.info("Step 2: Compute Analysis Scores")
-    for ticker in tickers:
+    logger.info(f"Step 2: Compute Analysis Scores")
+    scored = 0
+    for i, ticker in enumerate(tickers):
         if fetch_results.get(ticker, {}).get("status") == "ok":
             compute_scores_for_ticker(ticker)
+            scored += 1
+        if (i + 1) % 100 == 0:
+            logger.info(f"  Scored {i+1}/{len(tickers)} ({scored} with fresh data)")
 
-    # Step 3: Generate recommendations
+    # Step 3: Generate recommendations for all active tickers with scores
     logger.info("─" * 40)
     logger.info("Step 3: Generate Recommendations")
-    recommendations = generate_recommendations(tickers)
+    # Only generate recommendations for tickers that have fresh scores
+    # (fetch_results status=ok means data was updated today)
+    rec_tickers = [t for t in tickers if fetch_results.get(t, {}).get("status") == "ok"]
+    logger.info(f"  Generating recommendations for {len(rec_tickers)} tickers with fresh data")
+    recommendations = generate_recommendations(rec_tickers)
 
     # Step 4: Run automated execution (monitoring mode by default)
     logger.info("─" * 40)
@@ -277,9 +300,41 @@ def daily_job() -> None:
     logger.info("Step 6: Performance Snapshot")
     save_performance_snapshot()
 
-    # Step 7: Send notifications
+    # Step 7: Render supplementary data (macro, sentiment, patterns, etc.)
     logger.info("─" * 40)
-    logger.info("Step 7: Send Notifications")
+    logger.info("Step 7: Render Supplementary Data")
+    try:
+        from trading_system.data.storage import DataStorage as _DS
+        supp_storage = _DS()
+        supp_tasks = [
+            "macro_data", "fear_greed", "pattern_analysis",
+            "stock_personality", "market_calendar", "sector_master",
+            "external_events", "policy_events",
+        ]
+        for task_name in supp_tasks:
+            try:
+                # Import render function dynamically
+                import importlib.util
+                spec = importlib.util.spec_from_file_location(
+                    "render_data",
+                    Path(__file__).parent / "render_data.py",
+                )
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+
+                func_name = f"render_{task_name}"
+                func = getattr(mod, func_name, None)
+                if func:
+                    count = func(supp_storage, tickers, dry_run=False)
+                    logger.info(f"  {task_name}: {count} records")
+            except Exception as e:
+                logger.warning(f"  {task_name}: {e}")
+    except Exception as e:
+        logger.error(f"Supplementary render failed: {e}")
+
+    # Step 8: Send notifications
+    logger.info("─" * 40)
+    logger.info("Step 8: Send Notifications")
     send_notifications(recommendations)
 
     logger.info("=" * 60)

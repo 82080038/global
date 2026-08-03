@@ -23,34 +23,72 @@ class MarketRelationshipEngine:
         df = self.storage.load_ohlcv(ticker)
         if df.empty:
             return pd.Series(dtype=float)
+        # Normalize timezone: strip tz info agar index konsisten antara
+        # saham IDX (tz-aware Asia/Jakarta) dan global tickers (tz-naive)
+        if df.index.tz is not None:
+            df.index = df.index.tz_localize(None)
         return df["close"].pct_change().dropna()
 
     def lag_analysis(self, a: pd.Series, b: pd.Series, max_lag: int = 5) -> tuple[int, float]:
         """Return lag yang memberikan korelasi tertinggi (a vs b shift)."""
+        # Normalize timezones sebelum intersection
+        if a.index.tz is not None:
+            a = a.copy()
+            a.index = a.index.tz_localize(None)
+        if b.index.tz is not None:
+            b = b.copy()
+            b.index = b.index.tz_localize(None)
+        # Remove duplicates dan sort
+        a = a[~a.index.duplicated(keep="last")].sort_index()
+        b = b[~b.index.duplicated(keep="last")].sort_index()
         common = a.index.intersection(b.index)
-        x = a.loc[common]
+        if len(common) < 10:
+            return 0, 0.0
+        x = a.reindex(common)
         best_corr = -np.inf
         best_lag = 0
         for lag in range(-max_lag, max_lag + 1):
-            y = b.shift(lag).loc[common]
+            y = b.shift(lag).reindex(common)
             valid = x.notna() & y.notna()
             if valid.sum() < 10:
                 continue
-            corr = x[valid].corr(y[valid])
+            xv = x[valid]
+            yv = y[valid]
+            if xv.std() < 1e-12 or yv.std() < 1e-12:
+                continue
+            corr = xv.corr(yv)
             if not np.isnan(corr) and corr > best_corr:
                 best_corr = corr
                 best_lag = lag
         return best_lag, float(best_corr) if not np.isnan(best_corr) else 0.0
 
     def rolling_correlation(self, a: pd.Series, b: pd.Series) -> float:
+        # Normalize timezones sebelum intersection
+        if a.index.tz is not None:
+            a = a.copy()
+            a.index = a.index.tz_localize(None)
+        if b.index.tz is not None:
+            b = b.copy()
+            b.index = b.index.tz_localize(None)
+        # Remove duplicates dan sort
+        a = a[~a.index.duplicated(keep="last")].sort_index()
+        b = b[~b.index.duplicated(keep="last")].sort_index()
         common = a.index.intersection(b.index)
         if len(common) < self.window:
             return 0.0
-        x = a.loc[common].iloc[-self.window:]
-        y = b.loc[common].iloc[-self.window:]
+        x = a.reindex(common).iloc[-self.window:]
+        y = b.reindex(common).iloc[-self.window:]
         if x.empty or y.empty:
             return 0.0
-        corr = x.corr(y)
+        # Drop NaN and check for constant series
+        valid = x.notna() & y.notna()
+        if valid.sum() < 5:
+            return 0.0
+        xv = x[valid]
+        yv = y[valid]
+        if xv.std() < 1e-12 or yv.std() < 1e-12:
+            return 0.0
+        corr = xv.corr(yv)
         return float(corr) if not np.isnan(corr) else 0.0
 
     def compute(self, ticker: str) -> dict:

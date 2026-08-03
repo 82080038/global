@@ -53,9 +53,9 @@ class YFinanceRateLimiter:
     """Configurable rate limiter for yfinance requests.
 
     Env vars:
-        YFINANCE_MIN_DELAY: minimum delay between requests in seconds (default: 2.0)
-        YFINANCE_MAX_DELAY: maximum delay (jitter upper bound) in seconds (default: 5.0)
-        YFINANCE_MAX_REQUESTS: max requests per sliding window (default: 100)
+        YFINANCE_MIN_DELAY: minimum delay between requests in seconds (default: 0.3)
+        YFINANCE_MAX_DELAY: maximum delay (jitter upper bound) in seconds (default: 1.0)
+        YFINANCE_MAX_REQUESTS: max requests per sliding window (default: 2000)
         YFINANCE_WINDOW_SECONDS: sliding window size in seconds (default: 3600)
         YFINANCE_MAX_RETRIES: max retry attempts per symbol (default: 3)
         YFINANCE_BACKOFF_BASE: exponential backoff base in seconds (default: 2.0)
@@ -66,9 +66,9 @@ class YFinanceRateLimiter:
 
     def __init__(
         self,
-        min_delay: float = 2.0,
-        max_delay: float = 5.0,
-        max_requests: int = 100,
+        min_delay: float = 0.3,
+        max_delay: float = 1.0,
+        max_requests: int = 2000,
         window_seconds: int = 3600,
         max_retries: int = 3,
         backoff_base: float = 2.0,
@@ -96,9 +96,9 @@ class YFinanceRateLimiter:
     @classmethod
     def from_env(cls) -> YFinanceRateLimiter:
         return cls(
-            min_delay=float(os.getenv("YFINANCE_MIN_DELAY", "2.0")),
-            max_delay=float(os.getenv("YFINANCE_MAX_DELAY", "5.0")),
-            max_requests=int(os.getenv("YFINANCE_MAX_REQUESTS", "100")),
+            min_delay=float(os.getenv("YFINANCE_MIN_DELAY", "0.3")),
+            max_delay=float(os.getenv("YFINANCE_MAX_DELAY", "1.0")),
+            max_requests=int(os.getenv("YFINANCE_MAX_REQUESTS", "2000")),
             window_seconds=int(os.getenv("YFINANCE_WINDOW_SECONDS", "3600")),
             max_retries=int(os.getenv("YFINANCE_MAX_RETRIES", "3")),
             backoff_base=float(os.getenv("YFINANCE_BACKOFF_BASE", "2.0")),

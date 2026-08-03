@@ -5,7 +5,7 @@ Nantinya dapat diganti TimescaleDB/InfluxDB tanpa mengubah kontrak fungsi.
 
 import sqlite3
 from contextlib import contextmanager
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +64,15 @@ CREATE TABLE IF NOT EXISTS relationship_matrix (
     lag INTEGER,
     updated_at TEXT,
     PRIMARY KEY (asset_a, asset_b, window)
+);
+
+CREATE TABLE IF NOT EXISTS render_log (
+    ticker TEXT NOT NULL,
+    table_name TEXT NOT NULL,
+    last_rendered TEXT NOT NULL,
+    rows_rendered INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'ok',
+    PRIMARY KEY (ticker, table_name)
 );
 
 CREATE TABLE IF NOT EXISTS corporate_actions (
@@ -182,7 +191,7 @@ CREATE TABLE IF NOT EXISTS instrument_master (
     ticker TEXT PRIMARY KEY, name TEXT, sector TEXT, subsector TEXT,
     exchange TEXT, listing_date TEXT, delisting_date TEXT,
     is_active INTEGER DEFAULT 1, board TEXT, market_cap REAL,
-    free_float REAL, updated_at TEXT
+    free_float REAL, asset_class TEXT DEFAULT 'equity', updated_at TEXT
 );
 CREATE TABLE IF NOT EXISTS fundamental_data (
     ticker TEXT, date TEXT, pe_ratio REAL, pb_ratio REAL, roe REAL,
@@ -216,34 +225,43 @@ CREATE TABLE IF NOT EXISTS dividends (
     PRIMARY KEY (ticker, ex_date, source)
 );
 CREATE TABLE IF NOT EXISTS sector_master (
-    sector_code TEXT PRIMARY KEY, sector_name TEXT, parent_sector TEXT,
-    description TEXT, updated_at TEXT
+    id INTEGER PRIMARY KEY AUTOINCREMENT, kode TEXT, nama TEXT,
+    deskripsi TEXT, created_at TEXT, updated_at TEXT
 );
 CREATE TABLE IF NOT EXISTS market_calendar (
     date TEXT PRIMARY KEY, exchange TEXT, is_trading_day INTEGER DEFAULT 1,
     holiday_name TEXT, half_day INTEGER DEFAULT 0, updated_at TEXT
 );
 CREATE TABLE IF NOT EXISTS fear_greed (
-    date TEXT PRIMARY KEY, value REAL, classification TEXT,
-    source TEXT, updated_at TEXT
+    id INTEGER PRIMARY KEY AUTOINCREMENT, tanggal TEXT,
+    nilai INTEGER, label TEXT, created_at TEXT
 );
 CREATE TABLE IF NOT EXISTS external_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, event_type TEXT,
-    description TEXT, region TEXT, impact_level TEXT, source TEXT,
-    created_at TEXT NOT NULL
+    id INTEGER PRIMARY KEY AUTOINCREMENT, tanggal TEXT, kategori TEXT,
+    judul TEXT, lokasi TEXT, dampak_market TEXT, sektor TEXT,
+    deskripsi TEXT, created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS esg_scores (
-    ticker TEXT, date TEXT, e_score REAL, s_score REAL, g_score REAL,
-    esg_score REAL, source TEXT, PRIMARY KEY (ticker, date, source)
+    id INTEGER PRIMARY KEY AUTOINCREMENT, kode TEXT, year INTEGER,
+    rating_agency TEXT, rating TEXT, score REAL, created_at TEXT
 );
 CREATE TABLE IF NOT EXISTS corporate_governance (
-    ticker TEXT, date TEXT, board_size INTEGER, independent_directors INTEGER,
-    audit_committee_quality TEXT, ownership_concentration REAL, source TEXT,
-    PRIMARY KEY (ticker, date, source)
+    id INTEGER PRIMARY KEY AUTOINCREMENT, kode TEXT, year INTEGER,
+    board_commissioners REAL, independent_commissioners REAL,
+    board_directors REAL, audit_committee_meetings REAL,
+    gcg_score TEXT, acgs_score TEXT, has_whistleblowing INTEGER,
+    has_risk_committee INTEGER, created_at TEXT
 );
 CREATE TABLE IF NOT EXISTS stock_personality (
-    ticker TEXT PRIMARY KEY, personality_type TEXT, volatility_profile TEXT,
-    liquidity_profile TEXT, beta REAL, correlation_to_ihsg REAL, updated_at TEXT
+    id INTEGER PRIMARY KEY AUTOINCREMENT, kode TEXT, profile_date TEXT,
+    avg_daily_volatility REAL, volatility_regime TEXT, trend_bias TEXT,
+    trend_strength REAL, avg_uptrend_streak INTEGER, avg_downtrend_streak INTEGER,
+    beta_vs_ihsg REAL, correlation_ihsg REAL, avg_volume REAL,
+    volume_consistency REAL, net_distribution_score REAL, liquidity_score REAL,
+    best_pattern TEXT, best_pattern_winrate REAL, worst_pattern TEXT,
+    worst_pattern_winrate REAL, overall_pattern_winrate REAL,
+    personality_label TEXT, total_patterns_detected INTEGER,
+    total_patterns_success INTEGER, created_at TEXT
 );
 CREATE TABLE IF NOT EXISTS trade_journal (
     id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, entry_date TEXT,
@@ -478,7 +496,49 @@ class DataStorage:
                 """,
                 rows,
             )
-        return len(df)
+        n = len(df)
+
+        # Auto-sync: export updated tickers to Parquet archive
+        self._sync_ohlcv_to_parquet(df)
+
+        return n
+
+    def _sync_ohlcv_to_parquet(self, df: pd.DataFrame) -> None:
+        """Sync updated OHLCV data to Parquet archive (best-effort, non-blocking)."""
+        import os
+        sync_enabled = os.getenv("PARQUET_AUTO_SYNC", "1")
+        if sync_enabled != "1":
+            return
+        try:
+            from trading_system.config import DATA_ARCHIVE_DIR
+            archive_dir = DATA_ARCHIVE_DIR / "ohlcv"
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            # Export full data per ticker (not just the new rows) to keep Parquet complete
+            conn = sqlite3.connect(str(self.db_path))
+            for ticker in df["ticker"].unique():
+                full_df = pd.read_sql_query(
+                    "SELECT * FROM ohlcv WHERE ticker = ? ORDER BY timestamp",
+                    conn,
+                    params=(ticker,),
+                )
+                if full_df.empty:
+                    continue
+                # Delete old per-ticker files
+                base = ticker.replace(".JK", "")
+                for pattern in [f"{ticker}*.parquet", f"{base}*.parquet"]:
+                    for f in archive_dir.glob(pattern):
+                        try:
+                            f.unlink()
+                        except Exception:
+                            pass
+                # Write fresh complete file
+                from datetime import datetime as _dt
+                ts = _dt.now(UTC).strftime("%Y%m%d%H%M%S")
+                out_file = archive_dir / f"{ticker}_{ts}.parquet"
+                full_df.to_parquet(out_file, index=False, compression="snappy")
+            conn.close()
+        except Exception:
+            pass  # non-fatal: Parquet sync is best-effort
 
     def update_adjusted_close(self, ticker: str) -> int:
         """Recompute and persist adjusted_close for a ticker using corporate actions.
@@ -557,7 +617,7 @@ class DataStorage:
         with self._connect() as conn:
             df = pd.read_sql_query(sql, conn, params=params)
         if not df.empty:
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            df["timestamp"] = pd.to_datetime(df["timestamp"], format="mixed", errors="coerce")
             df.set_index("timestamp", inplace=True)
         return df
 
@@ -598,6 +658,47 @@ class DataStorage:
     def get_source_health(self) -> pd.DataFrame:
         with self._connect() as conn:
             return pd.read_sql_query("SELECT * FROM source_health", conn)
+
+    # ---------- Render Log (staleness tracking) ----------
+    def log_render(self, ticker: str, table_name: str, rows: int = 0, status: str = "ok"):
+        """Record that a ticker's table was rendered at the current time."""
+        now = datetime.now(UTC).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO render_log (ticker, table_name, last_rendered, rows_rendered, status)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(ticker, table_name) DO UPDATE SET
+                     last_rendered = excluded.last_rendered,
+                     rows_rendered = excluded.rows_rendered,
+                     status = excluded.status""",
+                (ticker, table_name, now, rows, status),
+            )
+
+    def get_last_rendered(self, ticker: str, table_name: str) -> str | None:
+        """Get ISO timestamp of last render for a ticker/table, or None if never rendered."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT last_rendered FROM render_log WHERE ticker = ? AND table_name = ?",
+                (ticker, table_name),
+            ).fetchone()
+            return row[0] if row else None
+
+    def get_stale_tickers(
+        self, table_name: str, tickers: list[str], max_age_hours: float = 24
+    ) -> list[str]:
+        """Return tickers that haven't been rendered for this table in the last max_age_hours.
+        Tickers with no render_log entry are always considered stale."""
+        from datetime import timedelta
+        cutoff = (datetime.now(UTC) - timedelta(hours=max_age_hours)).isoformat()
+        with self._connect() as conn:
+            rendered = set(
+                r[0]
+                for r in conn.execute(
+                    "SELECT ticker FROM render_log WHERE table_name = ? AND last_rendered >= ?",
+                    (table_name, cutoff),
+                ).fetchall()
+            )
+        return [t for t in tickers if t not in rendered]
 
     # ---------- Audit ----------
     def audit(self, event_type: str, payload: Any, actor: str = "system"):
@@ -1084,3 +1185,466 @@ class DataStorage:
         with self._connect() as conn:
             cursor = conn.execute(sql, params)
             return cursor.rowcount
+
+    # ---------- D1: Instrument Master ----------
+    def save_instrument_master(self, record: dict):
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO instrument_master
+                   (ticker, name, sector, subsector, exchange, listing_date,
+                    delisting_date, is_active, board, market_cap, free_float,
+                    asset_class, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(ticker) DO UPDATE SET
+                     name = COALESCE(excluded.name, instrument_master.name),
+                     sector = COALESCE(excluded.sector, instrument_master.sector),
+                     subsector = COALESCE(excluded.subsector, instrument_master.subsector),
+                     exchange = COALESCE(excluded.exchange, instrument_master.exchange),
+                     listing_date = COALESCE(excluded.listing_date, instrument_master.listing_date),
+                     delisting_date = COALESCE(excluded.delisting_date, instrument_master.delisting_date),
+                     is_active = COALESCE(excluded.is_active, instrument_master.is_active),
+                     board = COALESCE(excluded.board, instrument_master.board),
+                     market_cap = COALESCE(excluded.market_cap, instrument_master.market_cap),
+                     free_float = COALESCE(excluded.free_float, instrument_master.free_float),
+                     asset_class = COALESCE(excluded.asset_class, instrument_master.asset_class),
+                     updated_at = excluded.updated_at""",
+                (
+                    record.get("ticker"),
+                    record.get("name"),
+                    record.get("sector"),
+                    record.get("subsector"),
+                    record.get("exchange", "IDX"),
+                    record.get("listing_date"),
+                    record.get("delisting_date"),
+                    record.get("is_active", 1),
+                    record.get("board"),
+                    record.get("market_cap"),
+                    record.get("free_float"),
+                    record.get("asset_class", "equity"),
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    def load_instrument_master_tickers(self) -> list[str]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT ticker FROM instrument_master").fetchall()
+            return [r[0] for r in rows]
+
+    def load_idx_stock_tickers(self, active_only: bool = True) -> list[str]:
+        """Return tickers for IDX stocks (asset_class='equity'), optionally active only."""
+        with self._connect() as conn:
+            if active_only:
+                rows = conn.execute(
+                    "SELECT ticker FROM instrument_master WHERE asset_class = 'equity' AND (is_active = 1 OR is_active IS NULL)"
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT ticker FROM instrument_master WHERE asset_class = 'equity'"
+                ).fetchall()
+            return [r[0] for r in rows]
+
+    def load_non_equity_tickers(self) -> list[dict]:
+        """Return non-equity tickers (indices, commodities, forex, etfs) for relationship analysis."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT ticker, name, asset_class, exchange FROM instrument_master WHERE asset_class != 'equity'"
+            ).fetchall()
+            return [{"ticker": r[0], "name": r[1], "asset_class": r[2], "exchange": r[3]} for r in rows]
+
+    # ---------- D31: Pattern Analysis ----------
+    def save_pattern_analysis(self, record: dict):
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO pattern_analysis
+                   (ticker, date, pattern_type, confidence, direction, details, source, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    record.get("ticker"),
+                    record.get("date"),
+                    record.get("pattern_type"),
+                    record.get("confidence"),
+                    record.get("direction"),
+                    record.get("details"),
+                    record.get("source", "technical"),
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    # ---------- D2: Fundamental Data ----------
+    def save_fundamental(self, record: dict):
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO fundamental_data
+                   (ticker, date, pe_ratio, pb_ratio, roe, debt_to_equity,
+                    dividend_yield, earnings_per_share, book_value_per_share,
+                    net_profit, revenue, total_assets, total_liabilities,
+                    cash_flow, fiscal_year, quarter, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(ticker, date) DO UPDATE SET
+                     pe_ratio = COALESCE(excluded.pe_ratio, fundamental_data.pe_ratio),
+                     pb_ratio = COALESCE(excluded.pb_ratio, fundamental_data.pb_ratio),
+                     roe = COALESCE(excluded.roe, fundamental_data.roe),
+                     debt_to_equity = COALESCE(excluded.debt_to_equity, fundamental_data.debt_to_equity),
+                     dividend_yield = COALESCE(excluded.dividend_yield, fundamental_data.dividend_yield),
+                     earnings_per_share = COALESCE(excluded.earnings_per_share, fundamental_data.earnings_per_share),
+                     book_value_per_share = COALESCE(excluded.book_value_per_share, fundamental_data.book_value_per_share),
+                     net_profit = COALESCE(excluded.net_profit, fundamental_data.net_profit),
+                     revenue = COALESCE(excluded.revenue, fundamental_data.revenue),
+                     total_assets = COALESCE(excluded.total_assets, fundamental_data.total_assets),
+                     total_liabilities = COALESCE(excluded.total_liabilities, fundamental_data.total_liabilities),
+                     cash_flow = COALESCE(excluded.cash_flow, fundamental_data.cash_flow),
+                     fiscal_year = COALESCE(excluded.fiscal_year, fundamental_data.fiscal_year),
+                     quarter = COALESCE(excluded.quarter, fundamental_data.quarter),
+                     source = COALESCE(excluded.source, fundamental_data.source)""",
+                (
+                    record.get("ticker"),
+                    record.get("date") or record.get("as_of"),
+                    record.get("pe_ratio"),
+                    record.get("pb_ratio"),
+                    record.get("roe"),
+                    record.get("debt_to_equity"),
+                    record.get("dividend_yield"),
+                    record.get("earnings_per_share"),
+                    record.get("book_value_per_share"),
+                    record.get("net_profit"),
+                    record.get("revenue"),
+                    record.get("total_assets"),
+                    record.get("total_liabilities"),
+                    record.get("cash_flow"),
+                    record.get("fiscal_year"),
+                    record.get("quarter"),
+                    record.get("source", "yfinance"),
+                ),
+            )
+
+    # ---------- D4: Foreign Flow ----------
+    def save_foreign_flow(self, record: dict):
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO foreign_flow
+                   (ticker, date, foreign_buy, foreign_sell, foreign_net,
+                    domestic_buy, domestic_sell, domestic_net, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    record.get("ticker") or record.get("kode"),
+                    record.get("date") or record.get("tanggal"),
+                    record.get("foreign_buy"),
+                    record.get("foreign_sell"),
+                    record.get("foreign_net"),
+                    record.get("domestic_buy"),
+                    record.get("domestic_sell"),
+                    record.get("domestic_net"),
+                    record.get("source", "idx_scraper"),
+                ),
+            )
+
+    def load_foreign_flow(
+        self,
+        ticker: str,
+        start: str | None = None,
+        end: str | None = None,
+        source: str = "idx_scraper",
+    ) -> pd.DataFrame:
+        """Load foreign flow data for a ticker from the foreign_flow table.
+
+        Args:
+            ticker: Stock code (without .JK suffix, e.g. 'BBCA').
+            start: Optional start date (YYYY-MM-DD).
+            end: Optional end date (YYYY-MM-DD).
+            source: Filter by source. Default 'idx_scraper' (real IDX data).
+                    Pass None to load all sources.
+
+        Returns:
+            DataFrame sorted by date ascending with columns:
+            ticker, date, foreign_buy, foreign_sell, foreign_net,
+            domestic_buy, domestic_sell, domestic_net, source.
+        """
+        sql = "SELECT * FROM foreign_flow WHERE ticker = ?"
+        params: list = [ticker]
+        if source is not None:
+            sql += " AND source = ?"
+            params.append(source)
+        if start:
+            sql += " AND date >= ?"
+            params.append(start)
+        if end:
+            sql += " AND date <= ?"
+            params.append(end)
+        sql += " ORDER BY date"
+        with self._connect() as conn:
+            return pd.read_sql_query(sql, conn, params=params)
+
+    def load_broker_flow(
+        self,
+        date: str | None = None,
+        source: str = "idx_scraper",
+    ) -> pd.DataFrame:
+        """Load broker flow data (market-wide aggregate per broker per day).
+
+        Args:
+            date: Optional date filter (YYYY-MM-DD). None = all dates.
+            source: Filter by source. Default 'idx_scraper'.
+
+        Returns:
+            DataFrame sorted by date, broker.
+        """
+        sql = "SELECT * FROM broker_flow WHERE 1=1"
+        params: list = []
+        if source is not None:
+            sql += " AND source = ?"
+            params.append(source)
+        if date:
+            sql += " AND date = ?"
+            params.append(date)
+        sql += " ORDER BY date, net_value DESC"
+        with self._connect() as conn:
+            return pd.read_sql_query(sql, conn, params=params)
+
+    # ---------- D5: Broker Flow ----------
+    def save_broker_flow(self, record: dict):
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO broker_flow
+                   (ticker, date, broker, buy_volume, buy_value, sell_volume,
+                    sell_value, net_volume, net_value, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    record.get("ticker"),
+                    record.get("date"),
+                    record.get("broker"),
+                    record.get("buy_volume"),
+                    record.get("buy_value"),
+                    record.get("sell_volume"),
+                    record.get("sell_value"),
+                    record.get("net_volume"),
+                    record.get("net_value"),
+                    record.get("source", "idx_scraper"),
+                ),
+            )
+
+    # ---------- D7: Dividends ----------
+    def save_dividend(self, record: dict):
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO dividends
+                   (ticker, ex_date, record_date, payment_date, amount,
+                    currency, frequency, source)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    record.get("ticker"),
+                    record.get("ex_date"),
+                    record.get("record_date"),
+                    record.get("payment_date"),
+                    record.get("amount") or record.get("value"),
+                    record.get("currency", "IDR"),
+                    record.get("frequency"),
+                    record.get("source", "yfinance"),
+                ),
+            )
+
+    # ---------- D18: Technical Indicators ----------
+    def save_technical_indicator(self, record: dict):
+        """Save a single technical indicator row (long format)."""
+        indicator_map = {
+            "ma_20": "MA20", "ma_50": "MA50", "rsi": "RSI",
+            "macd": "MACD", "macd_signal": "MACD_SIGNAL",
+            "adx": "ADX", "atr_14": "ATR14",
+            "bb_upper": "BB_UPPER", "bb_lower": "BB_LOWER",
+            "volume_sma_20": "VOLUME_SMA20", "volume_ratio": "VOLUME_RATIO",
+            "volatility_20": "VOLATILITY_20",
+        }
+        ticker = record.get("ticker")
+        raw_date = record.get("timestamp") or record.get("date")
+        # Normalize date to YYYY-MM-DD (strip time component if present)
+        if raw_date and isinstance(raw_date, str) and len(raw_date) > 10:
+            raw_date = raw_date[:10]
+        date = raw_date
+        source = record.get("source", "computed")
+        with self._connect() as conn:
+            for key, indicator_name in indicator_map.items():
+                val = record.get(key)
+                if val is not None and not (isinstance(val, float) and val != val):
+                    conn.execute(
+                        """INSERT OR REPLACE INTO technical_indicators
+                           (ticker, date, indicator, value, timeframe, source)
+                           VALUES (?, ?, ?, ?, ?, ?)""",
+                        (ticker, date, indicator_name, float(val), "1d", source),
+                    )
+
+    # ---------- News ----------
+    def save_news(self, record: dict):
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO news
+                   (news_id, headline, body, published_at, source,
+                    entities, topic, sentiment, impact)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    record.get("news_id"),
+                    record.get("headline"),
+                    record.get("body"),
+                    record.get("published_at"),
+                    record.get("source"),
+                    record.get("entities"),
+                    record.get("topic"),
+                    record.get("sentiment"),
+                    record.get("impact"),
+                ),
+            )
+
+    # ---------- Sector Master ----------
+    def save_sector(self, record: dict):
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO sector_master
+                   (kode, nama, deskripsi, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    record.get("kode") or record.get("sector_code"),
+                    record.get("nama") or record.get("sector_name"),
+                    record.get("deskripsi") or record.get("description"),
+                    datetime.now(UTC).isoformat(),
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    # ---------- Market Calendar ----------
+    def save_market_calendar(self, record: dict):
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO market_calendar
+                   (date, exchange, is_trading_day, holiday_name, half_day, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    record.get("date"),
+                    record.get("exchange", "IDX"),
+                    record.get("is_trading_day", 1),
+                    record.get("holiday_name"),
+                    record.get("half_day", 0),
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    # ---------- Fear & Greed ----------
+    def save_fear_greed(self, record: dict):
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO fear_greed
+                   (tanggal, nilai, label, created_at)
+                   VALUES (?, ?, ?, ?)""",
+                (
+                    record.get("tanggal") or record.get("date"),
+                    int(record.get("nilai", record.get("value", 50))),
+                    record.get("label") or record.get("classification"),
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    # ---------- External Events ----------
+    def save_external_event(self, record: dict):
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO external_events
+                   (tanggal, kategori, judul, lokasi, dampak_market, sektor, deskripsi, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    record.get("tanggal") or record.get("date"),
+                    record.get("kategori") or record.get("event_type"),
+                    record.get("judul") or record.get("description"),
+                    record.get("lokasi") or record.get("region", "ID"),
+                    record.get("dampak_market") or record.get("impact_level"),
+                    record.get("sektor", ""),
+                    record.get("deskripsi", ""),
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    # ---------- ESG Scores ----------
+    def save_esg_score(self, record: dict):
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO esg_scores
+                   (kode, year, rating_agency, rating, score, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    record.get("kode") or record.get("ticker", ""),
+                    record.get("year") or int(datetime.now(UTC).year),
+                    record.get("rating_agency", "yfinance"),
+                    record.get("rating"),
+                    record.get("score") or record.get("esg_score"),
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    # ---------- Corporate Governance ----------
+    def save_corporate_governance(self, record: dict):
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO corporate_governance
+                   (kode, year, board_commissioners, independent_commissioners,
+                    board_directors, audit_committee_meetings, gcg_score, acgs_score,
+                    has_whistleblowing, has_risk_committee, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    record.get("kode") or record.get("ticker", ""),
+                    record.get("year") or int(datetime.now(UTC).year),
+                    record.get("board_commissioners") or record.get("board_size"),
+                    record.get("independent_commissioners") or record.get("independent_directors"),
+                    record.get("board_directors"),
+                    record.get("audit_committee_meetings"),
+                    record.get("gcg_score"),
+                    record.get("acgs_score"),
+                    record.get("has_whistleblowing"),
+                    record.get("has_risk_committee"),
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    # ---------- Stock Personality ----------
+    def save_stock_personality(self, record: dict):
+        # Map string liquidity profile to numeric score
+        liq_str = record.get("liquidity_score") or record.get("liquidity_profile", "")
+        liq_map = {"high_liquidity": 1.0, "moderate_liquidity": 0.5, "low_liquidity": 0.2}
+        liq_numeric = liq_map.get(liq_str, 0.5)
+        if isinstance(liq_str, (int, float)):
+            liq_numeric = float(liq_str)
+
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO stock_personality
+                   (kode, profile_date, avg_daily_volatility, volatility_regime,
+                    trend_bias, trend_strength, beta_vs_ihsg, correlation_ihsg,
+                    avg_volume, liquidity_score, personality_label, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    record.get("kode") or record.get("ticker", ""),
+                    record.get("profile_date") or datetime.now(UTC).strftime("%Y-%m-%d"),
+                    record.get("avg_daily_volatility"),
+                    record.get("volatility_regime") or record.get("volatility_profile"),
+                    record.get("trend_bias"),
+                    record.get("trend_strength"),
+                    record.get("beta_vs_ihsg") or record.get("beta"),
+                    record.get("correlation_ihsg") or record.get("correlation_to_ihsg"),
+                    record.get("avg_volume"),
+                    liq_numeric,
+                    record.get("personality_label") or record.get("personality_type"),
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    # ---------- Macro Data ----------
+    def save_macro_data(self, record: dict):
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO macro_data
+                   (series_name, date, value, unit, source, frequency)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    record.get("series_name"),
+                    record.get("date"),
+                    record.get("value"),
+                    record.get("unit"),
+                    record.get("source"),
+                    record.get("frequency", "daily"),
+                ),
+            )

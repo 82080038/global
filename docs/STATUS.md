@@ -1,8 +1,38 @@
 # Status Implementasi Sistem Trading
 
-> **Versi aplikasi:** 0.1.10  
-> **Update:** 2 Agustus 2026  
+> **Versi aplikasi:** 0.1.11  
+> **Update:** 4 Agustus 2026  
 > **Total unit tests:** 600+ (semua passing, 0 warnings)
+
+## Phase 7 — IDX Real-Data Scraper & XAI Expansion (4 Agustus 2026)
+
+**IDX Real-Data Batch Scraper (selesai):**
+- `data/idx_batch.py` — `IDXBatchEngine` untuk scrape foreign flow & broker summary riil dari `idx.co.id` (getStockSummary/getBrokerSummary, sejak Jan 2020, rate-limited 0.3s/req, backup Parquet).
+- `data/adaptive_rate_limiter.py` — `AdaptiveRateLimiter` dengan kalibrasi stress test.
+- CLI: `fetch-idx-foreign-flow` & `fetch-idx-broker-flow` subcommands.
+- `sentiment/foreign_flow.py` — integrasi data riil IDX (prioritas) dengan fallback proxy.
+
+**XAI Narrative Engine Expansion (selesai):**
+- `xai/engine.py` — 18 narrative builder baru (flow, correlation, lead-lag, broker, technical, fundamental, macro, global, sentiment, risk, manipulation, regime, cross-asset, pattern reliability, no-trade, factor, counter-scenarios).
+- `xai/advanced_context.py`, `correlation_context.py`, `score_context.py` — modul konteks terpisah.
+
+**Storage CRUD Layer (selesai):**
+- `data/storage.py` — 25+ method CRUD baru (instrument master, foreign flow, broker flow, pattern analysis, fundamental, dividend, technical indicator, news, sector, market calendar, fear & greed, external event, ESG, corporate governance, stock personality, macro data, render log tracking, OHLCV→Parquet sync).
+
+**Utility Scripts (selesai):**
+- `scripts/render_data.py` — render data ke format frontend dengan render log tracking.
+- `scripts/bootstrap_from_parquet.py` — bootstrap DB dari Parquet archive.
+- `scripts/export_all_tables.py` — export seluruh tabel SQLite.
+- `scripts/bench/` — folder benchmark (ratelimit_stress, speedtest_idx, speedtest_yf, speedtest.ps1, speedtest_yf.ps1).
+
+**Repository Cleanup (selesai):**
+- Hapus `Devin-linux-x64-3.4.27.deb` (installer Linux tidak relevan, ter-commit tidak sengaja).
+- Hapus `src/trading_system/intelligence/` (folder yatim, hanya `__pycache__`).
+- Hapus `reports/` (18 artefak ad-hoc) & `scripts/missing_idx_tickers.txt` — di-gitignore.
+- Update `.gitignore`: `*.deb`/`*.rpm`/`*.exe`, `reports/`, `scripts/missing_*.txt`.
+- Perbaiki 4 referensi path benchmark ke `scripts/bench/`.
+
+---
 
 ## Perbaikan Terbaru (implementasi `docs/SARAN_PENGEMBANGAN.md`)
 

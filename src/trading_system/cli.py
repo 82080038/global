@@ -100,6 +100,17 @@ def main():
     p_backtest.add_argument("--n-splits", type=int, default=5, help="Number of WF splits")
     p_backtest.add_argument("--block-size", type=int, default=None, help="Block size for block-bootstrap MC (None=IID)")
 
+    p_idx_foreign = sub.add_parser("fetch-idx-foreign-flow", help="Batch scrape real foreign flow from idx.co.id")
+    p_idx_foreign.add_argument("--start", default="2020-01-02", help="Start date YYYY-MM-DD")
+    p_idx_foreign.add_argument("--end", default=None, help="End date YYYY-MM-DD")
+    p_idx_foreign.add_argument("--tickers", nargs="*", default=None, help="Stock codes to filter (default: 47 blue chips)")
+    p_idx_foreign.add_argument("--delay", type=float, default=0.3, help="Delay between requests in seconds")
+
+    p_idx_broker = sub.add_parser("fetch-idx-broker-flow", help="Batch scrape broker summary from idx.co.id")
+    p_idx_broker.add_argument("--start", default="2020-01-02", help="Start date YYYY-MM-DD")
+    p_idx_broker.add_argument("--end", default=None, help="End date YYYY-MM-DD")
+    p_idx_broker.add_argument("--delay", type=float, default=0.3, help="Delay between requests in seconds")
+
     p_list = sub.add_parser("list", help="List tickers in DB")
 
     p_scores = sub.add_parser("compute-scores", help="Compute technical/fundamental/macro/global/relationship/sentiment scores")
@@ -272,6 +283,18 @@ def main():
         success = run_e2e_test(args.tickers)
         import sys
         sys.exit(0 if success else 1)
+    elif args.cmd == "fetch-idx-foreign-flow":
+        from trading_system.data.idx_batch import IDXBatchEngine
+
+        engine = IDXBatchEngine(delay=args.delay)
+        result = engine.scrape_foreign_flow(start_date=args.start, end_date=args.end, tickers=args.tickers)
+        print(result)
+    elif args.cmd == "fetch-idx-broker-flow":
+        from trading_system.data.idx_batch import IDXBatchEngine
+
+        engine = IDXBatchEngine(delay=args.delay)
+        result = engine.scrape_broker_flow(start_date=args.start, end_date=args.end)
+        print(result)
     elif args.cmd == "schedule":
         import os
         if args.once:

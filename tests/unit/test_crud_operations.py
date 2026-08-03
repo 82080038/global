@@ -227,7 +227,7 @@ class TestArchiveDelete:
 
     def test_delete_archived_files(self, tmp_path):
         from trading_system.data.archive import ArchiveAdapter
-        adapter = ArchiveAdapter(archive_dir=tmp_path / "archive")
+        adapter = ArchiveAdapter(archive_dir=tmp_path / "archive", raw_dir=tmp_path / "raw")
         df = pd.DataFrame({
             "date": ["2024-01-01", "2024-01-02"],
             "open": [100, 101], "high": [105, 106], "low": [99, 100],
@@ -236,13 +236,13 @@ class TestArchiveDelete:
         adapter.save_ohlcv("TEST.JK", df)
         adapter.save_ohlcv("OTHER.JK", df)
         deleted = adapter.delete_archived_ticker("TEST.JK")
-        assert deleted == 1
+        assert deleted == 2  # archive + raw
         tickers = adapter.list_archived_tickers()
         assert "TEST.JK" not in tickers
         assert "OTHER.JK" in tickers
 
     def test_delete_nonexistent(self, tmp_path):
         from trading_system.data.archive import ArchiveAdapter
-        adapter = ArchiveAdapter(archive_dir=tmp_path / "archive")
+        adapter = ArchiveAdapter(archive_dir=tmp_path / "archive", raw_dir=tmp_path / "raw")
         deleted = adapter.delete_archived_ticker("NONEXIST.JK")
         assert deleted == 0

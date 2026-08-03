@@ -10,13 +10,13 @@ class TestArchiveAdapter:
 
     def test_load_ohlcv_empty_archive(self, tmp_path):
         """Loading from empty archive should return empty DataFrame."""
-        adapter = ArchiveAdapter(archive_dir=tmp_path)
+        adapter = ArchiveAdapter(archive_dir=tmp_path, raw_dir=tmp_path / "raw")
         df = adapter.load_ohlcv("BBCA.JK")
         assert df.empty
 
     def test_save_and_load_ohlcv(self, tmp_path):
         """Save then load should return the same data."""
-        adapter = ArchiveAdapter(archive_dir=tmp_path)
+        adapter = ArchiveAdapter(archive_dir=tmp_path, raw_dir=tmp_path / "raw")
 
         test_df = pd.DataFrame({
             "tanggal": pd.date_range("2024-01-01", periods=5),
@@ -37,7 +37,7 @@ class TestArchiveAdapter:
 
     def test_load_with_date_filter(self, tmp_path):
         """Date filtering should work on archived data."""
-        adapter = ArchiveAdapter(archive_dir=tmp_path)
+        adapter = ArchiveAdapter(archive_dir=tmp_path, raw_dir=tmp_path / "raw")
 
         test_df = pd.DataFrame({
             "tanggal": pd.date_range("2024-01-01", periods=10),
@@ -57,7 +57,7 @@ class TestArchiveAdapter:
 
     def test_list_archived_tickers(self, tmp_path):
         """list_archived_tickers should return all unique tickers."""
-        adapter = ArchiveAdapter(archive_dir=tmp_path)
+        adapter = ArchiveAdapter(archive_dir=tmp_path, raw_dir=tmp_path / "raw")
 
         df1 = pd.DataFrame({"tanggal": [pd.Timestamp("2024-01-01")], "close": [8000]})
         df2 = pd.DataFrame({"tanggal": [pd.Timestamp("2024-01-01")], "close": [5000]})
@@ -71,7 +71,7 @@ class TestArchiveAdapter:
 
     def test_get_archive_info(self, tmp_path):
         """get_archive_info should return summary stats."""
-        adapter = ArchiveAdapter(archive_dir=tmp_path)
+        adapter = ArchiveAdapter(archive_dir=tmp_path, raw_dir=tmp_path / "raw")
 
         df = pd.DataFrame({
             "tanggal": [pd.Timestamp("2024-01-01")],
@@ -84,6 +84,6 @@ class TestArchiveAdapter:
         adapter.save_ohlcv("TEST.JK", df)
 
         info = adapter.get_archive_info()
-        assert info["ohlcv_files"] == 1
+        assert info["ohlcv_files"] == 2  # archive + raw
         assert info["ohlcv_size_mb"] >= 0
         assert "TEST.JK" in info["archived_tickers"]

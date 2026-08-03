@@ -12,6 +12,7 @@ Penggunaan:
 from __future__ import annotations
 
 import argparse
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -20,7 +21,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = ROOT / "data" / "trading_system.db"
-PARQUET_BASE = Path("/media/petrick/Parquet/trading_data/raw")
+PARQUET_BASE = Path(os.getenv("DATA_RAW_DIR", r"E:\trading_data\raw"))
 BACKUP_DIR = PARQUET_BASE / "sqlite_backup"
 
 

@@ -82,10 +82,18 @@ class CrossAssetEngine:
             return 0.0
         t = target_returns[-n:]
         b = bench_returns[-n:]
+        # Filter NaN values
+        valid = ~(np.isnan(t) | np.isnan(b))
+        if valid.sum() < 5:
+            return 0.0
+        t = t[valid]
+        b = b[valid]
         var_b = np.var(b, ddof=1)
-        if var_b < 1e-12:
+        if var_b < 1e-12 or np.isnan(var_b):
             return 0.0
         cov = np.cov(t, b, ddof=1)[0, 1]
+        if np.isnan(cov):
+            return 0.0
         return float(cov / var_b)
 
     def _rolling_corr(self, target_returns: np.ndarray, bench_returns: np.ndarray) -> float:
@@ -94,6 +102,12 @@ class CrossAssetEngine:
             return 0.0
         t = target_returns[-n:]
         b = bench_returns[-n:]
+        # Filter NaN values
+        valid = ~(np.isnan(t) | np.isnan(b))
+        if valid.sum() < 5:
+            return 0.0
+        t = t[valid]
+        b = b[valid]
         if np.std(t) < 1e-12 or np.std(b) < 1e-12:
             return 0.0
         return float(np.corrcoef(t, b)[0, 1])

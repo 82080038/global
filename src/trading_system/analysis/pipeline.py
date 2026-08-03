@@ -9,13 +9,13 @@ import pandas as pd
 from trading_system.analysis.fundamental import FundamentalAnalysisEngine
 from trading_system.analysis.global_market import GlobalMarketEngine
 from trading_system.analysis.macro import MacroEconomicEngine
+from trading_system.analysis.relationship import MarketRelationshipEngine
 from trading_system.analysis.technical import TechnicalAnalysisEngine
 from trading_system.corporate.actions import CorporateActionEngine
 from trading_system.data.acquisition import YahooFinanceAdapter, normalize_ohlcv
 from trading_system.data.archive import ArchiveAdapter
 from trading_system.data.storage import DataStorage
 from trading_system.data.validation import DataQualityValidator
-from trading_system.analysis.relationship import MarketRelationshipEngine
 from trading_system.sentiment.engine import SentimentEngine
 
 
@@ -44,7 +44,10 @@ class AnalysisPipeline:
             # Coba Parquet archive dulu sebelum Yahoo Finance
             arch_df = self.archive.load_ohlcv(ticker, start=last_ts)
             if not arch_df.empty:
-                new_df = arch_df[arch_df.index > pd.Timestamp(last_ts)]
+                last_ts_pd = pd.Timestamp(last_ts)
+                if arch_df.index.tz is not None:
+                    last_ts_pd = last_ts_pd.tz_localize(arch_df.index.tz)
+                new_df = arch_df[arch_df.index > last_ts_pd]
                 if not new_df.empty:
                     new_df = new_df.reset_index()
                     new_df["ticker"] = ticker

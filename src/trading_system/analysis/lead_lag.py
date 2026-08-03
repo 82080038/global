@@ -55,6 +55,12 @@ class LeadLagAnalyzer:
             l = leader[-min_len:]
             f = follower[-(min_len + offset):-offset]
 
+        # Filter NaN values
+        valid = ~(np.isnan(l) | np.isnan(f))
+        if valid.sum() < 5:
+            return 0.0
+        l = l[valid]
+        f = f[valid]
         if np.std(l) < 1e-12 or np.std(f) < 1e-12:
             return 0.0
         return float(np.corrcoef(l, f)[0, 1])

@@ -13,8 +13,8 @@ from typing import Any
 import pandas as pd
 import yfinance as yf
 
-from trading_system.config import RAW_ZONE, YFINANCE_RATE_LIMIT_CALLS, YFINANCE_RATE_LIMIT_WINDOW
-from trading_system.data.rate_limit import YFinanceRateLimiter
+from trading_system.config import DATA_ARCHIVE_DIR, RAW_ZONE, YFINANCE_RATE_LIMIT_CALLS, YFINANCE_RATE_LIMIT_WINDOW
+from trading_system.data.adaptive_rate_limiter import AdaptiveRateLimiter
 from trading_system.data.storage import DataStorage
 
 
@@ -119,9 +119,9 @@ class YahooFinanceAdapter(DataSourceAdapter):
 
     name = "yahoo_finance"
 
-    def __init__(self, rate_limiter: YFinanceRateLimiter | None = None):
+    def __init__(self, rate_limiter: AdaptiveRateLimiter | None = None):
         self.storage = DataStorage()
-        self.rate_limiter = rate_limiter or YFinanceRateLimiter.from_env()
+        self.rate_limiter = rate_limiter or AdaptiveRateLimiter.for_yfinance()
 
     def fetch(
         self,
@@ -181,6 +181,13 @@ class YahooFinanceAdapter(DataSourceAdapter):
 
             raw_file = RAW_ZONE / f"{ticker}_{interval}_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}.parquet"
             df.to_parquet(raw_file, index=False)
+
+            # Also save to permanent archive (archive/ohlcv/)
+            archive_dir = DATA_ARCHIVE_DIR / "ohlcv"
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            archive_file = archive_dir / f"{ticker}_{interval}_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}.parquet"
+            if archive_file != raw_file:
+                df.to_parquet(archive_file, index=False)
 
             self.storage.update_source_health(self.name, "ok", success=True)
             self.storage.audit(

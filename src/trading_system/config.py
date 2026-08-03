@@ -4,6 +4,18 @@ import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+
+# Load .env file if it exists (simple parser, no dependency on python-dotenv)
+_env_file = ROOT / ".env"
+if _env_file.exists():
+    for _line in _env_file.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _key, _, _val = _line.partition("=")
+            _key = _key.strip()
+            _val = _val.strip().strip("\"'")
+            if _key and _key not in os.environ:
+                os.environ[_key] = _val
 DATA_DIR = ROOT / "data"
 RAW_ZONE = Path(os.getenv("DATA_RAW_DIR", str(DATA_DIR / "raw")))
 CLEAN_ZONE = DATA_DIR / "clean"
@@ -76,9 +88,11 @@ TRADING_MODE = os.getenv("TRADING_MODE", "paper").lower()
 # harga belum menyentuh stop-loss/take-profit (§2.3 SARAN_PENGEMBANGAN.md).
 EXIT_CONVICTION_THRESHOLD = _safe_float("EXIT_CONVICTION_THRESHOLD", "40")
 
-# YFinance rate limiting
+# YFinance rate limiting — calibrated via scripts/bench/ratelimit_stress.py (Aug 2026)
+# Stress test: 100% success at 0.0s delay for 30 requests; 0.3s chosen with
+# safety margin for 989-ticker batches (~2000 req/hour safe zone).
 YFINANCE_RATE_LIMIT_CALLS = 1
-YFINANCE_RATE_LIMIT_WINDOW = 1.0  # seconds
+YFINANCE_RATE_LIMIT_WINDOW = 0.3  # seconds (was 1.0s)
 
 # Macro & Global proxy instruments (Yahoo Finance)
 DEFAULT_MACRO_TICKERS = {
