@@ -3,7 +3,7 @@
 ## Overview
 
 - **Project**: `trading-system` (Indonesian stocks / IDX decision support)
-- **Version**: `0.1.0` (runtime reports `0.1.10`)
+- **Version**: `0.1.11`
 - **Language**: Python 3.10+ (target 3.11)
 - **Repository root**: `/opt/lampp/htdocs/global`
 - **Backend**: `src/trading_system/` (setuptools package under `src`)
