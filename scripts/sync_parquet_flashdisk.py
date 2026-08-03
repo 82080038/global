@@ -700,6 +700,54 @@ IMPORT_MAPPING = {
         """,
         "col_map": {},
     },
+    # --- New tables (migration 0003) ---
+    "trading_suspensions": {
+        "table": "trading_suspensions",
+        "create_sql": """
+            CREATE TABLE IF NOT EXISTS trading_suspensions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticker TEXT NOT NULL,
+                suspend_date TEXT NOT NULL,
+                resume_date TEXT,
+                reason TEXT,
+                suspension_type TEXT,
+                source TEXT,
+                created_at TEXT NOT NULL
+            )
+        """,
+        "col_map": {},
+    },
+    "instrument_master_sync": {
+        "table": "instrument_master",
+        "create_sql": """
+            CREATE TABLE IF NOT EXISTS instrument_master (
+                ticker TEXT PRIMARY KEY, name TEXT, sector TEXT, subsector TEXT,
+                exchange TEXT, listing_date TEXT, delisting_date TEXT,
+                is_active INTEGER DEFAULT 1, board TEXT, market_cap REAL,
+                free_float REAL, asset_class TEXT DEFAULT 'equity', updated_at TEXT,
+                ipo_date TEXT, ipo_price REAL, status TEXT DEFAULT 'active',
+                lock_up_end_date TEXT
+            )
+        """,
+        "col_map": {
+            "kode": "ticker",
+            "nama": "name",
+            "sektor": "sector",
+            "subsektor": "subsector",
+            "bursa": "exchange",
+            "tanggal_listing": "listing_date",
+            "tanggal_delisting": "delisting_date",
+            "aktif": "is_active",
+            "papan": "board",
+            "kapitalisasi_pasar": "market_cap",
+            "free_float": "free_float",
+            "kelas_aset": "asset_class",
+            "tanggal_ipo": "ipo_date",
+            "harga_ipo": "ipo_price",
+            "status": "status",
+            "akhir_lock_up": "lock_up_end_date",
+        },
+    },
 }
 
 
@@ -808,9 +856,9 @@ def import_parquet_to_sqlite():
 # FASE 3: Verifikasi
 # ═══════════════════════════════════════════════════════════════════════
 def verify():
-    """Bandingkan row counts SQLite vs Parquet."""
+    """Bandingkan row counts SQLite vs Parquet backup."""
     print("=" * 60)
-    print("FASE 3: Verifikasi")
+    print("FASE 3: Verifikasi (table-level)")
     print("=" * 60)
 
     conn = sqlite3.connect(str(DB_PATH))
@@ -819,6 +867,7 @@ def verify():
     print(f"\n  {'Table':45s} {'SQLite':>12s} {'Parquet':>12s}")
     print(f"  {'-' * 45} {'-' * 12} {'-' * 12}")
 
+    mismatches = []
     for table in tables:
         cur = conn.execute(f"SELECT COUNT(*) FROM {table}")
         sqlite_count = cur.fetchone()[0]
@@ -829,11 +878,119 @@ def verify():
         if backup_file.exists():
             try:
                 df = pd.read_parquet(backup_file, columns=None)
-                parquet_count = f"{len(df):,}"
+                parquet_count = len(df)
+                if parquet_count != sqlite_count:
+                    mismatches.append((table, sqlite_count, parquet_count))
+                parquet_count = f"{parquet_count:,}"
             except Exception:
                 parquet_count = "ERR"
 
         print(f"  {table:45s} {sqlite_count:>12,} {parquet_count:>12s}")
+
+    conn.close()
+
+    if mismatches:
+        print(f"\n  ⚠ {len(mismatches)} table(s) with row count mismatch:")
+        for table, sql_n, pq_n in mismatches:
+            print(f"    {table}: SQLite={sql_n:,} vs Parquet={pq_n:,}")
+    else:
+        print("\n  ✓ All backed-up tables match.")
+
+
+def verify_ohlcv_sync():
+    """Bandingkan OHLCV row counts per ticker: SQLite vs Parquet archive.
+
+    Checks the live archive (DATA_ARCHIVE_DIR/ohlcv/) and raw zone,
+    not the backup directory.
+    """
+    print("=" * 60)
+    print("FASE 3b: Verifikasi OHLCV per-ticker (archive sync)")
+    print("=" * 60)
+
+    from trading_system.config import DATA_ARCHIVE_DIR, RAW_ZONE
+
+    archive_ohlcv = DATA_ARCHIVE_DIR / "ohlcv"
+
+    conn = sqlite3.connect(str(DB_PATH))
+    # Get tickers and row counts from SQLite
+    sql_counts = dict(
+        conn.execute(
+            "SELECT ticker, COUNT(*) FROM ohlcv GROUP BY ticker ORDER BY ticker"
+        ).fetchall()
+    )
+
+    # Get tickers and row counts from Parquet archive
+    pq_counts = {}
+    if archive_ohlcv.exists():
+        for f in archive_ohlcv.glob("*.parquet"):
+            try:
+                df = pd.read_parquet(f, columns=["ticker"] if False else None)
+                col = "ticker" if "ticker" in df.columns else "kode"
+                for t in df[col].dropna().unique():
+                    t = str(t)
+                    pq_counts[t] = pq_counts.get(t, 0) + len(df[df[col] == t])
+            except Exception:
+                pass
+
+    # Also check raw zone
+    raw_counts = {}
+    if RAW_ZONE.exists():
+        for f in RAW_ZONE.glob("*.parquet"):
+            try:
+                df = pd.read_parquet(f, columns=["ticker"] if False else None)
+                col = "ticker" if "ticker" in df.columns else "kode"
+                for t in df[col].dropna().unique():
+                    t = str(t)
+                    raw_counts[t] = raw_counts.get(t, 0) + len(df[df[col] == t])
+            except Exception:
+                pass
+
+    all_tickers = sorted(set(sql_counts) | set(pq_counts))
+
+    print(f"\n  {'Ticker':15s} {'SQLite':>10s} {'Parquet':>10s} {'Raw':>10s} {'Status':>10s}")
+    print(f"  {'-' * 15} {'-' * 10} {'-' * 10} {'-' * 10} {'-' * 10}")
+
+    mismatches = 0
+    for ticker in all_tickers:
+        sql_n = sql_counts.get(ticker, 0)
+        pq_n = pq_counts.get(ticker, 0)
+        raw_n = raw_counts.get(ticker, 0)
+
+        if sql_n == pq_n:
+            status = "✓ sync"
+        elif pq_n == 0 and raw_n > 0:
+            status = "⚠ raw only"
+            mismatches += 1
+        elif sql_n > pq_n:
+            status = "⚠ SQLite >"
+            mismatches += 1
+        elif pq_n > sql_n:
+            status = "⚠ Parquet >"
+            mismatches += 1
+        else:
+            status = "?"
+
+        print(f"  {ticker:15s} {sql_n:>10,} {pq_n:>10,} {raw_n:>10,} {status:>10s}")
+
+    if mismatches:
+        print(f"\n  ⚠ {mismatches} ticker(s) with sync issues.")
+    else:
+        print("\n  ✓ All OHLCV tickers in sync.")
+
+    # Also verify instrument_master and trading_suspensions Parquet sync
+    print()
+    all_tables = get_all_tables(conn)
+    for table in ("instrument_master", "trading_suspensions"):
+        sql_n = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] if table in all_tables else 0
+        pq_files = list((DATA_ARCHIVE_DIR / table).glob("*.parquet")) if (DATA_ARCHIVE_DIR / table).exists() else []
+        pq_n = 0
+        for f in pq_files:
+            try:
+                pq_n += len(pd.read_parquet(f))
+            except Exception:
+                pass
+        status = "✓" if sql_n == pq_n else "⚠"
+        print(f"  {status} {table:30s} SQLite={sql_n:,}  Parquet={pq_n:,}")
 
     conn.close()
 
@@ -843,7 +1000,8 @@ def main():
     parser.add_argument("--backup", action="store_true", help="Backup SQLite → Parquet")
     parser.add_argument("--import", dest="do_import", action="store_true", help="Import Parquet lama → SQLite")
     parser.add_argument("--all", action="store_true", help="Lakukan keduanya + verifikasi")
-    parser.add_argument("--verify", action="store_true", help="Hanya verifikasi")
+    parser.add_argument("--verify", action="store_true", help="Hanya verifikasi (table-level)")
+    parser.add_argument("--verify-ohlcv", action="store_true", help="Verifikasi OHLCV per-ticker sync")
     args = parser.parse_args()
 
     if args.all:
@@ -852,12 +1010,16 @@ def main():
         import_parquet_to_sqlite()
         print()
         verify()
+        print()
+        verify_ohlcv_sync()
     elif args.backup:
         backup_sqlite_to_parquet()
     elif args.do_import:
         import_parquet_to_sqlite()
     elif args.verify:
         verify()
+    elif args.verify_ohlcv:
+        verify_ohlcv_sync()
     else:
         parser.print_help()
         return 1

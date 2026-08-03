@@ -124,12 +124,25 @@ class LabelingEngine:
     def __init__(self, config: LabelingConfig | None = None):
         self.config = config or LabelingConfig()
 
-    def compute(self, df: pd.DataFrame, regime_state: str = "neutral") -> dict[str, pd.Series]:
+    def compute(
+        self,
+        df: pd.DataFrame,
+        regime_state: str = "neutral",
+        non_tradeable_mask: pd.Series | None = None,
+    ) -> dict[str, pd.Series]:
         """Compute all label types for a DataFrame.
+
+        Args:
+            df: OHLCV DataFrame.
+            regime_state: Current regime state.
+            non_tradeable_mask: Optional boolean Series (same index as df) where
+                True indicates a non-tradeable bar (suspended, pre-IPO, post-delisting).
+                Labels for these bars and the subsequent forward_periods bars are
+                set to NaN to prevent ML from learning on non-tradeable periods.
 
         Returns dict with 'forward_return', 'triple_barrier', 'alpha_adjusted'.
         """
-        return {
+        labels = {
             "forward_return": forward_return_labels(df, self.config.forward_periods),
             "triple_barrier": triple_barrier_labels(
                 df,
@@ -141,3 +154,19 @@ class LabelingEngine:
                 df, self.config.forward_periods, regime_state, self.config
             ),
         }
+
+        if non_tradeable_mask is not None and non_tradeable_mask.any():
+            fwd = self.config.forward_periods
+            max_hold = self.config.max_holding_periods
+            horizon = max(fwd, max_hold)
+            for key, series in labels.items():
+                masked = series.copy()
+                idx_array = df.index
+                mask_values = non_tradeable_mask.values
+                for i in range(len(mask_values)):
+                    if mask_values[i]:
+                        end = min(i + horizon + 1, len(masked))
+                        masked.iloc[i:end] = np.nan
+                labels[key] = masked
+
+        return labels

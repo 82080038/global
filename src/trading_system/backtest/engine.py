@@ -37,11 +37,45 @@ class BacktestEngine:
         end: str | None = None,
         initial_capital: float = TRADING_CAPITAL,
         cost_model: CostModel | None = None,
+        survivorship_free: bool = True,
     ) -> dict[str, Any]:
-        """Jalankan backtest event-driven sederhana."""
+        """Jalankan backtest event-driven sederhana.
+
+        Args:
+            survivorship_free: If True, filter OHLCV to only include bars within
+                the instrument's listing period (listing_date to delisting_date).
+                This prevents survivorship bias by excluding pre-IPO data and
+                data after delisting.
+        """
         df = self.storage.load_ohlcv(ticker, start=start, end=end)
         if df.empty:
             return {"status": "error", "message": f"No data for {ticker}"}
+
+        # Survivorship bias prevention: clip to listing/delisting dates
+        if survivorship_free:
+            info = self.storage.get_instrument_status(ticker)
+            if isinstance(info, dict):
+                listing = info.get("listing_date") or info.get("ipo_date")
+                delisting = info.get("delisting_date")
+                if listing:
+                    df = df[df.index >= pd.Timestamp(listing)]
+                if delisting:
+                    df = df[df.index < pd.Timestamp(delisting)]
+                # Also mask out suspension periods
+                suspensions = self.storage.load_suspensions(ticker)
+                if isinstance(suspensions, list):
+                    for s in suspensions:
+                        s_start = s.get("suspend_date")
+                        s_end = s.get("resume_date")
+                        if s_start:
+                            mask_start = pd.Timestamp(s_start)
+                            if s_end:
+                                mask_end = pd.Timestamp(s_end)
+                                df = df[~((df.index >= mask_start) & (df.index < mask_end))]
+                            else:
+                                df = df[df.index < mask_start]
+            if df.empty:
+                return {"status": "error", "message": f"No tradeable data for {ticker} within listing period"}
 
         cost = cost_model or CostModel()
         result = self._run_core(df, strategy, initial_capital, cost, ticker=ticker)

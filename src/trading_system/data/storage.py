@@ -191,7 +191,9 @@ CREATE TABLE IF NOT EXISTS instrument_master (
     ticker TEXT PRIMARY KEY, name TEXT, sector TEXT, subsector TEXT,
     exchange TEXT, listing_date TEXT, delisting_date TEXT,
     is_active INTEGER DEFAULT 1, board TEXT, market_cap REAL,
-    free_float REAL, asset_class TEXT DEFAULT 'equity', updated_at TEXT
+    free_float REAL, asset_class TEXT DEFAULT 'equity', updated_at TEXT,
+    ipo_date TEXT, ipo_price REAL, status TEXT DEFAULT 'active',
+    lock_up_end_date TEXT
 );
 CREATE TABLE IF NOT EXISTS fundamental_data (
     ticker TEXT, date TEXT, pe_ratio REAL, pb_ratio REAL, roe REAL,
@@ -293,6 +295,20 @@ CREATE INDEX IF NOT EXISTS idx_dividends_ticker ON dividends(ticker);
 CREATE INDEX IF NOT EXISTS idx_trade_journal_ticker ON trade_journal(ticker);
 CREATE INDEX IF NOT EXISTS idx_technical_indicators_ticker ON technical_indicators(ticker);
 CREATE INDEX IF NOT EXISTS idx_technical_indicators_date ON technical_indicators(date);
+
+-- Trading suspensions (§13.4 — IPO/suspension/delisting lifecycle)
+CREATE TABLE IF NOT EXISTS trading_suspensions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT NOT NULL,
+    suspend_date TEXT NOT NULL,
+    resume_date TEXT,
+    reason TEXT,
+    suspension_type TEXT,
+    source TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_suspension_ticker ON trading_suspensions(ticker);
+CREATE INDEX IF NOT EXISTS idx_suspension_date ON trading_suspensions(suspend_date);
 """
 
 
@@ -504,13 +520,17 @@ class DataStorage:
         return n
 
     def _sync_ohlcv_to_parquet(self, df: pd.DataFrame) -> None:
-        """Sync updated OHLCV data to Parquet archive (best-effort, non-blocking)."""
+        """Sync updated OHLCV data to Parquet archive (best-effort, non-blocking).
+
+        Also cleans up old raw zone Parquet files for synced tickers to prevent
+        accumulation from repeated Yahoo Finance fetches.
+        """
         import os
         sync_enabled = os.getenv("PARQUET_AUTO_SYNC", "1")
         if sync_enabled != "1":
             return
         try:
-            from trading_system.config import DATA_ARCHIVE_DIR
+            from trading_system.config import DATA_ARCHIVE_DIR, RAW_ZONE
             archive_dir = DATA_ARCHIVE_DIR / "ohlcv"
             archive_dir.mkdir(parents=True, exist_ok=True)
             # Export full data per ticker (not just the new rows) to keep Parquet complete
@@ -523,7 +543,7 @@ class DataStorage:
                 )
                 if full_df.empty:
                     continue
-                # Delete old per-ticker files
+                # Delete old per-ticker files in archive
                 base = ticker.replace(".JK", "")
                 for pattern in [f"{ticker}*.parquet", f"{base}*.parquet"]:
                     for f in archive_dir.glob(pattern):
@@ -536,6 +556,58 @@ class DataStorage:
                 ts = _dt.now(UTC).strftime("%Y%m%d%H%M%S")
                 out_file = archive_dir / f"{ticker}_{ts}.parquet"
                 full_df.to_parquet(out_file, index=False, compression="snappy")
+                # Cleanup old raw zone files for this ticker (keep only latest)
+                raw_files = sorted(
+                    RAW_ZONE.glob(f"{ticker}_*.parquet"),
+                    key=lambda f: f.stat().st_mtime,
+                    reverse=True,
+                )
+                # Also check base name without .JK
+                raw_files_base = sorted(
+                    RAW_ZONE.glob(f"{base}_*.parquet"),
+                    key=lambda f: f.stat().st_mtime,
+                    reverse=True,
+                )
+                all_raw = raw_files + raw_files_base
+                for old_f in all_raw[1:]:  # keep newest, delete rest
+                    try:
+                        old_f.unlink()
+                    except Exception:
+                        pass
+            conn.close()
+        except Exception:
+            pass  # non-fatal: Parquet sync is best-effort
+
+    def _sync_table_to_parquet(self, table: str, archive_subdir: str | None = None) -> None:
+        """Sync a full table to Parquet archive (best-effort, non-blocking).
+
+        Used for non-OHLCV tables like instrument_master, trading_suspensions.
+        Writes a single Parquet file per table (not per-ticker).
+        """
+        import os
+        sync_enabled = os.getenv("PARQUET_AUTO_SYNC", "1")
+        if sync_enabled != "1":
+            return
+        try:
+            from trading_system.config import DATA_ARCHIVE_DIR
+            subdir = archive_subdir or table
+            archive_dir = DATA_ARCHIVE_DIR / subdir
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(str(self.db_path))
+            full_df = pd.read_sql_query(f"SELECT * FROM {table}", conn)
+            if full_df.empty:
+                conn.close()
+                return
+            # Delete old file(s)
+            for f in archive_dir.glob(f"{table}*.parquet"):
+                try:
+                    f.unlink()
+                except Exception:
+                    pass
+            from datetime import datetime as _dt
+            ts = _dt.now(UTC).strftime("%Y%m%d%H%M%S")
+            out_file = archive_dir / f"{table}_{ts}.parquet"
+            full_df.to_parquet(out_file, index=False, compression="snappy")
             conn.close()
         except Exception:
             pass  # non-fatal: Parquet sync is best-effort
@@ -1193,8 +1265,9 @@ class DataStorage:
                 """INSERT INTO instrument_master
                    (ticker, name, sector, subsector, exchange, listing_date,
                     delisting_date, is_active, board, market_cap, free_float,
-                    asset_class, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    asset_class, updated_at, ipo_date, ipo_price, status,
+                    lock_up_end_date)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(ticker) DO UPDATE SET
                      name = COALESCE(excluded.name, instrument_master.name),
                      sector = COALESCE(excluded.sector, instrument_master.sector),
@@ -1207,6 +1280,10 @@ class DataStorage:
                      market_cap = COALESCE(excluded.market_cap, instrument_master.market_cap),
                      free_float = COALESCE(excluded.free_float, instrument_master.free_float),
                      asset_class = COALESCE(excluded.asset_class, instrument_master.asset_class),
+                     ipo_date = COALESCE(excluded.ipo_date, instrument_master.ipo_date),
+                     ipo_price = COALESCE(excluded.ipo_price, instrument_master.ipo_price),
+                     status = COALESCE(excluded.status, instrument_master.status),
+                     lock_up_end_date = COALESCE(excluded.lock_up_end_date, instrument_master.lock_up_end_date),
                      updated_at = excluded.updated_at""",
                 (
                     record.get("ticker"),
@@ -1222,8 +1299,14 @@ class DataStorage:
                     record.get("free_float"),
                     record.get("asset_class", "equity"),
                     datetime.now(UTC).isoformat(),
+                    record.get("ipo_date"),
+                    record.get("ipo_price"),
+                    record.get("status", "active"),
+                    record.get("lock_up_end_date"),
                 ),
             )
+        # Auto-sync to Parquet
+        self._sync_table_to_parquet("instrument_master")
 
     def load_instrument_master_tickers(self) -> list[str]:
         with self._connect() as conn:
@@ -1250,6 +1333,145 @@ class DataStorage:
                 "SELECT ticker, name, asset_class, exchange FROM instrument_master WHERE asset_class != 'equity'"
             ).fetchall()
             return [{"ticker": r[0], "name": r[1], "asset_class": r[2], "exchange": r[3]} for r in rows]
+
+    def get_instrument_status(self, ticker: str) -> dict | None:
+        """Return instrument lifecycle metadata for a ticker.
+
+        Keys: ticker, listing_date, delisting_date, ipo_date, ipo_price,
+        status, lock_up_end_date, is_active.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                """SELECT ticker, listing_date, delisting_date, ipo_date,
+                          ipo_price, status, lock_up_end_date, is_active
+                   FROM instrument_master WHERE ticker = ?""",
+                (ticker,),
+            ).fetchone()
+            if not row:
+                return None
+            return {
+                "ticker": row[0],
+                "listing_date": row[1],
+                "delisting_date": row[2],
+                "ipo_date": row[3],
+                "ipo_price": row[4],
+                "status": row[5] or "active",
+                "lock_up_end_date": row[6],
+                "is_active": row[7],
+            }
+
+    def is_tradeable(self, ticker: str, as_of: str | None = None) -> bool:
+        """Check if a ticker was tradeable on a given date (or today).
+
+        Returns False if:
+        - status is 'suspended' or 'delisted'
+        - as_of is before listing_date / ipo_date
+        - as_of is after delisting_date
+        - as_of is within a suspension period
+        """
+        from datetime import datetime as _dt
+
+        info = self.get_instrument_status(ticker)
+        if info is None:
+            return True  # Unknown ticker — allow by default
+
+        check_date = as_of or _dt.now(UTC).strftime("%Y-%m-%d")
+
+        # Status check: 'suspended' always blocks (currently suspended).
+        # 'delisted' only blocks if we're checking at/after the delisting date.
+        if info["status"] == "suspended":
+            return False
+        if info["status"] == "delisted":
+            delisting = info.get("delisting_date")
+            if delisting is None or check_date >= delisting:
+                return False
+
+        listing = info.get("listing_date") or info.get("ipo_date")
+        if listing and check_date < listing:
+            return False
+
+        delisting = info.get("delisting_date")
+        if delisting and check_date >= delisting:
+            return False
+
+        suspensions = self.load_suspensions(ticker)
+        for s in suspensions:
+            s_start = s.get("suspend_date")
+            s_end = s.get("resume_date")
+            if s_start and check_date >= s_start:
+                if s_end is None or check_date < s_end:
+                    return False
+
+        return True
+
+    def load_active_tickers_at_date(self, as_of: str, exchange: str = "IDX") -> list[str]:
+        """Return tickers that were actively listed on a given date.
+
+        Used for survivorship-bias-free backtests: only includes tickers
+        whose listing_date <= as_of and (delisting_date IS NULL or delisting_date > as_of).
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT ticker FROM instrument_master
+                   WHERE asset_class = 'equity'
+                     AND (listing_date IS NULL OR listing_date <= ?)
+                     AND (delisting_date IS NULL OR delisting_date > ?)
+                     AND (status IS NULL OR status NOT IN ('delisted'))
+                   ORDER BY ticker""",
+                (as_of, as_of),
+            ).fetchall()
+            return [r[0] for r in rows]
+
+    # ---------- Trading Suspensions ----------
+    def save_suspension(self, record: dict):
+        """Insert a trading suspension record."""
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO trading_suspensions
+                   (ticker, suspend_date, resume_date, reason, suspension_type, source, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    record.get("ticker"),
+                    record.get("suspend_date"),
+                    record.get("resume_date"),
+                    record.get("reason"),
+                    record.get("suspension_type"),
+                    record.get("source", "manual"),
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+        # Auto-sync to Parquet
+        self._sync_table_to_parquet("trading_suspensions")
+
+    def load_suspensions(self, ticker: str | None = None) -> list[dict]:
+        """Load suspension records, optionally filtered by ticker."""
+        with self._connect() as conn:
+            if ticker:
+                rows = conn.execute(
+                    "SELECT * FROM trading_suspensions WHERE ticker = ? ORDER BY suspend_date DESC",
+                    (ticker,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM trading_suspensions ORDER BY suspend_date DESC"
+                ).fetchall()
+            cols = [d[0] for d in conn.execute("SELECT * FROM trading_suspensions LIMIT 0").description]
+            return [dict(zip(cols, row)) for row in rows]
+
+    def load_active_suspensions(self, as_of: str | None = None) -> list[dict]:
+        """Load suspensions that are active on a given date (resume_date is NULL or > as_of)."""
+        from datetime import datetime as _dt
+        check_date = as_of or _dt.now(UTC).strftime("%Y-%m-%d")
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT * FROM trading_suspensions
+                   WHERE suspend_date <= ?
+                     AND (resume_date IS NULL OR resume_date > ?)
+                   ORDER BY suspend_date DESC""",
+                (check_date, check_date),
+            ).fetchall()
+            cols = [d[0] for d in conn.execute("SELECT * FROM trading_suspensions LIMIT 0").description]
+            return [dict(zip(cols, row)) for row in rows]
 
     # ---------- D31: Pattern Analysis ----------
     def save_pattern_analysis(self, record: dict):

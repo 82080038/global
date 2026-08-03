@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-NOTRADE_VERSION = "1.0"
+NOTRADE_VERSION = "1.1"
 
 
 @dataclass
@@ -31,6 +31,8 @@ class NoTradeConfig:
     event_risk_window_days: int = 5
     regime_blocklist: list = field(default_factory=lambda: ["crisis", "unknown"])
     min_model_agreement: float = 0.6
+    ipo_lockup_days: int = 0  # 0 = use lock_up_end_date from instrument_master; >0 = override
+    ipo_min_history_days: int = 20  # min bars of post-IPO history before trading
 
 
 @dataclass
@@ -67,6 +69,8 @@ class NoTradeEngine:
         latest_data_date: datetime | None = None,
         event_risk: bool = False,
         model_agreement: float = 1.0,
+        instrument_status: dict[str, Any] | None = None,
+        active_suspensions: list[dict] | None = None,
     ) -> NoTradeResult:
         """Evaluate all No-Trade gates for a single instrument.
 
@@ -79,6 +83,9 @@ class NoTradeEngine:
             latest_data_date: Date of most recent data
             event_risk: Whether there's an upcoming event
             model_agreement: Fraction of models that agree (0.0 to 1.0)
+            instrument_status: Dict from DataStorage.get_instrument_status() with keys:
+                status, listing_date, delisting_date, ipo_date, lock_up_end_date
+            active_suspensions: List of active suspension dicts for this ticker
 
         Returns:
             NoTradeResult with decision and gate details.
@@ -163,6 +170,45 @@ class NoTradeEngine:
         else:
             gates_passed.append("DATA_QUALITY_FAIL")
 
+        # Gate 10: Instrument delisted
+        if instrument_status is not None:
+            inst_status = instrument_status.get("status", "active")
+            if inst_status == "delisted":
+                gates_failed.append("DELISTED")
+                reason_codes.append(f"DELISTED: ticker status is 'delisted'")
+            else:
+                gates_passed.append("DELISTED")
+
+            # Gate 11: IPO lock-up period
+            lock_up_end = instrument_status.get("lock_up_end_date")
+            ipo_date = instrument_status.get("ipo_date") or instrument_status.get("listing_date")
+            now_str = datetime.now(UTC).strftime("%Y-%m-%d")
+            if lock_up_end and now_str < lock_up_end:
+                gates_failed.append("IPO_LOCKUP")
+                reason_codes.append(f"IPO_LOCKUP: lock-up ends {lock_up_end}, today is {now_str}")
+            elif ipo_date and self.config.ipo_min_history_days > 0 and bars_history is not None:
+                if bars_history < self.config.ipo_min_history_days:
+                    gates_failed.append("IPO_INSUFFICIENT_HISTORY")
+                    reason_codes.append(
+                        f"IPO_INSUFFICIENT_HISTORY: only {bars_history} bars since IPO "
+                        f"({ipo_date}), need {self.config.ipo_min_history_days}"
+                    )
+                else:
+                    gates_passed.append("IPO_LOCKUP")
+            else:
+                gates_passed.append("IPO_LOCKUP")
+        else:
+            gates_passed.append("DELISTED")
+            gates_passed.append("IPO_LOCKUP")
+
+        # Gate 12: Active trading suspension
+        if active_suspensions:
+            gates_failed.append("SUSPENDED")
+            reasons = [s.get("reason", "unknown") for s in active_suspensions[:3]]
+            reason_codes.append(f"SUSPENDED: active suspension ({', '.join(reasons)})")
+        else:
+            gates_passed.append("SUSPENDED")
+
         decision = "NO_TRADE" if gates_failed else "PROCEED"
 
         return NoTradeResult(
@@ -204,6 +250,8 @@ class NoTradeEngine:
                 latest_data_date=ctx.get("latest_data_date"),
                 event_risk=ctx.get("event_risk", False),
                 model_agreement=ctx.get("model_agreement", 1.0),
+                instrument_status=ctx.get("instrument_status"),
+                active_suspensions=ctx.get("active_suspensions"),
             )
             results.append(result)
 
