@@ -74,7 +74,7 @@ def _generate_ohlcv(ticker: str, config: dict, days: int = 500) -> pd.DataFrame:
             "volume": volume,
             "adjusted_close": close,
             "source": "seeder",
-            "ingested_at": datetime.now(UTC).isoformat(),
+            "ingested_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+00:00"),
             "data_quality_score": 100.0,
         })
     return pd.DataFrame(records)

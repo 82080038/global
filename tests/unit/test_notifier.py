@@ -1,19 +1,19 @@
-"""Tests for notifier — Telegram notification functions."""
+"""Tests for notifier — email notification functions."""
 
 import os
 from unittest.mock import patch
 
 
-def test_notifier_not_configured():
-    """When TELEGRAM_BOT_TOKEN is empty, notifier should be no-op."""
-    with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "", "TELEGRAM_CHAT_ID": ""}):
-        from trading_system.utils.notifier import _is_configured
-        assert not _is_configured()
+def test_email_not_configured():
+    """When EMAIL_FROM is empty, email should be no-op."""
+    with patch.dict(os.environ, {"EMAIL_FROM": "", "EMAIL_TO": "", "EMAIL_PASSWORD": ""}):
+        from trading_system.utils.notifier import _email_configured
+        assert not _email_configured()
 
 
-def test_send_telegram_no_token():
-    """send_telegram should return False when not configured."""
-    with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "", "TELEGRAM_CHAT_ID": ""}):
-        from trading_system.utils.notifier import send_telegram
-        result = send_telegram("test message")
+def test_send_email_not_configured():
+    """send_email should return False when not configured."""
+    with patch.dict(os.environ, {"EMAIL_FROM": "", "EMAIL_TO": "", "EMAIL_PASSWORD": ""}):
+        from trading_system.utils.notifier import send_email
+        result = send_email("test subject", "test message")
         assert result is False

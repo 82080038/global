@@ -120,17 +120,6 @@ class AutomatedExecutionEngine:
 
         logger.info(f"BUY {quantity} {ticker} @ Rp {price:,.2f} (fee: {fee:,.0f})")
 
-        # Telegram notification
-        try:
-            from trading_system.utils.notifier import notify_signal
-            notify_signal(
-                action="BUY", ticker=ticker, price=price, conviction=100,
-                details={"stop_loss": stop_loss, "take_profit": take_profit,
-                         "risk_flags": ["AUTO_EXEC"]},
-            )
-        except Exception:
-            pass
-
         return {
             "status": "ok", "action": "BUY", "ticker": ticker,
             "quantity": quantity, "price": price, "fee": fee,
@@ -188,15 +177,6 @@ class AutomatedExecutionEngine:
 
         logger.info(f"SELL {quantity} {ticker} @ Rp {price:,.2f} (PnL: {realized_pnl:,.0f})")
 
-        # Telegram notification
-        try:
-            from trading_system.utils.notifier import notify_signal
-            notify_signal(
-                action="SELL", ticker=ticker, price=price, conviction=100,
-                details={"risk_flags": [trigger]},
-            )
-        except Exception:
-            pass
 
         return {
             "status": "ok", "action": "SELL", "ticker": ticker,
@@ -345,18 +325,6 @@ class AutomatedExecutionEngine:
             )
             # Persist halt flag so the rest of TODAY's cycles stay halted too.
             self.storage.set_state("execution_halted_date", today)
-            # Send Telegram alert
-            try:
-                from trading_system.utils.notifier import send_telegram
-                send_telegram(
-                    f"🚫 <b>DAILY LOSS LIMIT TRIGGERED</b>\n"
-                    f"Loss today: Rp {abs(total_pnl_today):,.2f}\n"
-                    f"Limit: Rp {self.daily_loss_limit:,.2f}\n"
-                    f"Auto-trade DISABLED for today.",
-                    parse_mode="HTML",
-                )
-            except Exception:
-                pass
             return True  # STOP trading
 
         return False
@@ -373,14 +341,25 @@ class AutomatedExecutionEngine:
         logger.info("=" * 60)
         logger.info("Automated execution cycle started...")
 
-        # Circuit breaker: check daily loss limit
+        # Circuit breaker: check daily loss limit first (safety priority)
         if self._check_daily_loss_limit():
             logger.error("Daily Loss Limit reached. Execution halted for today.")
             return [{"status": "circuit_breaker", "reason": "daily_loss_limit"}]
 
+        # Market status check: skip if market is closed
+        from trading_system.utils.market_status import get_market_status
+
+        mkt = get_market_status(self.storage)
+        if not mkt["is_open"]:
+            logger.info(
+                "Market closed (session=%s, holiday=%s). Skipping execution cycle.",
+                mkt["session"],
+                mkt.get("holiday_name") or "N/A",
+            )
+            return [{"status": "market_closed", "session": mkt["session"], "next_open": mkt.get("next_open")}]
+
         if tickers is None:
-            # Load all tickers from OHLCV table
-            tickers = self.storage.list_tickers()
+            tickers = self.storage.list_active_equity_tickers()
 
         if not tickers:
             logger.warning("No tickers found.")
@@ -405,8 +384,12 @@ class AutomatedExecutionEngine:
     def start_scheduler(self, interval_minutes: int = 15, tickers: list[str] | None = None):
         """Start the automated execution scheduler.
 
+        In trading mode (market open): runs every `interval_minutes` for signal execution.
+        In maintenance mode (market closed): run_once skips execution automatically,
+        but still logs market status for visibility.
+
         Args:
-            interval_minutes: Check interval in minutes (default 15).
+            interval_minutes: Check interval in minutes (default 15 during trading hours).
             tickers: List of tickers to monitor. If None, loads from DB.
         """
         try:
@@ -415,6 +398,17 @@ class AutomatedExecutionEngine:
         except ImportError:
             logger.error("apscheduler not installed. Install with: pip install apscheduler")
             return
+
+        from trading_system.utils.market_status import get_market_status
+
+        mkt = get_market_status(self.storage)
+        if mkt["mode"] == "trading":
+            logger.info("Scheduler starting in TRADING mode (market open). Interval: %d min.", interval_minutes)
+        else:
+            logger.info(
+                "Scheduler starting in MAINTENANCE mode (market %s). Execution cycles will be skipped.",
+                mkt["session"],
+            )
 
         scheduler = BackgroundScheduler()
         scheduler.add_job(

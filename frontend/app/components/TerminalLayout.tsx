@@ -7,11 +7,12 @@ export default function TerminalLayout({
   children,
   ticker = "BBCA.JK",
 }: {
-  active: "dashboard" | "engines" | "backtest" | "portfolio" | "audit" | "replay" | "simulation";
+  active: "home";
   children: React.ReactNode;
   ticker?: string;
 }) {
   const [time, setTime] = useState("");
+  const [fullPage, setFullPage] = useState(false);
 
   useEffect(() => {
     const update = () => setTime(new Date().toLocaleTimeString("id-ID"));
@@ -29,108 +30,49 @@ export default function TerminalLayout({
           <span>{ticker}</span>
           <span>{time}</span>
         </div>
-        <div className="ml-auto flex gap-4">
+        <div className="ml-auto flex items-center gap-4">
           <a
-            href="/dashboard"
+            href="/"
             className={
-              active === "dashboard"
+              active === "home"
                 ? "text-zinc-100"
                 : "text-zinc-400 hover:text-zinc-100"
             }
           >
-            DASHBOARD
+            DATA INSPECTION
           </a>
-          <a
-            href="/engines"
-            className={
-              active === "engines"
-                ? "text-zinc-100"
-                : "text-zinc-400 hover:text-zinc-100"
-            }
+          <div className="h-4 w-px bg-zinc-700" />
+          <button
+            onClick={() => setFullPage((v) => !v)}
+            title={fullPage ? "Show sidebar" : "Hide sidebar (full page)"}
+            className="flex items-center gap-1 text-zinc-500 hover:text-zinc-200 transition-colors"
           >
-            ENGINES
-          </a>
-          <a
-            href="/simulation"
-            className={
-              active === "simulation"
-                ? "text-zinc-100"
-                : "text-zinc-400 hover:text-zinc-100"
-            }
-          >
-            SIMULATION
-          </a>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className={fullPage ? "rotate-180" : ""} style={{ transition: "transform 0.2s" }}>
+              <rect x="1" y="2" width="14" height="12" rx="1" stroke="currentColor" strokeWidth="1.2" />
+              <rect x="1" y="2" width="4" height="12" fill="currentColor" opacity={fullPage ? 0.2 : 0.5} rx="1" />
+            </svg>
+            <span className="text-[10px]">{fullPage ? "EXPAND" : "COLLAPSE"}</span>
+          </button>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <aside className="w-48 border-r border-zinc-800 bg-zinc-900/50 p-2 text-xs">
+        <aside className={`border-r border-zinc-800 bg-zinc-900/50 p-2 text-xs transition-all duration-200 overflow-hidden ${
+          fullPage ? "w-0 border-r-0 p-0" : "w-48"
+        }`} style={fullPage ? { opacity: 0 } : { opacity: 1 }}>
           <div className="mb-2 px-2 py-1 text-zinc-500">NAVIGATION</div>
           <a
-            href="/dashboard"
-            className={`block rounded px-2 py-1 ${active === "dashboard"
+            href="/"
+            className={`block rounded px-2 py-1 ${active === "home"
               ? "bg-zinc-800 text-zinc-100"
               : "text-zinc-300 hover:bg-zinc-800"
-              }`}
+              }`
+            }
           >
-            Dashboard
-          </a>
-          <a
-            href="/engines"
-            className={`block rounded px-2 py-1 ${active === "engines"
-              ? "bg-zinc-800 text-zinc-100"
-              : "text-zinc-300 hover:bg-zinc-800"
-              }`}
-          >
-            Engine Monitor
-          </a>
-          <a
-            href="/backtest"
-            className={`block rounded px-2 py-1 ${active === "backtest"
-              ? "bg-zinc-800 text-zinc-100"
-              : "text-zinc-300 hover:bg-zinc-800"
-              }`}
-          >
-            Backtest
-          </a>
-          <a
-            href="/portfolio"
-            className={`block rounded px-2 py-1 ${active === "portfolio"
-              ? "bg-zinc-800 text-zinc-100"
-              : "text-zinc-300 hover:bg-zinc-800"
-              }`}
-          >
-            Portfolio
-          </a>
-          <a
-            href="/audit"
-            className={`block rounded px-2 py-1 ${active === "audit"
-              ? "bg-zinc-800 text-zinc-100"
-              : "text-zinc-300 hover:bg-zinc-800"
-              }`}
-          >
-            Audit Log
-          </a>
-          <a
-            href="/replay"
-            className={`block rounded px-2 py-1 ${active === "replay"
-              ? "bg-zinc-800 text-zinc-100"
-              : "text-zinc-300 hover:bg-zinc-800"
-              }`}
-          >
-            Replay Sim
-          </a>
-          <a
-            href="/simulation"
-            className={`block rounded px-2 py-1 ${active === "simulation"
-              ? "bg-zinc-800 text-zinc-100"
-              : "text-zinc-300 hover:bg-zinc-800"
-              }`}
-          >
-            Simulation
+            Data Inspection
           </a>
           <div className="mt-6 px-2 py-1 text-zinc-500">SYSTEM</div>
-          <div className="px-2 py-1 text-zinc-400">v0.1.7</div>
+          <div className="px-2 py-1 text-zinc-400">v0.1.11</div>
         </aside>
 
         <section className="flex flex-1 flex-col overflow-auto p-4">

@@ -182,7 +182,7 @@ class TestTrainLinearRegression:
         """< 60 sampel harus ditolak (ambang lama 20 dinaikkan ke 60)."""
         feature_cols = ["technical", "fundamental", "macro", "global", "relationship", "sentiment"]
         scores_df, price_df = self._build_scores_and_prices(30, feature_cols, {})
-        mock_storage.list_tickers.return_value = ["TEST.JK"]
+        mock_storage.list_active_equity_tickers.return_value = ["TEST.JK"]
         mock_storage.load_scores.return_value = scores_df
         mock_storage.load_ohlcv.return_value = price_df
 
@@ -198,7 +198,7 @@ class TestTrainLinearRegression:
         # 'sentiment' sengaja dibuat berkorelasi NEGATIF kuat dengan forward return
         coef_map = {"technical": 0.01, "sentiment": -0.02}
         scores_df, price_df = self._build_scores_and_prices(120, feature_cols, coef_map)
-        mock_storage.list_tickers.return_value = ["TEST.JK"]
+        mock_storage.list_active_equity_tickers.return_value = ["TEST.JK"]
         mock_storage.load_scores.return_value = scores_df
         mock_storage.load_ohlcv.return_value = price_df
         mock_storage.save_ai_weights = MagicMock()
@@ -215,7 +215,7 @@ class TestTrainLinearRegression:
         feature_cols = ["technical", "fundamental", "macro", "global", "relationship", "sentiment"]
         coef_map = {"technical": 0.01}
         scores_df, price_df = self._build_scores_and_prices(150, feature_cols, coef_map)
-        mock_storage.list_tickers.return_value = ["TEST.JK"]
+        mock_storage.list_active_equity_tickers.return_value = ["TEST.JK"]
         mock_storage.load_scores.return_value = scores_df
         mock_storage.load_ohlcv.return_value = price_df
         mock_storage.save_ai_weights = MagicMock()
@@ -224,5 +224,5 @@ class TestTrainLinearRegression:
         result = engine.train_linear_regression()
 
         assert result["status"] == "ok"
-        assert result["n_splits"] >= 2
         assert "oos_r2_score" in result
+        assert result["n_splits"] >= 2

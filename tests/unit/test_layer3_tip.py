@@ -212,4 +212,4 @@ class TestNoTradeEngine:
         assert results[1].decision == "NO_TRADE"
 
     def test_version(self):
-        assert NOTRADE_VERSION == "1.0"
+        assert NOTRADE_VERSION == "1.1"

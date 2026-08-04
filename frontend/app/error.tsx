@@ -16,7 +16,7 @@ export default function Error({
   }, [error])
 
   return (
-    <TerminalLayout active="error" ticker="ERROR">
+    <TerminalLayout active="dashboard" ticker="ERROR">
       <div className="flex h-full flex-col items-center justify-center">
         <div className="max-w-md space-y-4 text-center">
           <h1 className="text-2xl font-bold text-red-400">

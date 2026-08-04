@@ -1054,7 +1054,7 @@ def main():
                 if "source" not in df.columns:
                     df["source"] = "archive"
                 if "ingested_at" not in df.columns:
-                    df["ingested_at"] = datetime.now(UTC).isoformat()
+                    df["ingested_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+00:00")
                 if "data_quality_score" not in df.columns:
                     df["data_quality_score"] = None
                 raw = normalize_ohlcv(df)

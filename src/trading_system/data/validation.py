@@ -10,6 +10,7 @@ Jenis validasi:
 import pandas as pd
 
 from trading_system.data.contracts import DataQualityReport
+from trading_system.data.quality import check_quality
 from trading_system.data.storage import DataStorage
 
 
@@ -168,6 +169,31 @@ class DataQualityValidator:
                     "severity": "medium",
                 })
                 score -= 1.0
+
+        # 8. TIP-derived quality checks: duplicates, stale data, abnormal returns
+        ticker = df["ticker"].iloc[0] if "ticker" in df.columns else "unknown"
+        qr = check_quality(df, symbol=str(ticker))
+        if qr.duplicates > 0:
+            anomalies.append({
+                "check": "tip_quality",
+                "detail": f"{qr.duplicates} duplicate timestamps",
+                "severity": "medium",
+            })
+            score -= 2.0
+        if qr.stale_data:
+            anomalies.append({
+                "check": "tip_quality",
+                "detail": "data is stale (last bar >7 days ago)",
+                "severity": "medium",
+            })
+            score -= 2.0
+        if qr.abnormal_returns > 0:
+            anomalies.append({
+                "check": "tip_quality",
+                "detail": f"{qr.abnormal_returns} abnormal returns (>25% daily move)",
+                "severity": "low",
+            })
+            score -= 1.0
 
         score = max(0.0, min(100.0, score))
 

@@ -215,9 +215,13 @@ class TestAutomatedExecutionEngine:
 
     def test_run_once_no_tickers(self, temp_storage):
         """Empty ticker list returns empty results."""
-        engine = AutomatedExecutionEngine(storage=temp_storage)
-        results = engine.run_once([])
-        assert results == []
+        with patch(
+            "trading_system.utils.market_status.get_market_status",
+            return_value={"is_open": True, "session": "open", "next_open": None},
+        ):
+            engine = AutomatedExecutionEngine(storage=temp_storage)
+            results = engine.run_once([])
+            assert results == []
 
     def test_position_size_capped_at_10pct(self, temp_storage):
         """Position size is capped at 10% of capital."""

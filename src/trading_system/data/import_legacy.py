@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 import pandas as pd
 
 from trading_system.data.storage import DataStorage
+from trading_system.data.validation import DataQualityValidator
 
 
 class LegacyDataImporter:
@@ -21,6 +22,7 @@ class LegacyDataImporter:
     ):
         self.source_db = source_db
         self.storage = target_storage or DataStorage()
+        self.validator = DataQualityValidator()
         self.stats: dict[str, int] = {}
 
     def import_all(self) -> dict[str, int]:
@@ -62,14 +64,19 @@ class LegacyDataImporter:
         df["exchange"] = "IDX"
         df["timeframe"] = "1d"
         df["source"] = "saham_db"
-        df["ingested_at"] = datetime.now(UTC).isoformat()
+        df["ingested_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+00:00")
         df["data_quality_score"] = None
 
         for col in ["open", "high", "low", "close", "volume", "adjusted_close"]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
 
-        n = self.storage.save_ohlcv(df)
+        clean, report = self.validator.validate(df)
+        if report.action == "pause":
+            print(f"  ohlcv: SKIPPED (quality={report.data_quality_score}, tier={report.tier})")
+            self._log("ohlcv", 0)
+            return
+        n = self.storage.save_ohlcv(clean)
         self._log("ohlcv", n)
 
     def _import_instruments(self):
@@ -164,14 +171,19 @@ class LegacyDataImporter:
         df["exchange"] = "GLOBAL"
         df["timeframe"] = "1d"
         df["source"] = "saham_db_global"
-        df["ingested_at"] = datetime.now(UTC).isoformat()
+        df["ingested_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+00:00")
         df["data_quality_score"] = None
 
         for col in ["open", "high", "low", "close", "volume", "adjusted_close"]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
 
-        n = self.storage.save_ohlcv(df)
+        clean, report = self.validator.validate(df)
+        if report.action == "pause":
+            print(f"  global_market_data: SKIPPED (quality={report.data_quality_score}, tier={report.tier})")
+            self._log("global_market_data", 0)
+            return
+        n = self.storage.save_ohlcv(clean)
         self._log("global_market_data", n)
 
     def _import_dividends(self):

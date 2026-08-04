@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trading-system"
-version = "0.1.0"
-description = "Professional trading decision system - Phase 1"
+version = "0.1.11"
+description = "Professional trading decision system for Indonesian stocks (IDX)"
 requires-python = ">=3.10"
 dependencies = [
     "pandas>=2.0.0",
@@ -42,6 +42,15 @@ dev = [
 e2e = [
     "playwright>=1.40.0",
     "pytest-playwright>=0.4.0",
+]
+# GPU-accelerated ML: PyTorch with CUDA 12.1 backend.
+# Install with: pip install -e ".[gpu]" --index-url https://download.pytorch.org/whl/cu121
+# Hardware: 2x NVIDIA GeForce GTX 1050 Ti (4 GB VRAM each, compute capability 6.1).
+# Used by ai_learning/deep_learning.py (LSTM) — auto-detected at runtime.
+gpu = [
+    "torch>=2.4.0",
+    "torchvision>=0.19.0",
+    "torchaudio>=2.4.0",
 ]
 
 [tool.setuptools.packages.find]

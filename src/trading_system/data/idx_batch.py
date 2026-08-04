@@ -121,6 +121,18 @@ class IDXBatchEngine:
     def _save_foreign_flow_rows(self, records: list[dict]) -> int:
         if not records:
             return 0
+        # Quality gate: filter out records with negative or missing critical fields
+        clean_records = [
+            r for r in records
+            if r.get("ticker")
+            and r.get("date")
+            and r["foreign_buy"] >= 0
+            and r["foreign_sell"] >= 0
+            and r["foreign_net"] is not None
+        ]
+        skipped = len(records) - len(clean_records)
+        if skipped > 0:
+            self._audit("data.idx.foreign_flow.quality_skip", {"skipped": skipped})
         tuples = [
             (
                 r["ticker"],
@@ -133,7 +145,7 @@ class IDXBatchEngine:
                 r["domestic_net"],
                 r["source"],
             )
-            for r in records
+            for r in clean_records
         ]
         sql = """
             INSERT OR REPLACE INTO foreign_flow
@@ -146,6 +158,17 @@ class IDXBatchEngine:
     def _save_broker_flow_rows(self, records: list[dict]) -> int:
         if not records:
             return 0
+        # Quality gate: filter out records with missing critical fields or negative volumes
+        clean_records = [
+            r for r in records
+            if r.get("broker")
+            and r.get("date")
+            and r["net_volume"] is not None
+            and r["net_volume"] >= 0
+        ]
+        skipped = len(records) - len(clean_records)
+        if skipped > 0:
+            self._audit("data.idx.broker_flow.quality_skip", {"skipped": skipped})
         tuples = [
             (
                 r["ticker"],
@@ -159,7 +182,7 @@ class IDXBatchEngine:
                 r["net_value"],
                 r["source"],
             )
-            for r in records
+            for r in clean_records
         ]
         sql = """
             INSERT OR REPLACE INTO broker_flow
@@ -236,7 +259,7 @@ class IDXBatchEngine:
                 dom_sell = max(0, vol - fs)
 
                 all_records.append({
-                    "ticker": kode,
+                    "ticker": f"{kode}.JK" if "." not in kode else kode,
                     "date": date_fmt,
                     "foreign_buy": fb,
                     "foreign_sell": fs,

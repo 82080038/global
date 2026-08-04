@@ -57,8 +57,9 @@ from trading_system.analysis.relationship import MarketRelationshipEngine
 from trading_system.monitoring.engine import MonitoringEngine
 from trading_system.paper_trading.engine import PaperTradingEngine
 from trading_system.xai.engine import ExplainableAIEngine
+from trading_system.utils.market_status import get_market_status
 
-app = FastAPI(title="Trading System API", version="0.1.8", default_response_class=SanitizedJSONResponse)
+app = FastAPI(title="Trading System API", version="0.1.11", default_response_class=SanitizedJSONResponse)
 
 # Global exception handlers
 @app.exception_handler(Exception)
@@ -240,7 +241,7 @@ async def api_key_auth(request: Request, call_next):
     # Skip auth for health/root and CORS preflight (OPTIONS) requests.
     # Preflight requests don't carry credentials and must be allowed to reach
     # CORSMiddleware, otherwise the browser blocks the actual request (§3.5).
-    if path in ("/", "/api/health") or path.startswith("/ws/") or method == "OPTIONS":
+    if path in ("/", "/api/health", "/api/market-status") or path.startswith("/ws/") or method == "OPTIONS":
         return await call_next(request)
 
     # DELETE methods are always sensitive (destructive operations)
@@ -317,6 +318,11 @@ def health():
     return storage.get_source_health().to_dict(orient="records")
 
 
+@app.get("/api/market-status")
+def market_status():
+    return get_market_status(storage)
+
+
 @app.get("/api/data/{category}")
 def get_data(category: str, ticker: str, start: str | None = None, end: str | None = None, page: int = 1, limit: int = 500):
     if category != "ohlcv":
@@ -333,8 +339,11 @@ def get_data(category: str, ticker: str, start: str | None = None, end: str | No
 
 
 @app.get("/api/indicators/{ticker}")
-def get_indicators(ticker: str):
-    """Return OHLCV with computed technical indicators (RSI, MACD, MA, Bollinger)."""
+def get_indicators(ticker: str, limit: int = 0):
+    """Return OHLCV with computed technical indicators (RSI, MACD, MA, Bollinger).
+
+    If limit > 0, only return the last N rows (most recent) to reduce payload size.
+    """
     from trading_system.analysis.technical import TechnicalAnalysisEngine
 
     df = storage.load_ohlcv(ticker)
@@ -343,6 +352,8 @@ def get_indicators(ticker: str):
     engine = TechnicalAnalysisEngine()
     engine.ohlcv = df
     df_with_indicators = engine.compute_indicators()
+    if limit > 0:
+        df_with_indicators = df_with_indicators.tail(limit)
     records = []
     for idx, row in df_with_indicators.iterrows():
         record = {
@@ -463,6 +474,231 @@ def explain_recommendation(ticker: str):
         raise HTTPException(status_code=404, detail=dec["message"])
     xai = ExplainableAIEngine(storage=storage)
     return xai.explain(ticker, dec["recommendation"])
+
+
+# ---------- Screener / Universe Ranking ----------
+
+def _build_technical_features(tickers: list[str], limit: int = 300) -> "pd.DataFrame":
+    """Build a latest-row-per-ticker features DataFrame for the technical screener.
+
+    Computes indicators via TechnicalAnalysisEngine and renames columns to the
+    schema expected by trading_system.analysis.screener templates:
+        sma_50, rsi_14, adx_14, volume_sma_20, bb_lower, sma_200, macd_hist,
+        close_above_sma50.
+    """
+    import pandas as pd
+
+    from trading_system.analysis.technical import TechnicalAnalysisEngine
+
+    rows = []
+    for t in tickers[:limit]:
+        df = storage.load_ohlcv(t)
+        if df is None or df.empty or len(df) < 60:
+            continue
+        try:
+            eng = TechnicalAnalysisEngine()
+            eng.ohlcv = df
+            ind = eng.compute_indicators()
+        except Exception:
+            continue
+        # SMA 200 tidak dihitung oleh engine default — tambahkan manual.
+        if "sma_200" not in ind.columns:
+            ind["sma_200"] = ind["close"].rolling(200).mean()
+        latest = ind.iloc[-1]
+        row = {
+            "ticker": t,
+            "date": latest.name,
+            "close": float(latest["close"]) if pd.notna(latest["close"]) else None,
+            "volume": float(latest["volume"]) if pd.notna(latest["volume"]) else 0.0,
+            "sma_50": float(latest["ma_50"]) if pd.notna(latest.get("ma_50")) else None,
+            "sma_200": float(latest["sma_200"]) if pd.notna(latest.get("sma_200")) else None,
+            "rsi_14": float(latest["rsi"]) if pd.notna(latest.get("rsi")) else None,
+            "adx_14": float(latest["adx"]) if pd.notna(latest.get("adx")) else None,
+            "volume_sma_20": float(latest["volume_sma_20"]) if pd.notna(latest.get("volume_sma_20")) else None,
+            "bb_lower": float(latest["bb_lower"]) if pd.notna(latest.get("bb_lower")) else None,
+            "macd_hist": float(latest["macd"] - latest["macd_signal"])
+            if pd.notna(latest.get("macd")) and pd.notna(latest.get("macd_signal"))
+            else None,
+        }
+        if row["sma_50"] is not None and row["close"] is not None:
+            row["close_above_sma50"] = int(row["close"] > row["sma_50"])
+        else:
+            row["close_above_sma50"] = 0
+        rows.append(row)
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows)
+
+
+@app.get("/api/screen")
+def screen_universe(
+    template: str = "technical",
+    top_n: int = 20,
+    tickers: str | None = None,
+    max_tickers: int = 300,
+    min_rsi: float = 30.0,
+    max_rsi: float = 70.0,
+    min_adx: float = 20.0,
+    min_volume_ratio: float = 1.0,
+    max_per: float = 15.0,
+    min_roe: float = 10.0,
+    max_der: float = 1.0,
+):
+    """Run a technical screening template across the universe and return ranked passes.
+
+    Templates: 'technical', 'momentum', 'value'. The universe defaults to all
+    IDX (.JK) tickers; pass `tickers=A,B,C` to restrict. `max_tickers` caps the
+    number of tickers scanned to keep response time bounded.
+    """
+    import pandas as pd
+
+    from trading_system.analysis.screener import TEMPLATES
+
+    if template not in TEMPLATES:
+        raise HTTPException(status_code=400, detail=f"Unknown template: {template}. Available: {list(TEMPLATES.keys())}")
+
+    universe = (
+        [t.strip() for t in tickers.split(",") if t.strip()]
+        if tickers
+        else storage.list_active_equity_tickers()
+    )
+    if not universe:
+        raise HTTPException(status_code=404, detail="No tickers available")
+
+    features = _build_technical_features(universe, limit=max_tickers)
+    if features.empty:
+        raise HTTPException(status_code=404, detail="No features could be computed (insufficient data)")
+
+    # value_template butuh kolom fundamental (per/roe/der) — isi dari fundamental_data bila ada.
+    if template == "value":
+        features = _enrich_value_features(features)
+
+    # Panggil template function langsung dengan kwargs-nya (screen_universe tidak terima kwargs).
+    if template == "technical":
+        result = TEMPLATES["technical"](
+            features, min_rsi=min_rsi, max_rsi=max_rsi, min_adx=min_adx, min_volume_ratio=min_volume_ratio
+        )
+    elif template == "value":
+        result = TEMPLATES["value"](features, max_per=max_per, min_roe=min_roe, max_der=max_der)
+    else:
+        result = TEMPLATES["momentum"](features)
+
+    if result.empty:
+        return {
+            "template": template,
+            "universe_scanned": len(features),
+            "passed": 0,
+            "results": [],
+        }
+
+    # Rank hasil berdasarkan score (screen_universe tidak dipakai langsung di sini
+    # karena tidak menerima kwargs template).
+    result = result.sort_values("score", ascending=False).reset_index(drop=True)
+    result["rank"] = result.index + 1
+
+    # Ambil kolom-kolom yang relevan untuk ditampilkan
+    cols = ["rank", "ticker", "score", "close", "rsi_14", "adx_14", "sma_50", "volume"]
+    if template == "momentum":
+        cols = ["rank", "ticker", "score", "close", "rsi_14", "adx_14", "macd_hist", "sma_200"]
+    elif template == "value":
+        cols = ["rank", "ticker", "score", "close", "per", "roe", "der"]
+    cols = [c for c in cols if c in result.columns]
+    payload = result[cols].head(top_n).to_dict(orient="records")
+    # Bersihkan NaN -> None
+    for row in payload:
+        for k, v in list(row.items()):
+            if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                row[k] = None
+    return {
+        "template": template,
+        "universe_scanned": len(features),
+        "passed": len(result),
+        "results": payload,
+    }
+
+
+def _enrich_value_features(features: "pd.DataFrame") -> "pd.DataFrame":
+    """Attach latest per/roe/der to features DataFrame from fundamental_data table."""
+    import pandas as pd
+
+    try:
+        with storage._connect() as conn:
+            df = pd.read_sql_query(
+                """SELECT f.ticker, f.per, f.roe, f.der
+                   FROM fundamental_data f
+                   JOIN (SELECT ticker, MAX(timestamp) AS mx FROM fundamental_data GROUP BY ticker) g
+                     ON f.ticker = g.ticker AND f.timestamp = g.mx""",
+                conn,
+            )
+    except Exception:
+        return features
+    if df.empty:
+        return features
+    if "per" in features.columns:
+        features = features.drop(columns=["per", "roe", "der"], errors="ignore")
+    return features.merge(df, on="ticker", how="left")
+
+
+@app.get("/api/factors")
+def factor_screen(
+    top_n: int = 20,
+    min_composite: float = 0.0,
+    factor_filter: str | None = None,
+    min_factor_rank: float = 0.0,
+    tickers: str | None = None,
+    max_tickers: int = 0,
+):
+    """Run the FactorEngine cross-sectional screen and return top-N ranked instruments.
+
+    Returns composite rank (0-1) plus per-factor percentile breakdown for each
+    passing instrument. Factors: momentum, low_volatility, quality, beta, size, value.
+
+    `max_tickers` (>0) caps the universe size for faster responses; 0 = no cap.
+    """
+    from trading_system.analysis.factor_engine import FactorEngine
+    from trading_system.analysis.factor_screener import FactorScreenerService
+
+    universe = (
+        [t.strip() for t in tickers.split(",") if t.strip()]
+        if tickers
+        else storage.list_active_equity_tickers()
+    )
+    if not universe:
+        raise HTTPException(status_code=404, detail="No tickers available")
+    if max_tickers > 0:
+        universe = universe[:max_tickers]
+
+    engine = FactorEngine(storage=storage)
+    service = FactorScreenerService(engine)
+    return service.screen(
+        top_n=top_n,
+        min_composite=min_composite,
+        factor_filter=factor_filter,
+        min_factor_rank=min_factor_rank,
+        tickers=universe,
+    )
+
+
+@app.get("/api/factors/{ticker}")
+def factor_explain(ticker: str, universe: int = 80):
+    """Explainable factor breakdown (percentile rank + tier) for a single ticker.
+
+    Cross-sectional ranking membutuhkan universe; `universe` membatasi jumlah
+    ticker pembanding (diambil dari IDX list + ticker target) agar respons cepat.
+    """
+    from trading_system.analysis.factor_engine import FactorEngine
+    from trading_system.analysis.factor_screener import FactorScreenerService
+
+    idx_tickers = storage.list_active_equity_tickers()
+    # Pastikan ticker target masuk ke universe pembanding.
+    compare = [t for t in idx_tickers if t != ticker][: max(0, universe - 1)]
+    compare.append(ticker)
+    engine = FactorEngine(storage=storage)
+    service = FactorScreenerService(engine)
+    result = service.explain(ticker, tickers=compare)
+    if not result.get("found", True):
+        raise HTTPException(status_code=404, detail=result.get("reason", "Not found"))
+    return result
 
 
 @app.post("/api/paper-trade")
@@ -827,9 +1063,12 @@ def save_performance_snapshot():
 
 # ====================== WATCHLIST ======================
 @app.get("/api/tickers")
-def list_tickers(page: int = 1, limit: int = 100):
-    """List all tickers in the database with pagination."""
-    tickers = storage.list_tickers()
+def list_tickers(page: int = 1, limit: int = 100, equity_only: bool = False):
+    """List all tickers in the database with pagination.
+
+    If equity_only=True, returns only active equity stocks (saham listed).
+    """
+    tickers = storage.list_active_equity_tickers() if equity_only else storage.list_tickers()
     total = len(tickers)
     offset = (page - 1) * limit
     tickers_page = tickers[offset:offset + limit]
@@ -1422,6 +1661,615 @@ def get_circuit_breaker_status():
     from trading_system.risk.circuit_breaker import CircuitBreaker
     cb = CircuitBreaker()
     return cb.status()
+
+
+@app.get("/api/data-overview")
+def data_overview():
+    """Data application overview: stock counts, grouping, freshness, table stats."""
+    from trading_system.data.storage import DataStorage
+    storage = DataStorage()
+    with storage._connect() as conn:
+        # Ticker counts by asset_class
+        asset_rows = conn.execute("""
+            SELECT asset_class, COUNT(*) as cnt FROM instrument_master
+            GROUP BY asset_class
+        """).fetchall()
+        asset_groups = {r[0]: r[1] for r in asset_rows}
+
+        # Active vs delisted
+        active = conn.execute("SELECT COUNT(*) FROM instrument_master WHERE is_active = 1 OR is_active IS NULL").fetchone()[0]
+        delisted = conn.execute("SELECT COUNT(*) FROM instrument_master WHERE is_active = 0").fetchone()[0]
+
+        # Sector breakdown
+        sector_rows = conn.execute("""
+            SELECT COALESCE(sector, 'Unknown') as sector, COUNT(*) as cnt
+            FROM instrument_master WHERE asset_class = 'equity'
+            GROUP BY sector ORDER BY cnt DESC
+        """).fetchall()
+        sectors = [{"sector": r[0], "count": r[1]} for r in sector_rows]
+
+        # Table row counts
+        tables = ["ohlcv", "technical_indicators", "fundamental_data", "scores",
+                  "foreign_flow", "broker_flow", "corporate_actions", "dividends",
+                  "macro_data", "news", "pattern_analysis", "relationship_matrix",
+                  "instrument_master", "stock_personality", "fear_greed",
+                  "market_calendar", "watchlist", "esg_scores", "external_events",
+                  "policy_events", "audit_log", "data_watermark"]
+        table_counts = {}
+        for t in tables:
+            try:
+                cnt = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+                table_counts[t] = cnt
+            except Exception:
+                table_counts[t] = 0
+
+        # Data freshness from watermark
+        wm_rows = conn.execute("""
+            SELECT
+                CASE
+                    WHEN last_data_date >= date('now', '-1 day') THEN 'current'
+                    WHEN last_data_date >= date('now', '-7 days') THEN 'stale_7d'
+                    WHEN last_data_date >= date('now', '-30 days') THEN 'stale_30d'
+                    ELSE 'very_stale'
+                END as bucket, COUNT(*) as cnt
+            FROM data_watermark WHERE table_name = 'ohlcv'
+            GROUP BY bucket
+        """).fetchall()
+        freshness = {r[0]: r[1] for r in wm_rows}
+
+        # Date range
+        date_range = conn.execute("""
+            SELECT MIN(timestamp), MAX(timestamp) FROM ohlcv
+        """).fetchone()
+
+        # Top 5 stale tickers
+        stale_rows = conn.execute("""
+            SELECT ticker, last_data_date, row_count, source, last_fetch_at
+            FROM data_watermark WHERE table_name = 'ohlcv'
+            ORDER BY last_data_date ASC LIMIT 10
+        """).fetchall()
+        stale_tickers = [
+            {"ticker": r[0], "last_date": r[1], "rows": r[2], "source": r[3], "last_fetch": r[4]}
+            for r in stale_rows
+        ]
+
+    return {
+        "tickers": {
+            "total": active + delisted,
+            "active": active,
+            "delisted": delisted,
+            "by_asset_class": asset_groups,
+        },
+        "sectors": sectors,
+        "table_counts": table_counts,
+        "data_freshness": freshness,
+        "date_range": {"first": date_range[0], "last": date_range[1]},
+        "stale_tickers": stale_tickers,
+    }
+
+
+@app.get("/api/market-calendar")
+def market_calendar(month: str | None = None):
+    """IDX market calendar: trading days, holidays, schedule, data freshness summary."""
+    from datetime import datetime as _dt
+    from trading_system.data.storage import DataStorage
+    storage = DataStorage()
+    with storage._connect() as conn:
+        # Market calendar entries
+        if month:
+            rows = conn.execute("""
+                SELECT date, exchange, is_trading_day, holiday_name, half_day, updated_at
+                FROM market_calendar
+                WHERE date LIKE ? || '%'
+                ORDER BY date
+            """, (month,)).fetchall()
+        else:
+            rows = conn.execute("""
+                SELECT date, exchange, is_trading_day, holiday_name, half_day, updated_at
+                FROM market_calendar
+                WHERE date >= date('now', '-7 days')
+                ORDER BY date
+            """).fetchall()
+
+        # Build calendar with day-of-week and day type
+        dow_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        calendar = []
+        for r in rows:
+            date_str = r[0]
+            try:
+                dt = _dt.strptime(date_str[:10], "%Y-%m-%d")
+                dow = dow_names[dt.weekday()]
+            except Exception:
+                dow = ""
+            is_trading = bool(r[2])
+            holiday_name = r[3]
+            # Determine day type
+            if is_trading:
+                day_type = "trading"
+            elif holiday_name:
+                day_type = "holiday"
+            else:
+                day_type = "weekend"
+
+            calendar.append({
+                "date": date_str,
+                "dow": dow,
+                "exchange": r[1],
+                "is_trading_day": is_trading,
+                "holiday_name": holiday_name,
+                "half_day": bool(r[4]),
+                "day_type": day_type,
+            })
+
+        # Upcoming holidays — only named holidays (exclude plain weekends)
+        holidays = conn.execute("""
+            SELECT date, holiday_name FROM market_calendar
+            WHERE is_trading_day = 0 AND holiday_name IS NOT NULL AND holiday_name != ''
+            AND date >= date('now')
+            ORDER BY date LIMIT 10
+        """).fetchall()
+        upcoming_holidays = [{"date": r[0], "name": r[1]} for r in holidays]
+
+        # Render log schedule
+        render_rows = conn.execute("""
+            SELECT ticker, table_name, last_rendered, status
+            FROM render_log
+            ORDER BY last_rendered DESC LIMIT 20
+        """).fetchall()
+        render_log = [
+            {"ticker": r[0], "table": r[1], "last_rendered": r[2], "status": r[3]}
+            for r in render_rows
+        ]
+
+        # Watermark summary — last fetch per ticker (top 10 most recent)
+        wm_rows = conn.execute("""
+            SELECT ticker, last_data_date, last_fetch_at, source
+            FROM data_watermark WHERE table_name = 'ohlcv'
+            ORDER BY last_fetch_at DESC LIMIT 10
+        """).fetchall()
+        recent_fetches = [
+            {"ticker": r[0], "last_data_date": r[1], "last_fetch_at": r[2], "source": r[3]}
+            for r in wm_rows
+        ]
+
+        # Data freshness summary
+        total_wm = conn.execute(
+            "SELECT COUNT(*) FROM data_watermark WHERE table_name = 'ohlcv'"
+        ).fetchone()[0]
+        current_count = conn.execute("""
+            SELECT COUNT(*) FROM data_watermark
+            WHERE table_name = 'ohlcv' AND last_data_date >= date('now', '-1 day')
+        """).fetchone()[0]
+        stale_count = total_wm - current_count
+
+        # Stale tickers that are NOT delisted (need catch-up)
+        delisted = storage.load_delisted_tickers()
+        stale_rows = conn.execute("""
+            SELECT ticker, last_data_date, source
+            FROM data_watermark WHERE table_name = 'ohlcv'
+            AND last_data_date < date('now', '-1 day')
+            ORDER BY last_data_date ASC
+        """).fetchall()
+        stale_tickers = []
+        for r in stale_rows:
+            bare = r[0].replace(".JK", "") if r[0].endswith(".JK") else r[0]
+            if bare not in delisted:
+                stale_tickers.append({
+                    "ticker": r[0],
+                    "last_date": r[1],
+                    "source": r[2],
+                })
+
+        # Last render timestamp
+        last_render = conn.execute("""
+            SELECT MAX(last_rendered) FROM render_log
+        """).fetchone()[0]
+
+    # IDX trading hours
+    trading_hours = {
+        "pre_open": "08:00 - 08:50 WIB",
+        "opening_session": "08:50 - 09:00 WIB",
+        "regular_session": "09:00 - 11:30 WIB",
+        "lunch_break": "11:30 - 13:30 WIB",
+        "afternoon_session": "13:30 - 15:50 WIB",
+        "closing_session": "15:50 - 16:00 WIB",
+        "close": "16:00 WIB",
+    }
+
+    return {
+        "trading_hours": trading_hours,
+        "calendar": calendar,
+        "upcoming_holidays": upcoming_holidays,
+        "render_log": render_log,
+        "recent_fetches": recent_fetches,
+        "data_freshness": {
+            "total": total_wm,
+            "current": current_count,
+            "stale": stale_count,
+            "catch_up_needed": len(stale_tickers),
+        },
+        "stale_tickers": stale_tickers[:30],
+        "last_render": last_render,
+    }
+
+
+@app.get("/api/storage-info")
+def storage_info():
+    """Storage locations, parquet sync status, and render schedule info."""
+    import os
+    from pathlib import Path as _P
+    from trading_system.config import DATA_DIR, DB_PATH, DATA_ARCHIVE_DIR
+
+    db_path = str(DB_PATH)
+    db_size = os.path.getsize(db_path) if os.path.exists(db_path) else 0
+
+    parquet_raw = os.getenv("DATA_RAW_DIR", str(DATA_DIR / "raw"))
+    parquet_archive = str(DATA_ARCHIVE_DIR)
+    parquet_raw_exists = os.path.exists(parquet_raw)
+    parquet_archive_exists = os.path.exists(parquet_archive)
+
+    # Count parquet files
+    raw_files = 0
+    raw_size = 0
+    if parquet_raw_exists:
+        for _root, _dirs, _files in os.walk(parquet_raw):
+            for f in _files:
+                if f.endswith(".parquet"):
+                    raw_files += 1
+                    try:
+                        raw_size += os.path.getsize(os.path.join(_root, f))
+                    except OSError:
+                        pass
+
+    archive_files = 0
+    archive_size = 0
+    if parquet_archive_exists:
+        for _root, _dirs, _files in os.walk(parquet_archive):
+            for f in _files:
+                if f.endswith(".parquet"):
+                    archive_files += 1
+                    try:
+                        archive_size += os.path.getsize(os.path.join(_root, f))
+                    except OSError:
+                        pass
+
+    # Check if DB is in WAL mode
+    with storage._connect() as conn:
+        journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        page_size = conn.execute("PRAGMA page_size").fetchone()[0]
+        page_count = conn.execute("PRAGMA page_count").fetchone()[0]
+
+    # Render schedule from market_calendar
+    from datetime import datetime as _dt
+    from trading_system.config import DATA_DIR as _DD
+
+    # Get render log summary
+    with storage._connect() as conn:
+        render_total = conn.execute("SELECT COUNT(*) FROM render_log").fetchone()[0]
+        render_ok = conn.execute("SELECT COUNT(*) FROM render_log WHERE status = 'ok'").fetchone()[0]
+        render_fail = conn.execute("SELECT COUNT(*) FROM render_log WHERE status != 'ok'").fetchone()[0]
+        last_render = conn.execute("SELECT MAX(last_rendered) FROM render_log").fetchone()[0]
+
+        # Tables rendered
+        render_tables = conn.execute("""
+            SELECT table_name, COUNT(*) as cnt, MAX(last_rendered) as last
+            FROM render_log GROUP BY table_name ORDER BY cnt DESC
+        """).fetchall()
+
+        # Next trading day from calendar
+        next_trading = conn.execute("""
+            SELECT date FROM market_calendar
+            WHERE is_trading_day = 1 AND date > date('now')
+            ORDER BY date LIMIT 1
+        """).fetchone()
+
+        # Today's calendar entry
+        today_cal = conn.execute("""
+            SELECT date, is_trading_day, holiday_name, half_day
+            FROM market_calendar WHERE date = date('now')
+        """).fetchone()
+
+    # Daily runner config
+    daily_runner_time = os.getenv("DAILY_RUNNER_TIME", "17:00")
+    daily_runner_once = os.getenv("DAILY_RUNNER_ONCE", "0")
+
+    # Build render recommendation
+    now = _dt.now()
+    recommendations = []
+    if next_trading:
+        recommendations.append(f"Next trading day: {next_trading[0]} — fetch OHLCV after 16:00 WIB")
+    if today_cal and today_cal[1]:
+        recommendations.append("Market is open today — fetch after close (16:00 WIB)")
+    elif today_cal and not today_cal[1]:
+        recommendations.append(f"Market closed today ({today_cal[2] or 'weekend'}) — maintenance mode")
+    recommendations.append(f"Daily runner scheduled at {daily_runner_time} server time")
+    if render_fail > 0:
+        recommendations.append(f"{render_fail} render failures — check render_log for details")
+
+    return {
+        "database": {
+            "path": db_path,
+            "size_bytes": db_size,
+            "size_human": f"{db_size / (1024*1024):.1f} MB",
+            "journal_mode": journal_mode,
+            "page_size": page_size,
+            "page_count": page_count,
+        },
+        "parquet": {
+            "raw_dir": parquet_raw,
+            "raw_exists": parquet_raw_exists,
+            "raw_files": raw_files,
+            "raw_size_bytes": raw_size,
+            "raw_size_human": f"{raw_size / (1024*1024):.1f} MB",
+            "archive_dir": parquet_archive,
+            "archive_exists": parquet_archive_exists,
+            "archive_files": archive_files,
+            "archive_size_bytes": archive_size,
+            "archive_size_human": f"{archive_size / (1024*1024):.1f} MB",
+            "synced": parquet_raw_exists and raw_files > 0,
+        },
+        "render": {
+            "total_renders": render_total,
+            "ok": render_ok,
+            "failed": render_fail,
+            "last_render": last_render,
+            "tables": [
+                {"table": r[0], "count": r[1], "last_rendered": r[2]}
+                for r in render_tables
+            ],
+            "next_trading_day": next_trading[0] if next_trading else None,
+            "today_is_trading_day": bool(today_cal[1]) if today_cal else None,
+            "today_holiday": today_cal[2] if today_cal else None,
+            "daily_runner_time": daily_runner_time,
+            "daily_runner_once": daily_runner_once == "1",
+            "recommendations": recommendations,
+        },
+    }
+
+
+@app.get("/api/instrument-status")
+def instrument_status():
+    """Listed vs delisted instruments with details for downstream engine filtering.
+    
+    Separates equity stocks (IDX-listed saham) from non-equity instruments
+    (forex, index, commodity, ETF) which are reference/macro data, not stocks.
+    """
+    with storage._connect() as conn:
+        # --- Equity stocks only ---
+        # Active/listed equity tickers
+        active_equity_rows = conn.execute("""
+            SELECT ticker, name, sector, subsector, exchange, listing_date,
+                   board, market_cap, asset_class
+            FROM instrument_master
+            WHERE (is_active = 1 OR is_active IS NULL) AND asset_class = 'equity'
+            ORDER BY ticker
+        """).fetchall()
+
+        # Delisted equity tickers
+        delisted_equity_rows = conn.execute("""
+            SELECT ticker, name, sector, subsector, exchange, listing_date,
+                   delisting_date, board, market_cap, asset_class
+            FROM instrument_master
+            WHERE is_active = 0 AND asset_class = 'equity'
+            ORDER BY delisting_date DESC
+        """).fetchall()
+
+        # Active equity with OHLCV
+        active_equity_with_ohlcv = conn.execute("""
+            SELECT COUNT(DISTINCT im.ticker) FROM instrument_master im
+            INNER JOIN ohlcv o ON im.ticker = o.ticker OR im.ticker || '.JK' = o.ticker
+            WHERE (im.is_active = 1 OR im.is_active IS NULL) AND im.asset_class = 'equity'
+        """).fetchone()[0]
+
+        # Active equity WITHOUT OHLCV (true data gap — should be zero)
+        active_equity_no_data = conn.execute("""
+            SELECT im.ticker, im.name FROM instrument_master im
+            WHERE (im.is_active = 1 OR im.is_active IS NULL) AND im.asset_class = 'equity'
+            AND NOT EXISTS (
+                SELECT 1 FROM ohlcv o WHERE o.ticker = im.ticker OR o.ticker = im.ticker || '.JK'
+            )
+            ORDER BY im.ticker
+        """).fetchall()
+
+        # Delisted equity with historical OHLCV
+        delisted_equity_with_data = conn.execute("""
+            SELECT COUNT(DISTINCT im.ticker) FROM instrument_master im
+            INNER JOIN ohlcv o ON im.ticker = o.ticker OR im.ticker || '.JK' = o.ticker
+            WHERE im.is_active = 0 AND im.asset_class = 'equity'
+        """).fetchone()[0]
+
+        # --- Non-equity instruments (forex, index, commodity, ETF) ---
+        non_equity_rows = conn.execute("""
+            SELECT ticker, name, asset_class, exchange, is_active
+            FROM instrument_master
+            WHERE asset_class != 'equity'
+            ORDER BY asset_class, ticker
+        """).fetchall()
+
+        # Non-equity with OHLCV data
+        non_equity_with_data = conn.execute("""
+            SELECT COUNT(DISTINCT im.ticker) FROM instrument_master im
+            INNER JOIN ohlcv o ON im.ticker = o.ticker
+            WHERE im.asset_class != 'equity'
+        """).fetchone()[0]
+
+        # Non-equity without OHLCV
+        non_equity_no_data = conn.execute("""
+            SELECT im.ticker, im.name, im.asset_class FROM instrument_master im
+            WHERE im.asset_class != 'equity'
+            AND NOT EXISTS (SELECT 1 FROM ohlcv o WHERE o.ticker = im.ticker)
+            ORDER BY im.asset_class, im.ticker
+        """).fetchall()
+
+    active_equity = [
+        {
+            "ticker": r[0], "name": r[1], "sector": r[2] or "Unknown",
+            "subsector": r[3], "exchange": r[4], "listing_date": r[5],
+            "board": r[6], "market_cap": r[7], "asset_class": r[8],
+        }
+        for r in active_equity_rows
+    ]
+
+    delisted_equity = [
+        {
+            "ticker": r[0], "name": r[1], "sector": r[2] or "Unknown",
+            "subsector": r[3], "exchange": r[4], "listing_date": r[5],
+            "delisting_date": r[6], "board": r[7], "market_cap": r[8],
+            "asset_class": r[9],
+        }
+        for r in delisted_equity_rows
+    ]
+
+    non_equity = [
+        {
+            "ticker": r[0], "name": r[1], "asset_class": r[2],
+            "exchange": r[3], "is_active": bool(r[4]) if r[4] is not None else True,
+        }
+        for r in non_equity_rows
+    ]
+
+    return {
+        "summary": {
+            "total_instruments": len(active_equity) + len(delisted_equity) + len(non_equity),
+            # Equity stocks
+            "equity_total": len(active_equity) + len(delisted_equity),
+            "equity_active": len(active_equity),
+            "equity_delisted": len(delisted_equity),
+            "equity_active_with_ohlcv": active_equity_with_ohlcv,
+            "equity_active_without_ohlcv": len(active_equity_no_data),
+            "equity_delisted_with_ohlcv": delisted_equity_with_data,
+            # Non-equity (forex, index, commodity, ETF)
+            "non_equity_total": len(non_equity),
+            "non_equity_with_ohlcv": non_equity_with_data,
+            "non_equity_without_ohlcv": len(non_equity_no_data),
+        },
+        "active_equity": active_equity,
+        "delisted_equity": delisted_equity,
+        "equity_without_data": [
+            {"ticker": r[0], "name": r[1]} for r in active_equity_no_data
+        ],
+        "non_equity": non_equity,
+        "non_equity_without_data": [
+            {"ticker": r[0], "name": r[1], "asset_class": r[2]} for r in non_equity_no_data
+        ],
+    }
+
+
+# ====================== TESTING HARNESS ======================
+
+@app.get("/api/test/strategies")
+def list_test_strategies():
+    """List available testing strategies."""
+    from trading_system.testing import STRATEGIES
+    return {"strategies": list(STRATEGIES.keys())}
+
+
+@app.post("/api/test/prediction")
+def run_prediction_test(payload: dict):
+    """Run walk-forward prediction accuracy test (synchronous, returns full result).
+
+    For streaming progress, use WebSocket /ws/test instead.
+    """
+    from trading_system.testing import PredictionTestHarness, TestConfig
+
+    ticker = payload.get("ticker", "BBCA.JK")
+    start_date = payload.get("start_date", "2025-01-01")
+    end_date = payload.get("end_date", "2025-06-30")
+    horizon = payload.get("horizon", 5)
+    step = payload.get("step", 1)
+    strategy = payload.get("strategy", "technical_rsi_sma")
+    params = payload.get("params", {})
+
+    if not ticker:
+        raise HTTPException(status_code=400, detail="ticker required")
+
+    config = TestConfig(
+        ticker=ticker,
+        start_date=start_date,
+        end_date=end_date,
+        horizon=horizon,
+        step=step,
+        strategy=strategy,
+        params=params,
+    )
+    harness = PredictionTestHarness(storage=storage)
+    try:
+        return harness.run(config)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.websocket("/ws/test")
+async def ws_test(websocket: WebSocket):
+    """WebSocket for streaming prediction test progress.
+
+    Client sends a JSON config message to start the test:
+        {"ticker": "BBCA.JK", "start_date": "2025-01-01", ...}
+
+    Server streams progress events until test completes, then closes.
+    """
+    if _API_KEY:
+        provided = websocket.query_params.get("token") or websocket.headers.get("x-api-key", "")
+        if not _valid_api_key(provided or ""):
+            await websocket.close(code=4401)
+            return
+
+    await websocket.accept()
+    try:
+        # Wait for config message from client
+        config_msg = await websocket.receive_json()
+
+        from trading_system.testing import PredictionTestHarness, TestConfig
+
+        config = TestConfig(
+            ticker=config_msg.get("ticker", "BBCA.JK"),
+            start_date=config_msg.get("start_date", "2025-01-01"),
+            end_date=config_msg.get("end_date", "2025-06-30"),
+            horizon=config_msg.get("horizon", 5),
+            step=config_msg.get("step", 1),
+            strategy=config_msg.get("strategy", "technical_rsi_sma"),
+            params=config_msg.get("params", {}),
+        )
+
+        # Run test in thread pool to not block event loop, stream via callback
+        import queue
+        import threading
+
+        event_queue: queue.Queue = queue.Queue()
+        harness = PredictionTestHarness(storage=storage)
+
+        def progress_cb(event):
+            event_queue.put(event)
+
+        def run_test():
+            try:
+                result = harness.run(config, progress_callback=progress_cb)
+                event_queue.put({"type": "final_result", "result": result})
+            except Exception as e:
+                event_queue.put({"type": "error", "message": str(e)})
+            event_queue.put(None)  # sentinel
+
+        thread = threading.Thread(target=run_test, daemon=True)
+        thread.start()
+
+        # Stream events to client
+        while True:
+            try:
+                event = event_queue.get(timeout=120)
+            except Exception:
+                break
+            if event is None:
+                break
+            await websocket.send_json(event)
+
+        thread.join(timeout=5)
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await websocket.send_json({"type": "error", "message": str(e)})
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

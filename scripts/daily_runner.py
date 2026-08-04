@@ -39,12 +39,10 @@ def get_watchlist() -> list[str]:
     if env_tickers:
         return [t.strip() for t in env_tickers.split(",") if t.strip()]
     
-    # Load all active IDX stocks from instrument_master
+    # Load all active IDX stocks from instrument_master (already .JK-suffixed)
     from trading_system.data.storage import DataStorage
     storage = DataStorage()
-    codes = storage.load_idx_stock_tickers(active_only=True)
-    # Append .JK suffix for yfinance compatibility
-    tickers = [f"{c}.JK" if "." not in c else c for c in codes]
+    tickers = storage.list_active_equity_tickers()
     logger.info(f"Loaded {len(tickers)} active IDX stock tickers from instrument_master")
     return tickers
 
@@ -55,7 +53,7 @@ def fetch_and_validate(tickers: list[str]) -> dict:
     from trading_system.data.archive import ArchiveAdapter
     from trading_system.data.storage import DataStorage
     from trading_system.data.validation import DataQualityValidator
-    from datetime import datetime
+    from datetime import UTC, datetime
 
     adapter = YahooFinanceAdapter()
     archive = ArchiveAdapter()
@@ -67,10 +65,10 @@ def fetch_and_validate(tickers: list[str]) -> dict:
     for ticker in tickers:
         try:
             logger.info(f"Fetching {ticker}...")
-            # 1. Cek SQLite dulu — apakah data sudah mutakhir?
-            existing = storage.load_ohlcv(ticker)
-            if not existing.empty:
-                last_ts = str(existing.index[-1])[:10]
+            # 1. Cek watermark — sampai tanggal berapa data ter-fetch?
+            watermark = storage.get_watermark(ticker)
+            if watermark:
+                last_ts = watermark[:10]  # date-only
                 if last_ts >= today:
                     logger.info(f"  {ticker}: Already up to date ({last_ts})")
                     results[ticker] = {"status": "up_to_date", "rows": 0, "reason": "already_current"}
@@ -86,7 +84,7 @@ def fetch_and_validate(tickers: list[str]) -> dict:
                         new_df["exchange"] = "INDO" if ticker.endswith(".JK") else "GLOBAL"
                         new_df["timeframe"] = "1d"
                         new_df["source"] = "archive"
-                        new_df["ingested_at"] = datetime.now().isoformat()
+                        new_df["ingested_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+00:00")
                         new_df["data_quality_score"] = None
                         raw = normalize_ohlcv(new_df)
                         clean, report = validator.validate(raw)
@@ -98,26 +96,36 @@ def fetch_and_validate(tickers: list[str]) -> dict:
                 # 3. Fallback: Yahoo Finance untuk data terbaru
                 result = adapter.fetch_incremental(ticker, last_timestamp=last_ts)
             else:
-                # SQLite kosong — coba Parquet archive dulu
-                arch_df = archive.load_ohlcv(ticker)
-                if not arch_df.empty:
-                    arch_df = arch_df.reset_index()
-                    arch_df["ticker"] = ticker
-                    arch_df["asset_class"] = "equity"
-                    arch_df["exchange"] = "INDO" if ticker.endswith(".JK") else "GLOBAL"
-                    arch_df["timeframe"] = "1d"
-                    arch_df["source"] = "archive"
-                    arch_df["ingested_at"] = datetime.now().isoformat()
-                    arch_df["data_quality_score"] = None
-                    raw = normalize_ohlcv(arch_df)
-                    clean, report = validator.validate(raw)
-                    if report.action != "pause":
-                        n = storage.save_ohlcv(clean)
-                        logger.info(f"  {ticker}: Loaded {n} rows from Parquet archive. Quality={report.data_quality_score}")
-                        results[ticker] = {"status": "ok", "rows": n, "source": "archive"}
+                # No watermark — check SQLite as fallback (e.g., data loaded before watermark system)
+                existing = storage.load_ohlcv(ticker)
+                if not existing.empty:
+                    last_ts = str(existing.index[-1])[:10]
+                    if last_ts >= today:
+                        logger.info(f"  {ticker}: Already up to date ({last_ts}) [from SQLite]")
+                        results[ticker] = {"status": "up_to_date", "rows": 0, "reason": "already_current"}
                         continue
-                # 4. Fallback terakhir: Yahoo Finance full fetch
-                result = adapter.fetch(ticker, period="2y")
+                    result = adapter.fetch_incremental(ticker, last_timestamp=last_ts)
+                else:
+                    # SQLite kosong — coba Parquet archive dulu
+                    arch_df = archive.load_ohlcv(ticker)
+                    if not arch_df.empty:
+                        arch_df = arch_df.reset_index()
+                        arch_df["ticker"] = ticker
+                        arch_df["asset_class"] = "equity"
+                        arch_df["exchange"] = "INDO" if ticker.endswith(".JK") else "GLOBAL"
+                        arch_df["timeframe"] = "1d"
+                        arch_df["source"] = "archive"
+                        arch_df["ingested_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+                        arch_df["data_quality_score"] = None
+                        raw = normalize_ohlcv(arch_df)
+                        clean, report = validator.validate(raw)
+                        if report.action != "pause":
+                            n = storage.save_ohlcv(clean)
+                            logger.info(f"  {ticker}: Loaded {n} rows from Parquet archive. Quality={report.data_quality_score}")
+                            results[ticker] = {"status": "ok", "rows": n, "source": "archive"}
+                            continue
+                    # 4. Fallback terakhir: Yahoo Finance full fetch
+                    result = adapter.fetch(ticker, period="2y")
 
             if result["status"] == "ok":
                 raw = normalize_ohlcv(result["records"])
@@ -186,32 +194,6 @@ def generate_recommendations(tickers: list[str]) -> list[dict]:
     return recommendations
 
 
-def send_notifications(recommendations: list[dict]) -> None:
-    """Send notifications for actionable signals (BUY/SELL)."""
-    try:
-        from trading_system.utils.notifier import send_telegram
-    except ImportError:
-        logger.info("Notifier not available, skipping notifications")
-        return
-
-    actionable = [r for r in recommendations if r["action"] in ("BUY", "SELL")]
-    if not actionable:
-        logger.info("No actionable signals today")
-        return
-
-    for rec in actionable:
-        msg = (
-            f"🔔 SINYAL {rec['action']} untuk {rec['ticker']}\n"
-            f"   Conviction: {rec['conviction']:.1f}\n"
-            f"   Entry: {rec['entry_price']}\n"
-            f"   Stop Loss: {rec['stop_loss']}\n"
-            f"   Take Profit: {rec['take_profit']}\n"
-            f"   Risk Flags: {rec['risk_flags']}"
-        )
-        send_telegram(msg)
-        logger.info(f"Notification sent for {rec['ticker']}: {rec['action']}")
-
-
 def run_automated_execution(tickers: list[str]) -> None:
     """Run one cycle of automated execution (monitoring mode by default)."""
     try:
@@ -250,22 +232,37 @@ def save_performance_snapshot() -> None:
 
 
 def daily_job() -> None:
-    """Run the full daily pipeline: fetch → scores → recommendations → execution → risk → performance → notifications."""
+    """Run the full daily pipeline: fetch → scores → recommendations → execution → risk → performance.
+
+    Behavior adapts to market calendar:
+    - Trading day: full pipeline including execution cycle
+    - Non-trading day (holiday/weekend): maintenance only (fetch, scores, render) — skip execution
+    """
+    from trading_system.utils.market_status import get_market_status
+
+    mkt = get_market_status()
+    is_trading_day = mkt["is_trading_day"]
+
     logger.info("=" * 60)
-    logger.info("🔄 Memulai daily update...")
+    if is_trading_day:
+        logger.info("🔄 Memulai daily update (TRADING DAY — full pipeline)...")
+    else:
+        holiday = mkt.get("holiday_name") or "weekend"
+        logger.info(f"🔄 Memulai daily update (NON-TRADING DAY: {holiday} — maintenance only)...")
+
     tickers = get_watchlist()
     logger.info(f"Watchlist: {len(tickers)} tickers")
     if len(tickers) <= 10:
         logger.info(f"  {tickers}")
 
-    # Step 1: Fetch & validate OHLCV
+    # Step 1: Fetch & validate OHLCV (always run — data maintenance)
     logger.info("─" * 40)
     logger.info(f"Step 1: Fetch & Validate OHLCV ({len(tickers)} tickers)")
     fetch_results = fetch_and_validate(tickers)
     ok_count = sum(1 for r in fetch_results.values() if r["status"] == "ok")
     logger.info(f"Fetch complete: {ok_count}/{len(tickers)} succeeded")
 
-    # Step 2: Compute scores (only for tickers with fresh data)
+    # Step 2: Compute scores (always run — data maintenance)
     logger.info("─" * 40)
     logger.info(f"Step 2: Compute Analysis Scores")
     scored = 0
@@ -276,69 +273,74 @@ def daily_job() -> None:
         if (i + 1) % 100 == 0:
             logger.info(f"  Scored {i+1}/{len(tickers)} ({scored} with fresh data)")
 
-    # Step 3: Generate recommendations for all active tickers with scores
+    # Step 3: Generate recommendations (always run — useful for next trading day)
     logger.info("─" * 40)
     logger.info("Step 3: Generate Recommendations")
-    # Only generate recommendations for tickers that have fresh scores
-    # (fetch_results status=ok means data was updated today)
     rec_tickers = [t for t in tickers if fetch_results.get(t, {}).get("status") == "ok"]
     logger.info(f"  Generating recommendations for {len(rec_tickers)} tickers with fresh data")
     recommendations = generate_recommendations(rec_tickers)
 
-    # Step 4: Run automated execution (monitoring mode by default)
-    logger.info("─" * 40)
-    logger.info("Step 4: Automated Execution Cycle")
-    run_automated_execution(tickers)
+    # Step 4: Run automated execution — ONLY on trading days
+    if is_trading_day:
+        logger.info("─" * 40)
+        logger.info("Step 4: Automated Execution Cycle")
+        run_automated_execution(tickers)
+    else:
+        logger.info("─" * 40)
+        logger.info("Step 4: Skipped (non-trading day — no execution)")
 
-    # Step 5: Save daily risk metrics
+    # Step 5: Save daily risk metrics (always run)
     logger.info("─" * 40)
     logger.info("Step 5: Daily Risk Metrics")
     save_daily_risk_metrics()
 
-    # Step 6: Save performance snapshot
+    # Step 6: Save performance snapshot (always run)
     logger.info("─" * 40)
     logger.info("Step 6: Performance Snapshot")
     save_performance_snapshot()
 
-    # Step 7: Render supplementary data (macro, sentiment, patterns, etc.)
+    # Step 7: Render supplementary data (always run — data maintenance)
     logger.info("─" * 40)
     logger.info("Step 7: Render Supplementary Data")
     try:
         from trading_system.data.storage import DataStorage as _DS
         supp_storage = _DS()
         supp_tasks = [
+            "corporate_actions", "fundamental", "technical_indicators",
             "macro_data", "fear_greed", "pattern_analysis",
             "stock_personality", "market_calendar", "sector_master",
             "external_events", "policy_events",
+            "foreign_flow", "broker_flow", "news",
+            "esg_scores", "corporate_governance",
+            "instrument_master",
         ]
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "render_data",
+            Path(__file__).parent / "render_data.py",
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
         for task_name in supp_tasks:
             try:
-                # Import render function dynamically
-                import importlib.util
-                spec = importlib.util.spec_from_file_location(
-                    "render_data",
-                    Path(__file__).parent / "render_data.py",
-                )
-                mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(mod)
-
                 func_name = f"render_{task_name}"
                 func = getattr(mod, func_name, None)
                 if func:
                     count = func(supp_storage, tickers, dry_run=False)
                     logger.info(f"  {task_name}: {count} records")
+                else:
+                    logger.warning(f"  {task_name}: function not found")
             except Exception as e:
                 logger.warning(f"  {task_name}: {e}")
     except Exception as e:
         logger.error(f"Supplementary render failed: {e}")
 
-    # Step 8: Send notifications
-    logger.info("─" * 40)
-    logger.info("Step 8: Send Notifications")
-    send_notifications(recommendations)
-
     logger.info("=" * 60)
-    logger.info("✅ Daily update selesai.")
+    if is_trading_day:
+        logger.info("✅ Daily update selesai (full pipeline).")
+    else:
+        logger.info("✅ Daily update selesai (maintenance only — no execution on non-trading day).")
 
 
 def run_scheduler_mode():

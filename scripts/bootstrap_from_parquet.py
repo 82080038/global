@@ -50,6 +50,16 @@ def restore_tables(storage: DataStorage, dry_run: bool = False) -> dict:
     skipped = 0
     errors = 0
 
+    column_mappings = {
+        "policy_events": {
+            "tanggal": "date",
+            "kategori": "event_type",
+            "judul": "description",
+            "instansi": "source",
+            "dampak": "impact",
+        },
+    }
+
     for pf in parquet_files:
         table_name = pf.stem
         try:
@@ -57,6 +67,12 @@ def restore_tables(storage: DataStorage, dry_run: bool = False) -> dict:
             if df.empty:
                 skipped += 1
                 continue
+
+            if table_name in column_mappings:
+                df = df.rename(columns=column_mappings[table_name])
+                for col in column_mappings[table_name].values():
+                    if col not in df.columns:
+                        df[col] = None
 
             if dry_run:
                 print(f"    {table_name:30s} {len(df):>10,} rows (dry-run)")
@@ -121,7 +137,7 @@ def restore_ohlcv(archive: ArchiveAdapter, storage: DataStorage,
             if "source" not in df.columns:
                 df["source"] = "archive"
             if "ingested_at" not in df.columns:
-                df["ingested_at"] = datetime.now(UTC).isoformat()
+                df["ingested_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+00:00")
             if "data_quality_score" not in df.columns:
                 df["data_quality_score"] = None
 

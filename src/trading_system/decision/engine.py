@@ -202,37 +202,6 @@ class DecisionEngine:
             recommendation,
         )
 
-        # Send Telegram notification for actionable signals
-        if action in ("BUY", "SELL"):
-            try:
-                from trading_system.utils.notifier import notify_signal
-                notify_signal(
-                    action=action,
-                    ticker=ticker,
-                    price=risk["last_price"],
-                    conviction=conviction,
-                    details={
-                        "stop_loss": risk.get("stop_loss"),
-                        "take_profit": risk.get("take_profit"),
-                        "entry_price_range": recommendation["entry_price_range"],
-                        "risk_flags": risk.get("risk_flags", []),
-                    },
-                )
-            except Exception:
-                pass  # Don't block recommendation if notifier fails
-
-        # Send risk alert for severe drawdown
-        if "SEVERE_DRAWDOWN" in risk.get("risk_flags", []):
-            try:
-                from trading_system.utils.notifier import notify_risk_alert
-                notify_risk_alert(
-                    ticker=ticker,
-                    alert_type="SEVERE_DRAWDOWN",
-                    message=f"Max Drawdown: {risk.get('max_drawdown', 'N/A')}",
-                )
-            except Exception:
-                pass
-
         # Generate XAI explanation for the recommendation
         explanation = self.xai.explain(ticker, recommendation)
         recommendation["explanation"] = explanation

@@ -16,6 +16,7 @@ def client():
     with patch("trading_system.api.app.storage") as mock_storage:
         mock_storage.get_source_health.return_value = MagicMock(to_dict=MagicMock(return_value=[]))
         mock_storage.list_tickers.return_value = ["BBCA.JK"]
+        mock_storage.list_active_equity_tickers.return_value = ["BBCA.JK"]
         mock_storage.load_ohlcv.return_value = MagicMock(empty=True)
         mock_storage.load_scores.return_value = MagicMock(empty=True)
         from trading_system.api.app import app
@@ -31,6 +32,7 @@ def authed_client():
     with patch("trading_system.api.app.storage") as mock_storage:
         mock_storage.get_source_health.return_value = MagicMock(to_dict=MagicMock(return_value=[]))
         mock_storage.list_tickers.return_value = ["BBCA.JK"]
+        mock_storage.list_active_equity_tickers.return_value = ["BBCA.JK"]
         mock_storage.load_ohlcv.return_value = MagicMock(empty=True)
         mock_storage.load_scores.return_value = MagicMock(empty=True)
         yield TestClient(app_module.app, headers={"X-API-Key": "test-secret-key"})

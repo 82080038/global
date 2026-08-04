@@ -202,7 +202,7 @@ class AILearningEngine:
         if ticker:
             tickers = [ticker]
         else:
-            tickers = self.storage.list_tickers()
+            tickers = self.storage.list_active_equity_tickers()
 
         all_rows = []
         for t in tickers:

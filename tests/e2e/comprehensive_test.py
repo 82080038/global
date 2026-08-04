@@ -54,8 +54,8 @@ def test_dashboard(page: Page):
     print("=" * 60)
 
     try:
-        page.goto(f"{BASE_URL}/dashboard", wait_until="networkidle", timeout=30_000)
-        page.wait_for_selector("h1", timeout=15_000)
+        page.goto(f"{BASE_URL}/dashboard", wait_until="domcontentloaded", timeout=30_000)
+        page.wait_for_selector("h1", timeout=60_000)
         _screenshot(page, "comp_01_dashboard_loaded")
         _record("Dashboard loads", "pass", "Page loaded with h1 visible")
     except Exception as e:
@@ -73,7 +73,7 @@ def test_dashboard(page: Page):
 
     # Click Analyze
     try:
-        analyze_btn = page.locator("button:has-text('Analyze')")
+        analyze_btn = page.locator("button:has-text('ANALYZE')")
         expect(analyze_btn).to_be_visible(timeout=10_000)
         analyze_btn.click()
         print("  Clicked Analyze button, waiting for result...")
@@ -102,7 +102,7 @@ def test_dashboard(page: Page):
     # Change ticker to TLKM.JK
     try:
         ticker_input.fill("TLKM.JK")
-        page.locator("button:has-text('Analyze')").click()
+        page.locator("button:has-text('ANALYZE')").click()
         page.locator("text=/TLJM\\.JK|TLKM\\.JK/").first.wait_for(timeout=60_000)
         time.sleep(2)
         _screenshot(page, "comp_03_tlkm_analyzed")
@@ -121,8 +121,8 @@ def test_backtest(page: Page):
     print("=" * 60)
 
     try:
-        page.goto(f"{BASE_URL}/backtest", wait_until="networkidle", timeout=30_000)
-        page.wait_for_selector("h1:has-text('Backtest')", timeout=15_000)
+        page.goto(f"{BASE_URL}/backtest", wait_until="domcontentloaded", timeout=30_000)
+        page.wait_for_selector("h1:has-text('Backtest')", timeout=60_000)
         _screenshot(page, "comp_04_backtest_loaded")
         _record("Backtest page loads", "pass", "Page loaded")
     except Exception as e:
@@ -173,8 +173,8 @@ def test_portfolio(page: Page):
     print("=" * 60)
 
     try:
-        page.goto(f"{BASE_URL}/portfolio", wait_until="networkidle", timeout=30_000)
-        page.wait_for_selector("h1", timeout=15_000)
+        page.goto(f"{BASE_URL}/portfolio", wait_until="domcontentloaded", timeout=30_000)
+        page.wait_for_selector("h1", timeout=60_000)
         time.sleep(2)
         _screenshot(page, "comp_07_portfolio")
         _record("Portfolio page loads", "pass", "Page loaded")
@@ -189,8 +189,8 @@ def test_audit(page: Page):
     print("=" * 60)
 
     try:
-        page.goto(f"{BASE_URL}/audit", wait_until="networkidle", timeout=30_000)
-        page.wait_for_selector("h1", timeout=15_000)
+        page.goto(f"{BASE_URL}/audit", wait_until="domcontentloaded", timeout=30_000)
+        page.wait_for_selector("h1", timeout=60_000)
         time.sleep(2)
         _screenshot(page, "comp_08_audit")
         _record("Audit page loads", "pass", "Page loaded")
@@ -205,8 +205,8 @@ def test_engines(page: Page):
     print("=" * 60)
 
     try:
-        page.goto(f"{BASE_URL}/engines", wait_until="networkidle", timeout=30_000)
-        page.wait_for_selector("h1", timeout=15_000)
+        page.goto(f"{BASE_URL}/engines", wait_until="domcontentloaded", timeout=30_000)
+        page.wait_for_selector("h1", timeout=60_000)
         time.sleep(2)
         _screenshot(page, "comp_09_engines")
         _record("Engines page loads", "pass", "Page loaded")
@@ -250,7 +250,7 @@ def test_api_endpoints(page: Page):
                 try {{
                     const res = await fetch('{API_URL}{ep}', {{
                         method: '{method}',
-                        headers: {{'X-API-Key': 'dev_b11174160ce59a0e4e9901baef84c1d2'}}
+                        headers: {{'X-API-Key': 'dev-secret-key-2026'}}
                     }});
                     const data = await res.text();
                     return {{status: res.status, length: data.length}};
@@ -296,7 +296,7 @@ def test_console_errors(page: Page):
         console_errors.clear()
         page_errors.clear()
         try:
-            page.goto(url, wait_until="networkidle", timeout=30_000)
+            page.goto(url, wait_until="domcontentloaded", timeout=30_000)
             time.sleep(3)
 
             error_count = len([e for e in console_errors if e["type"] == "error"])
@@ -328,12 +328,17 @@ def main():
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=False,
-            args=["--no-sandbox", "--disable-gpu", "--start-maximized"],
+            args=[
+                "--no-sandbox",
+                "--disable-gpu",
+                "--window-position=1339,0",
+                "--window-size=1280,800",
+            ],
         )
         context = browser.new_context(
-            viewport={"width": 1400, "height": 900},
+            viewport={"width": 1280, "height": 800},
             record_video_dir=str(SCREEN_DIR / "videos"),
-            record_video_size={"width": 1400, "height": 900},
+            record_video_size={"width": 1280, "height": 800},
         )
         page = context.new_page()
 

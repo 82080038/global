@@ -18,7 +18,7 @@ class MonitoringEngine:
 
     def health(self) -> dict:
         source_df = self.storage.get_source_health()
-        tickers = self.storage.list_tickers()
+        tickers = self.storage.list_active_equity_tickers()
         scores_df = self.storage.load_scores()
 
         now = datetime.now(UTC)

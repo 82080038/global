@@ -1,17 +1,17 @@
-"""Notifier module — Telegram bot integration for real-time trading signals.
+"""Notifier module — email notifications for trading signals.
 
 Setup:
-    1. Create a Telegram bot via @BotFather, get the bot token.
-    2. Get your chat ID (message @userinfobot or use the bot's getUpdates API).
-    3. Set environment variables:
-       - TELEGRAM_BOT_TOKEN
-       - TELEGRAM_CHAT_ID
-    4. Or set them in a .env file at project root.
+    1. Set environment variables in .env:
+       - SMTP_SERVER (default: smtp.gmail.com)
+       - SMTP_PORT (default: 587)
+       - EMAIL_FROM
+       - EMAIL_TO
+       - EMAIL_PASSWORD
 
 Usage:
-    from trading_system.utils.notifier import send_telegram, notify_signal
+    from trading_system.utils.notifier import send_email, notify_signal
 
-    send_telegram("Hello from trading system!")
+    send_email("Trading Alert", "Hello from trading system!")
     notify_signal("BUY", "BBCA.JK", 8500, 78.5, {"stop_loss": 8200, "take_profit": 9000})
 """
 
@@ -20,7 +20,6 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +35,6 @@ if _env_file.exists():
             if key and key not in os.environ:
                 os.environ[key] = value
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 EMAIL_FROM = os.getenv("EMAIL_FROM", "")
@@ -53,8 +49,6 @@ def _email_configured() -> bool:
 
 def send_email(subject: str, body: str) -> bool:
     """Send an email notification via SMTP.
-
-    Used as fallback when Telegram is unavailable (§5.3).
 
     Returns:
         True if sent successfully, False otherwise.
@@ -88,61 +82,16 @@ def send_email(subject: str, body: str) -> bool:
 
 
 def notify_with_fallback(message: str, subject: str = "Trading System Alert") -> bool:
-    """Send notification via Telegram, fallback to email if Telegram fails.
+    """Send notification via email.
 
     Args:
         message: Message body text.
-        subject: Email subject line (only used for email fallback).
-
-    Returns:
-        True if sent via any channel, False if all fail.
-    """
-    if send_telegram(message):
-        return True
-    logger.info("Telegram failed or not configured, trying email fallback...")
-    return send_email(subject, message)
-
-
-def _is_configured() -> bool:
-    """Check if Telegram credentials are set."""
-    return bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
-
-
-def send_telegram(message: str, parse_mode: str | None = None) -> bool:
-    """Send a message via Telegram bot.
-
-    Args:
-        message: Text to send.
-        parse_mode: Optional 'HTML' or 'Markdown' for formatted messages.
+        subject: Email subject line.
 
     Returns:
         True if sent successfully, False otherwise.
     """
-    if not _is_configured():
-        logger.info("Telegram not configured (TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID not set)")
-        return False
-
-    try:
-        import requests
-
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        payload: dict[str, Any] = {
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": message,
-        }
-        if parse_mode:
-            payload["parse_mode"] = parse_mode
-
-        resp = requests.post(url, json=payload, timeout=10)
-        if resp.status_code == 200:
-            logger.info("Telegram message sent successfully")
-            return True
-        else:
-            logger.error(f"Telegram API error: {resp.status_code} — {resp.text}")
-            return False
-    except Exception as e:
-        logger.error(f"Failed to send Telegram message: {e}")
-        return False
+    return send_email(subject, message)
 
 
 def notify_signal(
@@ -188,7 +137,7 @@ def notify_signal(
     lines.append(f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     message = "\n".join(lines)
-    return send_telegram(message, parse_mode="HTML")
+    return send_email(f"SINYAL {action} — {ticker}", message)
 
 
 def notify_risk_alert(ticker: str, alert_type: str, message: str) -> bool:
@@ -202,5 +151,5 @@ def notify_risk_alert(ticker: str, alert_type: str, message: str) -> bool:
     Returns:
         True if sent successfully, False otherwise.
     """
-    full_msg = f"⚠️ <b>RISK ALERT: {alert_type}</b>\n📊 {ticker}\n{message}"
-    return send_telegram(full_msg, parse_mode="HTML")
+    full_msg = f"RISK ALERT: {alert_type}\n{ticker}\n{message}"
+    return send_email(f"RISK ALERT: {alert_type} — {ticker}", full_msg)

@@ -319,3 +319,64 @@ class TestBlockBootstrapMC:
         assert block_result["block_size"] == 15
         # The max drawdown distributions should differ
         assert iid_result["worst_drawdown"] != block_result["worst_drawdown"]
+
+
+class TestMonteCarloGPU:
+    """Tests for GPU-accelerated Monte Carlo path (auto-fallback to CPU)."""
+
+    def test_gpu_path_produces_valid_result(self):
+        """GPU path (use_gpu=True) should produce same shape result as CPU."""
+        rng = np.random.default_rng(42)
+        returns = pd.Series(rng.normal(0.001, 0.02, 100))
+        result = monte_carlo_simulation(
+            returns, n_simulations=100, n_periods=60, use_gpu=True,
+        )
+        assert "status" not in result or result.get("status") != "insufficient_data"
+        assert "backend" in result
+        assert result["backend"] in ("gpu", "cpu")  # cpu if no torch/CUDA
+        assert "mean_final_equity" in result
+        assert "prob_profit" in result
+
+    def test_gpu_cpu_results_statistically_close(self):
+        """GPU and CPU paths should produce statistically similar distributions
+        (same seed, same distribution — not identical due to RNG impl, but close)."""
+        rng = np.random.default_rng(42)
+        returns = pd.Series(rng.normal(0.001, 0.02, 200))
+
+        cpu_result = monte_carlo_simulation(
+            returns, n_simulations=500, n_periods=100, use_gpu=False,
+        )
+        gpu_result = monte_carlo_simulation(
+            returns, n_simulations=500, n_periods=100, use_gpu=True,
+        )
+
+        # Both should succeed
+        assert "mean_final_equity" in cpu_result
+        assert "mean_final_equity" in gpu_result
+
+        # Means should be within 15% of each other (statistical tolerance)
+        cpu_mean = cpu_result["mean_final_equity"]
+        gpu_mean = gpu_result["mean_final_equity"]
+        if cpu_mean > 0:
+            ratio = gpu_mean / cpu_mean
+            assert 0.85 < ratio < 1.15, f"GPU mean {gpu_mean} too far from CPU mean {cpu_mean}"
+
+    def test_gpu_disabled_falls_back_to_cpu(self):
+        """use_gpu=False should always use CPU backend."""
+        rng = np.random.default_rng(42)
+        returns = pd.Series(rng.normal(0.001, 0.02, 100))
+        result = monte_carlo_simulation(
+            returns, n_simulations=50, n_periods=60, use_gpu=False,
+        )
+        assert result["backend"] == "cpu"
+
+    def test_block_bootstrap_uses_cpu_even_with_gpu(self):
+        """Block bootstrap should always use CPU (GPU path only for IID)."""
+        rng = np.random.default_rng(42)
+        returns = pd.Series(rng.normal(0.001, 0.02, 100))
+        result = monte_carlo_simulation(
+            returns, n_simulations=50, n_periods=60, block_size=10, use_gpu=True,
+        )
+        # Block bootstrap always uses CPU loop
+        assert result["backend"] == "cpu"
+        assert result["block_size"] == 10

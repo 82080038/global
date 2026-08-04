@@ -1,3 +1,3 @@
-"""Trading System Profesional — Phase 1: Data & Backtest Foundation."""
+"""Trading System Profesional — IDX Decision Support System."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.11"

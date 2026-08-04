@@ -309,6 +309,19 @@ CREATE TABLE IF NOT EXISTS trading_suspensions (
 );
 CREATE INDEX IF NOT EXISTS idx_suspension_ticker ON trading_suspensions(ticker);
 CREATE INDEX IF NOT EXISTS idx_suspension_date ON trading_suspensions(suspend_date);
+
+-- Data watermark: tracks up to what date each ticker's data has been fetched
+CREATE TABLE IF NOT EXISTS data_watermark (
+    ticker TEXT NOT NULL,
+    table_name TEXT NOT NULL DEFAULT 'ohlcv',
+    last_data_date TEXT NOT NULL,
+    first_data_date TEXT,
+    row_count INTEGER DEFAULT 0,
+    source TEXT,
+    last_fetch_at TEXT NOT NULL,
+    PRIMARY KEY (ticker, table_name)
+);
+CREATE INDEX IF NOT EXISTS idx_watermark_date ON data_watermark(last_data_date);
 """
 
 
@@ -514,6 +527,18 @@ class DataStorage:
             )
         n = len(df)
 
+        # Update data watermark per ticker
+        if "ticker" in df.columns and "timestamp" in df.columns:
+            for ticker, group in df.groupby("ticker"):
+                dates = group["timestamp"].astype(str)
+                self.update_watermark(
+                    ticker=str(ticker),
+                    last_data_date=str(dates.max()),
+                    first_data_date=str(dates.min()),
+                    row_count=len(group),
+                    source=str(group["source"].iloc[0]) if "source" in group.columns else None,
+                )
+
         # Auto-sync: export updated tickers to Parquet archive
         self._sync_ohlcv_to_parquet(df)
 
@@ -693,9 +718,22 @@ class DataStorage:
             df.set_index("timestamp", inplace=True)
         return df
 
-    def list_tickers(self) -> list[str]:
+    def list_tickers(self, idx_only: bool = False) -> list[str]:
+        """Return distinct tickers from OHLCV.
+
+        If idx_only=True, only return IDX equity tickers (ending in .JK),
+        excluding global indices (^), commodities (=F), forex (=X), and US ETFs.
+        """
         with self._connect() as conn:
-            cur = conn.execute("SELECT DISTINCT ticker FROM ohlcv ORDER BY ticker")
+            if idx_only:
+                cur = conn.execute(
+                    """SELECT DISTINCT ticker FROM ohlcv
+                       WHERE ticker LIKE '%.JK'
+                       AND ticker NOT IN ('TEST.JK','SUSP.JK','IPO.JK')
+                       ORDER BY ticker"""
+                )
+            else:
+                cur = conn.execute("SELECT DISTINCT ticker FROM ohlcv ORDER BY ticker")
             return [r[0] for r in cur.fetchall()]
 
     # ---------- Source Health ----------
@@ -771,6 +809,114 @@ class DataStorage:
                 ).fetchall()
             )
         return [t for t in tickers if t not in rendered]
+
+    # ---------- Data Watermark (data date tracking) ----------
+    def update_watermark(
+        self,
+        ticker: str,
+        last_data_date: str,
+        table_name: str = "ohlcv",
+        first_data_date: str | None = None,
+        row_count: int = 0,
+        source: str | None = None,
+    ):
+        """Update the data watermark for a ticker/table after fetching data.
+
+        Tracks up to what date data has been fetched, enabling gap detection
+        and automatic catch-up when the app comes back online after downtime.
+        """
+        now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO data_watermark (ticker, table_name, last_data_date, first_data_date, row_count, source, last_fetch_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(ticker, table_name) DO UPDATE SET
+                     last_data_date = excluded.last_data_date,
+                     first_data_date = COALESCE(excluded.first_data_date, data_watermark.first_data_date),
+                     row_count = excluded.row_count,
+                     source = COALESCE(excluded.source, data_watermark.source),
+                     last_fetch_at = excluded.last_fetch_at""",
+                (ticker, table_name, last_data_date, first_data_date, row_count, source, now),
+            )
+
+    def get_watermark(self, ticker: str, table_name: str = "ohlcv") -> str | None:
+        """Get the last data date for a ticker/table, or None if no watermark exists."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT last_data_date FROM data_watermark WHERE ticker = ? AND table_name = ?",
+                (ticker, table_name),
+            ).fetchone()
+            return row[0] if row else None
+
+    def get_data_freshness(self, table_name: str = "ohlcv") -> pd.DataFrame:
+        """Return a DataFrame showing data freshness for all tickers.
+
+        Columns: ticker, first_data_date, last_data_date, row_count, source,
+                 last_fetch_at, days_behind
+        """
+        from datetime import datetime as _dt
+
+        today = _dt.now(UTC).strftime("%Y-%m-%d")
+        with self._connect() as conn:
+            df = pd.read_sql_query(
+                """SELECT w.ticker, w.first_data_date, w.last_data_date,
+                          w.row_count, w.source, w.last_fetch_at
+                   FROM data_watermark w
+                   WHERE w.table_name = ?
+                   ORDER BY w.last_data_date DESC""",
+                conn,
+                params=[table_name],
+            )
+        if not df.empty:
+            df["days_behind"] = (
+                pd.to_datetime(today) - pd.to_datetime(df["last_data_date"], format="mixed", errors="coerce")
+            ).dt.days
+        return df
+
+    def get_stale_data_tickers(
+        self,
+        table_name: str = "ohlcv",
+        max_days_behind: int = 1,
+        tickers: list[str] | None = None,
+    ) -> list[str]:
+        """Return tickers whose data is more than max_days_behind behind today.
+
+        If tickers list is provided, only check those tickers.
+        Tickers with no watermark at all are always considered stale.
+        Delisted tickers (is_active=0 in instrument_master) are always excluded.
+        """
+        from datetime import datetime as _dt, timedelta as _td
+
+        cutoff = (_dt.now(UTC) - _td(days=max_days_behind)).strftime("%Y-%m-%d")
+        delisted = self.load_delisted_tickers()
+        with self._connect() as conn:
+            if tickers:
+                placeholders = ",".join("?" * len(tickers))
+                rows = conn.execute(
+                    f"""SELECT ticker FROM data_watermark
+                        WHERE table_name = ? AND last_data_date < ?
+                        AND ticker IN ({placeholders})
+                        UNION
+                        SELECT ticker FROM ({placeholders}) AS t
+                        WHERE t.ticker NOT IN (
+                            SELECT ticker FROM data_watermark WHERE table_name = ?
+                        )""",
+                    [table_name, cutoff] + tickers + tickers + [table_name],
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """SELECT ticker FROM data_watermark
+                       WHERE table_name = ? AND last_data_date < ?""",
+                    (table_name, cutoff),
+                ).fetchall()
+        # Filter out delisted tickers (match both bare code and .JK variant)
+        result = []
+        for r in rows:
+            t = r[0]
+            bare = t.replace(".JK", "") if t.endswith(".JK") else t
+            if bare not in delisted:
+                result.append(t)
+        return result
 
     # ---------- Audit ----------
     def audit(self, event_type: str, payload: Any, actor: str = "system"):
@@ -1326,6 +1472,23 @@ class DataStorage:
                 ).fetchall()
             return [r[0] for r in rows]
 
+    def list_active_equity_tickers(self) -> list[str]:
+        """Return active equity tickers that have OHLCV data.
+
+        Joins instrument_master (asset_class='equity', is_active=1) with ohlcv
+        to ensure only tradeable listed stocks with price data are returned.
+        Tickers are returned with .JK suffix to match OHLCV convention.
+        This is the canonical ticker list for downstream analysis/execution engines.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT DISTINCT o.ticker FROM instrument_master im
+                   INNER JOIN ohlcv o ON im.ticker = o.ticker OR im.ticker || '.JK' = o.ticker
+                   WHERE im.asset_class = 'equity' AND im.is_active = 1
+                   ORDER BY o.ticker"""
+            ).fetchall()
+            return [r[0] for r in rows]
+
     def load_non_equity_tickers(self) -> list[dict]:
         """Return non-equity tickers (indices, commodities, forex, etfs) for relationship analysis."""
         with self._connect() as conn:
@@ -1334,16 +1497,35 @@ class DataStorage:
             ).fetchall()
             return [{"ticker": r[0], "name": r[1], "asset_class": r[2], "exchange": r[3]} for r in rows]
 
+    def load_delisted_tickers(self) -> set[str]:
+        """Return set of delisted ticker codes (bare, without .JK suffix).
+
+        A ticker is considered delisted if is_active=0 or delisting_date is not NULL.
+        Used to skip fetch/render/catch-up for dead tickers.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT ticker FROM instrument_master WHERE is_active = 0 OR delisting_date IS NOT NULL"
+            ).fetchall()
+            return {r[0] for r in rows}
+
     def get_instrument_status(self, ticker: str) -> dict | None:
         """Return instrument lifecycle metadata for a ticker.
 
         Keys: ticker, listing_date, delisting_date, ipo_date, ipo_price,
         status, lock_up_end_date, is_active.
+
+        Gracefully handles schemas where ipo_date/ipo_price/status/lock_up_end_date
+        columns are absent (returns None for those keys).
         """
         with self._connect() as conn:
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(instrument_master)").fetchall()}
+            select = []
+            for c in ("ticker", "listing_date", "delisting_date", "ipo_date",
+                      "ipo_price", "status", "lock_up_end_date", "is_active"):
+                select.append(c if c in cols else "NULL AS " + c)
             row = conn.execute(
-                """SELECT ticker, listing_date, delisting_date, ipo_date,
-                          ipo_price, status, lock_up_end_date, is_active
+                f"""SELECT {', '.join(select)}
                    FROM instrument_master WHERE ticker = ?""",
                 (ticker,),
             ).fetchone()
@@ -1357,7 +1539,7 @@ class DataStorage:
                 "ipo_price": row[4],
                 "status": row[5] or "active",
                 "lock_up_end_date": row[6],
-                "is_active": row[7],
+                "is_active": bool(row[7]) if row[7] is not None else True,
             }
 
     def is_tradeable(self, ticker: str, as_of: str | None = None) -> bool:

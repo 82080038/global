@@ -110,6 +110,55 @@ class TestDeepLearning:
         metrics = model.train(df)
         assert "error" in metrics
 
+    def test_torch_backend_selected_when_available(self):
+        """When torch is installed, auto backend should pick torch and report device."""
+        df = _make_ohlcv(100)
+        config = DeepLearningConfig(lookback=10, epochs=2, batch_size=16, backend="auto")
+        model = DeepLearningModel(config)
+        metrics = model.train(df)
+        if metrics.get("backend") == "torch":
+            assert metrics["model_type"] == "lstm"
+            assert "device" in metrics
+            assert "final_loss" in metrics
+            assert model.config.fit_info["backend"] == "torch"
+
+    def test_torch_cpu_device_explicit(self):
+        """Forcing device=cpu should never use CUDA even if available."""
+        df = _make_ohlcv(80)
+        config = DeepLearningConfig(
+            lookback=10, epochs=2, batch_size=16, backend="torch", device="cpu",
+        )
+        model = DeepLearningModel(config)
+        try:
+            import torch  # noqa: F401
+        except ImportError:
+            pytest.skip("torch not installed")
+        metrics = model.train(df)
+        assert metrics["backend"] == "torch"
+        assert metrics["device"] == "cpu"
+
+    def test_sklearn_backend_forced(self):
+        """Forcing backend=sklearn should use MLPRegressor on CPU."""
+        df = _make_ohlcv(80)
+        config = DeepLearningConfig(
+            lookback=10, epochs=5, batch_size=16, backend="sklearn",
+        )
+        model = DeepLearningModel(config)
+        metrics = model.train(df)
+        assert metrics["backend"] == "sklearn"
+        assert metrics["device"] == "cpu"
+        assert metrics["model_type"] == "mlp"
+
+    def test_pick_torch_device_auto(self):
+        from trading_system.ai_learning.deep_learning import _pick_torch_device
+        try:
+            import torch  # noqa: F401
+        except ImportError:
+            assert _pick_torch_device("auto") == "cpu"
+            return
+        dev = _pick_torch_device("auto")
+        assert dev.startswith("cuda") if torch.cuda.is_available() else dev == "cpu"
+
 
 class TestEnsemble:
     """Tests for T — Ensemble System."""

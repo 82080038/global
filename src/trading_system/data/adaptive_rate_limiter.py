@@ -198,6 +198,68 @@ class AdaptiveRateLimiter:
             jitter_ratio=0.4,
         )
 
+    @classmethod
+    def for_fred(cls) -> AdaptiveRateLimiter:
+        """Preset for FRED API (120 req/min documented limit).
+
+        FRED is a well-behaved REST API with documented rate limits.
+        Use 0.5s min delay (safe margin under 120/min = 0.5s/req).
+        """
+        return cls(
+            min_delay=0.5,
+            max_delay=2.0,
+            max_requests=120,
+            window_seconds=60,
+            max_retries=3,
+            backoff_base=2.0,
+            backoff_max=30.0,
+            circuit_threshold=5,
+            circuit_reset_seconds=60,
+            adaptive=True,
+            jitter_ratio=0.2,
+        )
+
+    @classmethod
+    def for_bps(cls) -> AdaptiveRateLimiter:
+        """Preset for BPS API (no documented limit, be respectful).
+
+        BPS is a government API — use conservative 1 req/sec.
+        """
+        return cls(
+            min_delay=1.0,
+            max_delay=3.0,
+            max_requests=60,
+            window_seconds=60,
+            max_retries=3,
+            backoff_base=2.0,
+            backoff_max=30.0,
+            circuit_threshold=5,
+            circuit_reset_seconds=60,
+            adaptive=True,
+            jitter_ratio=0.3,
+        )
+
+    @classmethod
+    def for_bi(cls) -> AdaptiveRateLimiter:
+        """Preset for Bank Indonesia website (undocumented JSON endpoints).
+
+        BI is a government website with undocumented endpoints — use very
+        conservative 1 req/2sec to avoid being blocked.
+        """
+        return cls(
+            min_delay=2.0,
+            max_delay=5.0,
+            max_requests=30,
+            window_seconds=60,
+            max_retries=3,
+            backoff_base=2.0,
+            backoff_max=60.0,
+            circuit_threshold=5,
+            circuit_reset_seconds=120,
+            adaptive=True,
+            jitter_ratio=0.3,
+        )
+
     @property
     def stats(self) -> dict:
         """Return current statistics."""

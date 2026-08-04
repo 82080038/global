@@ -10,6 +10,23 @@ Format berdasarkan [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), dan
 
 Phase 7: IDX real-data scraper, XAI narrative expansion, storage CRUD layer, repository cleanup.
 
+### Added — Equity-Only Filtering (Canonical Ticker Universe)
+
+- **`data/storage.py`**: `list_active_equity_tickers()` — joins `instrument_master` (asset_class='equity', is_active=1) with `ohlcv` to return only tradeable listed stocks with price data. Tickers include `.JK` suffix. This is the canonical ticker list for all downstream engines.
+- **Downstream engines updated**: `factor_engine`, `automated` execution, `ai_learning`, `monitoring` — all now use `list_active_equity_tickers()` instead of unfiltered `list_tickers()`.
+- **API endpoints updated**: `/api/screen`, `/api/factors`, `/api/factors/{ticker}`, `/api/tickers` (new `equity_only` parameter).
+- **CLI updated**: `list` command shows equity vs non-equity breakdown; `screen` uses equity-only universe; `fetch --all` and `compute-scores --all` flags added for batch processing.
+- **`scripts/daily_runner.py`**: Uses `list_active_equity_tickers()` for canonical ticker list.
+- **`tests/unit/test_equity_filter.py`**: 6 regression tests verifying equity-only filtering and downstream engine usage.
+
+### Fixed — Pipeline & Safety Bugs
+
+- **`analysis/pipeline.py`**: Fixed ordering bug — `_weight_multiplier` was stored in breakdown AFTER score save, causing decision engine to never find it. Now stored BEFORE save.
+- **`execution/automated.py`**: Moved circuit breaker (daily loss limit) check BEFORE market status check — safety should take priority over market hours.
+- **`tests/unit/test_execution.py`**: Fixed `test_run_once_no_tickers` to mock market status as open.
+- **`tests/unit/test_layer3_tip.py`**: Fixed `test_version` to expect `NOTRADE_VERSION == "1.1"`.
+- **Version sync**: `pyproject.toml`, `__init__.py`, API `app.version` all updated to `0.1.11`.
+
 ### Added — IDX Real-Data Batch Scraper
 
 - **`data/idx_batch.py`**: `IDXBatchEngine` — batch scraper untuk foreign flow & broker summary riil dari `idx.co.id` (endpoint `getStockSummary` / `getBrokerSummary`). Data sejak Jan 2020, rate-limited 0.3s/req, backup ke Parquet archive.

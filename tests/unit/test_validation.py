@@ -120,3 +120,51 @@ class TestDataQualityValidator:
 
         assert any(a["check"] == "plausibility" for a in report.anomalies)
         assert report.data_quality_score < 90
+
+    @patch("trading_system.data.validation.DataStorage")
+    def test_duplicate_timestamps_detected(self, mock_storage_cls):
+        """Duplicate timestamps should be flagged by TIP-derived check."""
+        mock_storage = MagicMock()
+        mock_storage_cls.return_value = mock_storage
+
+        ts = list(pd.date_range("2024-01-01", periods=10, freq="B").astype(str))
+        ts.append(ts[0])  # duplicate
+        df = pd.DataFrame({
+            "ticker": ["BBCA.JK"] * 11,
+            "timestamp": ts,
+            "open": [100.0] * 11,
+            "high": [105.0] * 11,
+            "low": [95.0] * 11,
+            "close": [102.0] * 11,
+            "volume": [1000000.0] * 11,
+        })
+
+        validator = DataQualityValidator()
+        clean, report = validator.validate(df)
+
+        assert any(a["check"] == "tip_quality" and "duplicate" in a["detail"] for a in report.anomalies)
+        assert report.data_quality_score < 100
+
+    @patch("trading_system.data.validation.DataStorage")
+    def test_abnormal_returns_detected(self, mock_storage_cls):
+        """Abnormal returns (>25% daily move) should be flagged."""
+        mock_storage = MagicMock()
+        mock_storage_cls.return_value = mock_storage
+
+        n = 20
+        closes = [100.0] * n
+        closes[-1] = 150.0  # 50% jump on last day
+        df = pd.DataFrame({
+            "ticker": ["BBCA.JK"] * n,
+            "timestamp": pd.date_range("2024-01-01", periods=n, freq="B").astype(str),
+            "open": [100.0] * n,
+            "high": [105.0] * (n - 1) + [155.0],
+            "low": [95.0] * (n - 1) + [145.0],
+            "close": closes,
+            "volume": [1000000.0] * n,
+        })
+
+        validator = DataQualityValidator()
+        clean, report = validator.validate(df)
+
+        assert any(a["check"] == "tip_quality" and "abnormal" in a["detail"] for a in report.anomalies)

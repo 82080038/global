@@ -6,6 +6,18 @@ import numpy as np
 import pandas as pd
 
 
+def _gpu_device_for_mc():
+    """Pick GPU device for Monte Carlo. Returns torch.device or None if no torch/CUDA."""
+    try:
+        import torch
+        if not torch.cuda.is_available():
+            return None
+        # Prefer cuda:1 (free of display server), fall back to cuda:0
+        return torch.device("cuda:1" if torch.cuda.device_count() >= 2 else "cuda:0")
+    except ImportError:
+        return None
+
+
 def compute_metrics(trade_history: pd.DataFrame, equity_curve: pd.Series, benchmark: pd.Series | None = None) -> dict:
     """Menghitung metrik backtest lengkap."""
     if equity_curve.empty:
@@ -105,6 +117,7 @@ def monte_carlo_simulation(
     initial_capital: float = 100_000_000,
     confidence_levels: tuple = (0.05, 0.50, 0.95),
     block_size: int | None = None,
+    use_gpu: bool = True,
 ) -> dict:
     """Run Monte Carlo simulation by resampling historical returns.
 
@@ -116,6 +129,12 @@ def monte_carlo_simulation(
     series (§3.6 SARAN_PENGEMBANGAN.md).  When ``None``, falls back to
     IID bootstrap.
 
+    When ``use_gpu=True`` (default) and PyTorch + CUDA are available, the
+    simulation is **vectorized on the GPU**: all n_simulations paths are
+    generated and reduced in a single batched tensor operation. This is
+    typically 10-50x faster than the CPU loop for n_simulations >= 1000.
+    Falls back to the CPU loop automatically when no GPU is present.
+
     Args:
         returns: Daily returns series from backtest.
         n_simulations: Number of simulated paths.
@@ -123,6 +142,7 @@ def monte_carlo_simulation(
         initial_capital: Starting capital for each simulation.
         confidence_levels: Percentiles to report (0-1 scale).
         block_size: Block length for block bootstrap (None = IID).
+        use_gpu: Try GPU acceleration via PyTorch CUDA (auto-fallback to CPU).
 
     Returns:
         Dict with percentile bands for final_equity, max_drawdown, sharpe_ratio.
@@ -138,6 +158,23 @@ def monte_carlo_simulation(
     if block_size is not None and block_size < 1:
         block_size = None
 
+    # --- GPU vectorized path (PyTorch CUDA) ---
+    # GPU has fixed overhead (~1s CUDA context init + PCIe transfer). Only
+    # worth it for larger simulation counts where vectorization dominates.
+    # Benchmark on GTX 1050 Ti: GPU wins at n_simulations >= ~2000.
+    if use_gpu and block_size is None and n_simulations >= 2000:
+        gpu_result = _monte_carlo_gpu(
+            returns_arr, n_simulations, n_periods, initial_capital, seed=42,
+        )
+        if gpu_result is not None:
+            final_equities, max_drawdowns, sharpe_ratios = gpu_result
+            return _monte_carlo_finalize(
+                final_equities, max_drawdowns, sharpe_ratios,
+                n_simulations, n_periods, initial_capital, block_size, confidence_levels,
+                backend="gpu",
+            )
+
+    # --- CPU loop path (original, also used for block bootstrap) ---
     final_equities = np.zeros(n_simulations)
     max_drawdowns = np.zeros(n_simulations)
     sharpe_ratios = np.zeros(n_simulations)
@@ -171,6 +208,82 @@ def monte_carlo_simulation(
         else:
             sharpe_ratios[i] = 0.0
 
+    return _monte_carlo_finalize(
+        final_equities, max_drawdowns, sharpe_ratios,
+        n_simulations, n_periods, initial_capital, block_size, confidence_levels,
+        backend="cpu",
+    )
+
+
+def _monte_carlo_gpu(
+    returns_arr: np.ndarray,
+    n_simulations: int,
+    n_periods: int,
+    initial_capital: float,
+    seed: int = 42,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+    """Vectorized Monte Carlo on GPU. Returns (final_equities, max_drawdowns, sharpe_ratios)
+    as numpy arrays, or None if GPU unavailable / not enough VRAM."""
+    device = _gpu_device_for_mc()
+    if device is None:
+        return None
+    import torch
+
+    n = len(returns_arr)
+    # VRAM estimate: n_simulations * n_periods * 8 bytes (float64→float32 halved)
+    # 1000 sims * 252 periods * 4 bytes = ~1 MB — trivially fits in 4 GB.
+    # Cap at 50k simulations to stay safe on 4 GB VRAM.
+    if n_simulations > 50_000:
+        return None
+
+    try:
+        gen = torch.Generator(device=device).manual_seed(seed)
+        # Sample indices once for all simulations: shape (n_simulations, n_periods)
+        idx = torch.randint(0, n, (n_simulations, n_periods), generator=gen, device=device)
+        # Gather returns: (n_simulations, n_periods)
+        rets = torch.from_numpy(returns_arr.copy()).to(device).float()
+        sampled = rets[idx]  # advanced indexing, batched
+        # Equity curves: cumprod along time axis
+        equity = initial_capital * torch.cumprod(1 + sampled, dim=1)
+        final_equities = equity[:, -1].cpu().numpy()
+
+        # Max drawdown per path: vectorized
+        rolling_max = torch.cummax(equity, dim=1).values
+        drawdowns = (equity - rolling_max) / rolling_max
+        max_drawdowns = drawdowns.min(dim=1).values.cpu().numpy()
+
+        # Sharpe per path: mean/std along time axis
+        mean = sampled.mean(dim=1)
+        std = sampled.std(dim=1)
+        sharpe = torch.where(std > 0, mean / std * (252 ** 0.5), torch.zeros_like(mean))
+        sharpe_ratios = sharpe.cpu().numpy()
+
+        # Cleanup VRAM
+        del idx, rets, sampled, equity, rolling_max, drawdowns, mean, std, sharpe
+        torch.cuda.empty_cache()
+        return final_equities, max_drawdowns, sharpe_ratios
+    except (torch.cuda.OutOfMemoryError, RuntimeError):
+        # Fall back to CPU
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+        return None
+
+
+def _monte_carlo_finalize(
+    final_equities: np.ndarray,
+    max_drawdowns: np.ndarray,
+    sharpe_ratios: np.ndarray,
+    n_simulations: int,
+    n_periods: int,
+    initial_capital: float,
+    block_size: int | None,
+    confidence_levels: tuple,
+    backend: str = "cpu",
+) -> dict:
+    """Compute percentile bands and summary stats from MC simulation arrays."""
+
     # Compute percentile bands
     def pct(arr, p):
         return float(np.percentile(arr, p * 100))
@@ -180,6 +293,7 @@ def monte_carlo_simulation(
         "n_periods": n_periods,
         "initial_capital": initial_capital,
         "block_size": block_size,
+        "backend": backend,
         "final_equity": {
             f"p{int(p*100)}": round(pct(final_equities, p), 2)
             for p in confidence_levels

@@ -177,7 +177,7 @@ class YahooFinanceAdapter(DataSourceAdapter):
             df["exchange"] = "INDO" if ticker.endswith(".JK") else "GLOBAL"
             df["timeframe"] = interval
             df["source"] = self.name
-            df["ingested_at"] = datetime.now(UTC).isoformat()
+            df["ingested_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
             raw_file = RAW_ZONE / f"{ticker}_{interval}_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}.parquet"
             df.to_parquet(raw_file, index=False)
@@ -223,11 +223,15 @@ def normalize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError(f"Kolom wajib hilang: {required - set(df.columns)}")
 
     df = df.copy()
-    df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.tz_localize(None)
-    if "timestamp" in df.columns:
-        df["timestamp"] = df["timestamp"].astype(str)
+    # Normalize timestamp: strip timezone (keep local trading date), format as date-only YYYY-MM-DD
+    ts = pd.to_datetime(df["timestamp"])
+    if ts.dt.tz is not None:
+        ts = ts.dt.tz_localize(None)
+    df["timestamp"] = ts.dt.strftime("%Y-%m-%d")
+    # Normalize ingested_at: convert to UTC, format as ISO8601 with +00:00 suffix
     if "ingested_at" in df.columns:
-        df["ingested_at"] = pd.to_datetime(df["ingested_at"]).dt.tz_localize(None).astype(str)
+        ia = pd.to_datetime(df["ingested_at"], format="mixed", utc=True)
+        df["ingested_at"] = ia.dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
     if "adj_close" in df.columns:
         df["adjusted_close"] = df["adj_close"]
@@ -335,7 +339,7 @@ class SQLiteAdapter(DataSourceAdapter):
         if "ticker" not in df.columns:
             df["ticker"] = ticker
         df["source"] = self.name
-        df["ingested_at"] = datetime.now(UTC).isoformat()
+        df["ingested_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+00:00")
         df["asset_class"] = "equity"
         df["exchange"] = "IDX" if ticker.endswith(".JK") else "GLOBAL"
         df["timeframe"] = "1d"
@@ -413,7 +417,7 @@ class CSVAdapter(DataSourceAdapter):
         if "ticker" not in df.columns:
             df["ticker"] = ticker
         df["source"] = self.name
-        df["ingested_at"] = datetime.now(UTC).isoformat()
+        df["ingested_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+00:00")
         df["asset_class"] = "equity"
         df["exchange"] = "IDX" if ticker.endswith(".JK") else "GLOBAL"
         df["timeframe"] = "1d"

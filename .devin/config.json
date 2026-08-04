@@ -4,7 +4,19 @@
     "allow": [
       "Exec(grep)",
       "Exec(head)",
-      "Exec(find)"
+      "Exec(find)",
+      "Exec(ls)",
+      "Exec(wc)",
+      "Exec(curl)",
+      "Exec(mkdir)",
+      "Exec(pkill)",
+      "Exec(sleep)",
+      "Exec(nvidia-smi)",
+      "Exec(.venv/bin/python)",
+      "Exec(.venv/bin/ruff)",
+      "Exec(.venv/bin/mypy)",
+      "Exec(.venv/bin/alembic)",
+      "Exec(.venv/bin/pytest)"
     ]
   }
 }

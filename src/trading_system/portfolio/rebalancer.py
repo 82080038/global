@@ -124,16 +124,6 @@ class PortfolioRebalancer:
 
         logger.info(f"REBALANCE BUY {quantity} {ticker} @ Rp {price:,.2f}")
 
-        # Telegram notification
-        try:
-            from trading_system.utils.notifier import send_telegram
-            send_telegram(
-                f"🔄 <b>REBALANCING</b>\nBUY {quantity} {ticker} @ Rp {price:,.2f}\nTotal: Rp {order_value:,.2f}",
-                parse_mode="HTML",
-            )
-        except Exception:
-            pass
-
         return {
             "status": "ok", "action": "BUY", "ticker": ticker,
             "quantity": quantity, "price": price, "fee": fee,
@@ -180,15 +170,6 @@ class PortfolioRebalancer:
         })
 
         logger.info(f"REBALANCE SELL {quantity} {ticker} @ Rp {price:,.2f} (PnL: {realized_pnl:,.0f})")
-
-        try:
-            from trading_system.utils.notifier import send_telegram
-            send_telegram(
-                f"🔄 <b>REBALANCING</b>\nSELL {quantity} {ticker} @ Rp {price:,.2f}\nTotal: Rp {order_value:,.2f}",
-                parse_mode="HTML",
-            )
-        except Exception:
-            pass
 
         return {
             "status": "ok", "action": "SELL", "ticker": ticker,

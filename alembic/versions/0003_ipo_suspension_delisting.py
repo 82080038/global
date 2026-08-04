@@ -16,6 +16,7 @@ Create Date: 2026-08-04
 from typing import Sequence, Union
 
 from alembic import op
+from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision: str = "0003_ipo_suspend"
@@ -30,7 +31,7 @@ def upgrade() -> None:
     # Add IPO and lifecycle columns to instrument_master
     # SQLite doesn't support ADD COLUMN IF NOT EXISTS, so we check pragma first.
     conn = op.get_bind()
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(instrument_master)").fetchall()}
+    cols = {r[1] for r in conn.execute(text("PRAGMA table_info(instrument_master)")).fetchall()}
 
     if "ipo_date" not in cols:
         op.execute("ALTER TABLE instrument_master ADD COLUMN ipo_date TEXT")
@@ -76,7 +77,7 @@ def downgrade() -> None:
 
     # SQLite doesn't support DROP COLUMN before 3.35; recreate without new columns
     conn = op.get_bind()
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(instrument_master)").fetchall()}
+    cols = {r[1] for r in conn.execute(text("PRAGMA table_info(instrument_master)")).fetchall()}
     new_cols = {"ipo_date", "ipo_price", "status", "lock_up_end_date"}
     if new_cols & cols:
         op.execute("""

@@ -79,3 +79,9 @@ logs/
 # Node (frontend has its own .gitignore too)
 node_modules/
 .next/
+
+# Test artifacts (mock db_path leaks — files created when a test mocks storage
+# but production code calls open(mock.db_path, ...). 0-byte junk to never commit.
+<MagicMock*
+auth
+status

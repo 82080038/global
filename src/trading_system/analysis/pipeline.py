@@ -141,6 +141,9 @@ class AnalysisPipeline:
 
         as_of = datetime.now(UTC).isoformat()
         for engine, res in results.items():
+            # Store weight_multiplier in breakdown BEFORE saving so decision engine can read it
+            if res.get("weight_multiplier") is not None and res.get("breakdown") is not None:
+                res["breakdown"]["_weight_multiplier"] = res["weight_multiplier"]
             if res.get("status") in ("ok", "warning", "degraded", "failed") and res.get("score") is not None:
                 self.storage.save_score(
                     ticker,
@@ -149,9 +152,6 @@ class AnalysisPipeline:
                     res.get("breakdown", {}),
                     as_of=as_of,
                 )
-            # Store weight_multiplier for decision engine to use
-            if res.get("weight_multiplier") is not None and res.get("breakdown") is not None:
-                res["breakdown"]["_weight_multiplier"] = res["weight_multiplier"]
 
         return {
             "status": "ok",

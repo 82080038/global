@@ -188,12 +188,12 @@ class FactorEngine:
         """Compute all factor scores for the universe.
 
         Args:
-            tickers: List of ticker symbols. If None, uses storage.list_tickers().
+            tickers: List of ticker symbols. If None, uses active equity tickers only.
 
-        Returns dict with as_of, factor_version, results, composite_ranks, reason_codes.
+        Returns dict with as_of, factor_versions, results, composite_ranks, reason_codes.
         """
         if tickers is None:
-            tickers = self.storage.list_tickers()
+            tickers = self.storage.list_active_equity_tickers()
 
         benchmark_returns = self._load_benchmark_returns()
 
