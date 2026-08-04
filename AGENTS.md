@@ -5,7 +5,8 @@
 - **Project**: `trading-system` (Indonesian stocks / IDX decision support)
 - **Version**: `0.1.11`
 - **Language**: Python 3.10+ (target 3.11)
-- **Repository root**: `/opt/lampp/htdocs/global`
+- **Repository root** (Windows): `C:\xampp\htdocs\global`
+- **Repository root** (Linux): `/home/petrick/projects/global`
 - **Backend**: `src/trading_system/` (setuptools package under `src`)
 - **Frontend**: `frontend/` (Next.js + TypeScript; see `frontend/AGENTS.md` for Next.js-specific rules)
 - **CLI**: `src/trading_system/cli.py`

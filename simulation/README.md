@@ -39,7 +39,8 @@ simulation/
 ### Jalankan semua modul
 
 ```bash
-cd /opt/lampp/htdocs/global
+cd ~/projects/global  # Linux
+# or: cd C:\xampp\htdocs\global  # Windows
 python -m simulation.run_all
 ```
 

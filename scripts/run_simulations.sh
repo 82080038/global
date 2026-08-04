@@ -3,7 +3,7 @@
 # Jalankan: bash scripts/run_simulations.sh
 
 set -e
-cd /opt/lampp/htdocs/global
+cd "$(dirname "$0")/.."  # auto-detect project root
 
 echo "============================================================"
 echo "  TRADING SYSTEM - SIMULASI LENGKAP"

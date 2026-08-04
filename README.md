@@ -39,7 +39,7 @@ pip install -e .
 ### Linux / macOS
 
 ```bash
-cd /opt/lampp/htdocs/global
+cd ~/projects/global
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
@@ -48,7 +48,8 @@ pip install -e .
 ### Using uv (recommended - faster)
 
 ```bash
-cd /opt/lampp/htdocs/global
+cd ~/projects/global          # Linux
+# or: cd C:\xampp\htdocs\global  # Windows
 uv venv
 source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 uv sync
