@@ -553,4 +553,4 @@ feature:
 
 ---
 
-> **Catatan:** MLOps untuk trading system adalah tentang disiplin: model bukan static artifact, tapi living system yang perlu dimonitor, di-retrain, dan di-retire. "Model yang tidak dimonitor adalah model yang sudah broken — Anda hanya belum tahu."
+> **Catatan:** MLOps untuk trading system adalah tentang disiplin: model bukan static artifact, tapi living system yang perlu dimonitor, di-retrain, dan di-retire. "Model yang tidak dimonitor adalah model yang sudah broken — Anda hanya belum tahu." Untuk pembahasan bagaimana model degradation berkontribusi pada gap backtest-to-live dan cara mencegahnya, lihat `85-backtest-to-live-gap-prevention.md`.

@@ -20,7 +20,7 @@ Berikut adalah keputusan desain tetap yang berlaku untuk seluruh dokumen di pust
 - Istilah pasar modal yang tidak dapat diterjemahkan (misal: *ticker*, *OHLCV*, *RSI*, *MACD*, *Sharpe ratio*, *VaR*, *P/E*, *EBITDA*) tetap ditampilkan dalam bahasa aslinya, **tetapi wajib memiliki tooltip** yang menjelaskan arti dan konteksnya dalam Bahasa Indonesia.
 - Singkatan umum pasar modal (misal: *IDX*, *BEI*, *OJK*, *KSEI*, *KPEI*, *IPO*, *SPO*, *REITs*, *ETF*) juga wajib memiliki tooltip.
 - Tooltip harus: (a) muncul on-hover (desktop) atau on-tap (mobile), (b) berisi penjelasan singkat 1-2 kalimat, (c) mudah diakses tanpa mengganggu flow pengguna.
-- Lihat `32-ui-ux-design-trading-app.md` bagian [13. Bahasa Indonesia & Tooltip System](../pustaka/32-ui-ux-design-trading-app.md#13-bahasa-indonesia--tooltip-system).
+- Lihat `32-ui-ux-design-trading-app.md` bagian [13. Bahasa Indonesia & Tooltip System](32-ui-ux-design-trading-app.md#13-bahasa-indonesia--tooltip-system).
 
 ### 2. Timezone GMT+7 (WIB) sebagai Acuan Lokal
 
@@ -32,7 +32,7 @@ Berikut adalah keputusan desain tetap yang berlaku untuk seluruh dokumen di pust
   - Overlap dengan bursa Asia (HK, SG, TH, JP, CN) yang beroperasi pada jam yang berdekatan.
   - **Overnight gap** dari bursa US/Europe yang tutup setelah IDX dan buka sebelum IDX hari berikutnya.
   - DST (Daylight Saving Time) untuk US/Europe — offset UTC berubah Mar-Nov (US) dan Mar-Oct (EU).
-- **Schedule semua operasi** mengacu pada waktu WIB lokal. Lihat `36-gap-data-timezone-global-idx.md` bagian [9. GMT+7 Local Timezone Awareness](../pustaka/36-gap-data-timezone-global-idx.md#9-gmt7-local-timezone-awareness).
+- **Schedule semua operasi** mengacu pada waktu WIB lokal. Lihat `36-gap-data-timezone-global-idx.md` bagian [9. GMT+7 Local Timezone Awareness](36-gap-data-timezone-global-idx.md#9-gmt7-local-timezone-awareness).
 
 ### 3. Aplikasi Single-User (Tidak Multi-User)
 
@@ -43,7 +43,7 @@ Berikut adalah keputusan desain tetap yang berlaku untuk seluruh dokumen di pust
   - Backup database dan Parquet archive.
   - `.env` tetap di `.gitignore` (best practice, bukan security concern).
   - Broker API key tetap aman (jangan hardcode di repo).
-- Lihat `33-cybersecurity-trading-system.md` bagian [13. Catatan: Single-User Application](../pustaka/33-cybersecurity-trading-system.md#13-catatan-single-user-application).
+- Lihat `33-cybersecurity-trading-system.md` bagian [13. Catatan: Single-User Application](33-cybersecurity-trading-system.md#13-catatan-single-user-application).
 
 ### 4. GPU/CUDA Acceleration Wajib Diperiksa
 
@@ -54,9 +54,7 @@ Berikut adalah keputusan desain tetap yang berlaku untuk seluruh dokumen di pust
 - Batasan: `batch_size <= 64`, `hidden_dim <= 256`, FP32 primary (no Tensor Cores).
 - Operasi yang wajib periksa GPU: LSTM training, walk-forward, Monte Carlo backtest, VaR simulation, NLP/sentiment (IndoBERT), ensemble training.
 - Operasi yang TIDAK perlu GPU: data fetching, database I/O, API handling, single ticker computation, frontend rendering.
-- Lihat `34-performance-engineering-optimization.md` bagian [13. GPU/CUDA Acceleration](../pustaka/34-performance-engineering-optimization.md#13-gpucuda-acceleration).
-
----
+- Lihat `34-performance-engineering-optimization.md` bagian [13. GPU/CUDA Acceleration](34-performance-engineering-optimization.md#13-gpucuda-acceleration).
 
 ---
 
@@ -139,6 +137,18 @@ Berikut adalah keputusan desain tetap yang berlaku untuk seluruh dokumen di pust
 | 72 | `72-human-in-the-loop-oversight.md` | **Human-in-the-Loop Oversight** | Approval gate architecture, risk classification (low/medium/high/critical), escalation policy, Telegram approval bot, kill switch, audit & compliance, LLM cost tracking |
 | 73 | `73-self-evolving-ai-roadmap-recommendation.md` | **Self-Evolving AI Roadmap & Rekomendasi** | 5 level self-evolution (L1-L5), current state assessment, roadmap bertahap (2-24 bulan), safety boundaries, cost estimation, risk register, rekomendasi implementasi |
 | 74 | `74-trading-financial-management-capital-operations.md` | **Trading Financial Management & Capital Operations** | Kalkulasi modal per transaksi (price + fees + tax), cek buying power (cash balance vs capital needed), flow screening→decision→eksekusi, cash flow manager (deposit/withdraw/buy/sell/dividend), capital allocator (conviction/equal-weight/HRP), PnL engine (realized/unrealized/FIFO), trade ledger (double-entry), NAV calculation, reconciliation (broker vs internal), capital efficiency metrics, financial config & parameter management |
+| 75 | `75-corporate-actions-processing-adjustment.md` | **Corporate Actions Processing & Adjustment** | Stock split, reverse split, stock dividend, cash dividend, bonus share, rights issue — price adjustment (backward), position adjustment (qty/price), cost basis adjustment, ex-date/cum-date/record date/payment date logic, dividend processor (PPh 10%), automated daily processing pipeline, ex-date notification |
+| 76 | `76-idx-trading-rules-market-mechanics.md` | **IDX Trading Rules & Market Mechanics** | Sesi perdagangan (pre-opening/S1/S2/pre-closing), fraksi harga/tick size, lot size 100, auto-reject (ARA/ARB 15-25%), circuit breaker IHSG (5%/10%/15%), trading halt, short selling (Designated Securities), margin trading (initial 50%/maintenance 30%), order validation |
+| 77 | `77-performance-attribution-benchmark-comparison.md` | **Performance Attribution & Benchmark Comparison** | Risk-adjusted metrics (Sharpe, Sortino, Calmar, Information Ratio, max drawdown), benchmark comparison vs IHSG (alpha, beta, R²), Brinson attribution (allocation/selection/interaction effect), factor attribution (6-factor regression), return decomposition (capital gain + dividend - costs - tax) |
+| 78 | `78-reporting-export-system.md` | **Reporting & Export System** | Report types (portfolio summary, monthly/annual statement, tax report/SPT, performance report, trade log, dividend statement), export formats (PDF/CSV/Excel/JSON), Jinja2 template engine, scheduled report generation, regulatory reporting (OJK/DJP), API endpoints |
+| 79 | `79-education-content-management.md` | **Education & Content Management** | Learning path (3 level: Pemula/Menengah/Advanced, 15 modul), content types (article/video/tutorial/quiz/simulation), glossary (200+ entries), contextual help & tooltip, quiz & assessment (passing score gating), content management system (draft→review→publish), API endpoints |
+| 80 | `80-watchlist-alert-system.md` | **Watchlist & Alert System** | Multiple watchlist per user, 15 alert types (price/volume/score/conviction/technical/foreign flow/drawdown/corporate action), alert lifecycle (active→triggered→expired), notification routing (push/Telegram/email/in-app), snooze & recurring, alert history log, anti-spam dedup |
+| 81 | `81-gamification-engagement-design.md` | **Gamification & Engagement Design** | XP & level system (8 level), 15 badge/achievement, streak system (learning/discipline/review/paper trading), challenge & quest, leaderboard (education/discipline/paper only — NO real trading leaderboard), anti-overtrading guardrails (daily XP cap, loss streak pause), opt-out |
+| 82 | `82-vendor-third-party-integration-management.md` | **Vendor & Third-Party Integration Management** | Vendor landscape (data/broker/infrastructure/notification), vendor config & health check, broker API failover, SLA monitoring, per-vendor circuit breaker, fallback strategy (Yahoo→archive, broker→mock, Telegram→email), vendor evaluation framework (6 criteria), API endpoints |
+| 83 | `83-advisory-system-screening-to-recommendation.md` | **Advisory System: Screening ke Saran Eksekusi** | Pipeline advisory lengkap — data testing & validation, screening (3 template + factor screener + equity filter), stock personality classification, strategy recommendation (swing/position/momentum/value/dividend), saran jumlah (position sizing + fees), saran entry (timing + technical signals), saran exit (SL/TP/trailing/conviction exit), persentase untung (expected value + win probability), alasan empiris (6-factor scores + XAI narrative + backtest evidence + VaR), eksekusi otomatis (condition check + auto-execute + post-execution monitoring), `/api/advisory/{ticker}` endpoint |
+| 84 | `84-new-data-arrival-processing-pipeline.md` | **New Data Arrival Processing Pipeline** | Pipeline 7 tahap setiap data baru masuk — Stage 1: ingestion (Yahoo/archive/IDX, rate limit, raw Parquet), Stage 2: pemeriksaan data lengkap (8 quality checks: completeness, plausibility, volume anomaly, gap detection, cross-source, reconciliation, OHLCV internal, TIP quality → score 0-100, tier gold/silver/bronze/reject), Stage 3: testing & validasi (normalization, corporate action detection, adjusted close, save to SQLite + watermark + Parquet sync), Stage 4: screening (3 template + factor screener + equity filter), Stage 5: penemuan pola (30+ indicators, chart & candlestick pattern detection, pattern reliability scoring, stock personality classification), Stage 6: penandaan & labeling ke DB (6-factor scores, AI labels triple-barrier, pattern tagging, personality tagging, data quality tag, watermark, audit trail), Stage 7: post-processing (decision engine, recommendation, XAI, risk metrics, alerts, auto-execution), daily runner implementation, real-time pipeline roadmap |
+| 85 | `85-backtest-to-live-gap-prevention.md` | **Backtest-to-Live Gap Prevention** | Mengatasi fenomena “backtest selalu untung, live trading rugi” — 7 root causes (look-ahead bias, survivorship bias, overfitting, unrealistic costs, market impact, regime change, behavioral gap), 8 mekanisme yang sudah diimplementasi (next-bar-open execution, survivorship-free backtest, walk-forward validation, realistic cost model + slippage, regime filter, automated execution, circuit breaker + daily loss limit, paper trading), 6 gap yang masih kurang (WFA belum mandatory, paper-vs-backtest comparison, conservative slippage, faster regime detection, live degradation alert, mandatory paper period), backtest-to-live transition protocol (6 step: backtest → WFA → paper 30 hari → live small → scale up → full size), stop conditions, continuous validation loop, re-validation triggers |
+| 86 | `86-gigantic-ai-autonomous-trading-system.md` | **Gigantic AI: Sistem Trading Otonom yang Berkembang Sendiri** | Arsitektur "Gigantic AI" yang bekerja mandiri tanpa campur tangan user — self-awareness layer (8 state: market/portfolio/performance/model/data/strategy/self/risk), self-reflection (5 pertanyaan: Am I profitable? Am I degrading? Is my model stale? Am I within risk limits? Are my self-improvements working?), autonomous decision loop 9-step (observe → analyze → reflect → decide → validate → execute → monitor → learn → evolve), runtime code generation dengan 7-layer validation + accountability (setiap keputusan + kode punya alasan empiris), profitability guarantee 5-layer (strategy validation → pre-execution risk → post-execution monitoring → self-correction → circuit breaker), 7-layer architecture stack (Layer 0 infrastructure → Layer 1 data → Layer 2 AI/ML → Layer 3 analysis → Layer 4 decision → Layer 5 self-awareness → Layer 6 self-evolution), 5 autonomy levels (A0 manual → A4 fully autonomous), path to full autonomy 24 bulan, perbedaan gigantic AI vs AGI (operational self-awareness bukan philosophical consciousness) |
 
 ---
 
@@ -225,6 +235,18 @@ Berikut adalah keputusan desain tetap yang berlaku untuk seluruh dokumen di pust
 59. Pelajari `72-human-in-the-loop-oversight.md` → approval gate, risk classification, escalation, kill switch, Telegram bot
 60. Pelajari `73-self-evolving-ai-roadmap-recommendation.md` → 5-level roadmap, safety boundaries, cost estimation, risk register
 61. Pelajari `74-trading-financial-management-capital-operations.md` → kalkulasi modal, buying power, screen→execute, cash flow, PnL engine, trade ledger, reconciliation
+62. Pelajari `75-corporate-actions-processing-adjustment.md` → split, dividend, rights issue, price/position/cost basis adjustment, ex-date logic
+63. Pelajari `76-idx-trading-rules-market-mechanics.md` → sesi perdagangan, tick size, lot size, ARA/ARB, circuit breaker, margin/short selling
+64. Pelajari `77-performance-attribution-benchmark-comparison.md` → Sharpe/Sortino/Calmar, alpha/beta, Brinson attribution, factor attribution
+65. Pelajari `78-reporting-export-system.md` → report types, PDF/CSV/Excel export, template engine, scheduled generation, SPT tax report
+66. Pelajari `79-education-content-management.md` → learning path, content CMS, glossary, quiz, contextual help
+67. Pelajari `80-watchlist-alert-system.md` → multi-watchlist, 15 alert types, notification routing, alert lifecycle
+68. Pelajari `81-gamification-engagement-design.md` → XP/level, badge, streak, challenge, leaderboard, anti-overtrading guardrails
+69. Pelajari `82-vendor-third-party-integration-management.md` → vendor health, circuit breaker, broker failover, SLA, vendor evaluation
+70. Pelajari `83-advisory-system-screening-to-recommendation.md` → screening ke saran lengkap: jenis strategi, jumlah, entry, exit, persentase untung, alasan empiris, eksekusi otomatis
+71. Pelajari `84-new-data-arrival-processing-pipeline.md` → pipeline 7 tahap setiap data baru: ingestion → pemeriksaan → testing → screening → penemuan pola → penandaan DB → post-processing
+72. Pelajari `85-backtest-to-live-gap-prevention.md` → mengapa backtest menipu, 8 mekanisme anti-gap yang sudah ada, 6 gap yang masih kurang, transition protocol backtest → paper → live
+73. Pelajari `86-gigantic-ai-autonomous-trading-system.md` → arsitektur AI otonom: self-awareness, self-reflection, autonomous loop 9-step, runtime code generation, profitability guard 5-layer, path A0→A4
 
 ### Untuk Peneliti
 
@@ -290,6 +312,18 @@ Berikut adalah keputusan desain tetap yang berlaku untuk seluruh dokumen di pust
 60. Dokumen 72 berisi human-in-the-loop oversight (approval gate, risk classification, escalation policy, Telegram approval bot, kill switch, audit & compliance)
 61. Dokumen 73 berisi self-evolving AI roadmap & rekomendasi (5-level vision L1-L5, current state assessment, roadmap bertahap, safety boundaries, cost estimation, risk register)
 62. Dokumen 74 berisi trading financial management & capital operations (kalkulasi modal, buying power, screen→execute pipeline, cash flow manager, capital allocator, PnL engine, trade ledger, NAV, reconciliation, capital efficiency, financial config)
+63. Dokumen 75 berisi corporate actions processing & adjustment (split, dividend, rights issue, price/position/cost basis adjustment, ex-date logic, dividend processor, automated pipeline)
+64. Dokumen 76 berisi IDX trading rules & market mechanics (sesi perdagangan, fraksi harga, lot size, auto-reject ARA/ARB, circuit breaker IHSG, short selling, margin trading, order validation)
+65. Dokumen 77 berisi performance attribution & benchmark comparison (Sharpe/Sortino/Calmar/IR, alpha/beta vs IHSG, Brinson attribution, factor attribution, return decomposition)
+66. Dokumen 78 berisi reporting & export system (portfolio summary, monthly/annual statement, tax report SPT, trade log, PDF/CSV/Excel export, Jinja2 template, scheduled generation, OJK/DJP regulatory reporting)
+67. Dokumen 79 berisi education & content management (3-level learning path, 15 modul, content CMS, glossary 200+ entries, quiz & assessment, contextual help, tooltip system)
+68. Dokumen 80 berisi watchlist & alert system (multi-watchlist, 15 alert types, alert lifecycle, notification routing push/Telegram/email, snooze & recurring, alert history)
+69. Dokumen 81 berisi gamification & engagement design (XP & 8-level system, 15 badge, 4 streak types, challenge/quest, leaderboard non-financial, anti-overtrading guardrails, opt-out)
+70. Dokumen 82 berisi vendor & third-party integration management (vendor landscape, health check, broker failover, SLA monitoring, per-vendor circuit breaker, fallback strategy, vendor evaluation framework)
+71. Dokumen 83 berisi advisory system: screening ke saran eksekusi (data testing, screening, stock personality, strategy classification, position sizing, entry timing, exit rules, expected profit, 6-factor scores, XAI narrative, backtest evidence, VaR, auto-execution dengan condition check, post-execution monitoring)
+72. Dokumen 84 berisi new data arrival processing pipeline: 7 tahap setiap data baru masuk (ingestion, pemeriksaan data lengkap 8 quality checks, testing & validasi, screening, penemuan pola, penandaan & labeling ke database, post-processing trigger), daily runner implementation, real-time pipeline roadmap
+73. Dokumen 85 berisi backtest-to-live gap prevention: 7 root causes (look-ahead, survivorship, overfitting, unrealistic costs, market impact, regime change, behavioral gap), 8 mekanisme yang sudah ada (next-bar-open, survivorship-free, walk-forward, realistic costs, regime filter, auto-execution, circuit breaker, paper trading), 6 gap yang masih kurang (WFA mandatory, paper-vs-backtest comparison, conservative slippage, faster regime detection, live degradation alert, mandatory paper period), transition protocol 6 step (backtest → WFA → paper 30 hari → live small → scale up → full), stop conditions, continuous validation loop
+74. Dokumen 86 berisi gigantic AI autonomous trading system: self-awareness layer (8 state: market/portfolio/performance/model/data/strategy/self/risk), self-reflection (5 pertanyaan: Am I profitable? Am I degrading? Is my model stale? Am I within risk limits? Are my self-improvements working?), autonomous decision loop 9-step (observe → analyze → reflect → decide → validate → execute → monitor → learn → evolve), runtime code generation dengan 7-layer validation + accountability, profitability guarantee 5-layer (strategy validation → pre-execution risk → post-execution monitoring → self-correction → circuit breaker), 7-layer architecture stack (Layer 0 infrastructure → Layer 1 data → Layer 2 AI/ML → Layer 3 analysis → Layer 4 decision → Layer 5 self-awareness → Layer 6 self-evolution), 5 autonomy levels (A0 manual → A4 fully autonomous), path to full autonomy 24 bulan, perbedaan gigantic AI vs AGI (operational self-awareness bukan philosophical consciousness)
 
 ---
 
@@ -317,9 +351,9 @@ Berikut adalah keputusan desain tetap yang berlaku untuk seluruh dokumen di pust
 
 ## Statistik
 
-- **Total dokumen:** 75 file Markdown (00-74)
-- **Total konten:** ~72000+ baris pengetahuan terstruktur
-- **Topik mencakup:** 74 area pengetahuan pasar modal
+- **Total dokumen:** 87 file Markdown (00-86)
+- **Total konten:** ~66000+ baris pengetahuan terstruktur
+- **Topik mencakup:** 86 area pengetahuan pasar modal
 - **Kode contoh:** Python (pandas, numpy, scikit-learn, FastAPI)
 - **Bahasa:** Indonesia (utama) dengan istilah teknis Inggris
 

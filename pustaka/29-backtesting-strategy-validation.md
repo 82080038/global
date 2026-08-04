@@ -977,7 +977,8 @@ def idx_backtest_adjustments(df: pd.DataFrame, ticker: str):
 9. `pustaka/08-trading-algoritmik.md` — Trading algoritmik
 10. `pustaka/23-machine-learning-trading.md` — ML untuk trading
 11. `pustaka/24-market-microstructure-likuiditas.md` — Microstructure & slippage
+12. `pustaka/85-backtest-to-live-gap-prevention.md` — Backtest-to-live gap prevention: 7 root causes, 8 mekanisme anti-gap, transition protocol backtest → paper → live
 
 ---
 
-> **Catatan:** Backtest yang baik bukan yang menunjukkan return tertinggi, tetapi yang paling realistis. Jika backtest terlalu bagus untuk jadi kenyataan, kemungkinan besar memang begitu. Selalu gunakan walk-forward + Monte Carlo + realistic costs.
+> **Catatan:** Backtest yang baik bukan yang menunjukkan return tertinggi, tetapi yang paling realistis. Jika backtest terlalu bagus untuk jadi kenyataan, kemungkinan besar memang begitu. Selalu gunakan walk-forward + Monte Carlo + realistic costs. Untuk pembahasan lengkap mengapa backtest bisa menipu di live trading dan bagaimana aplikasi mengatasinya, lihat `85-backtest-to-live-gap-prevention.md`.

@@ -982,4 +982,4 @@ class LocalLLMClient(LLMClient):
 
 ---
 
-> **Catatan:** LLM Agent Layer ini berfungsi sebagai **lapisan di atas** sistem trading existing. Tidak menggantikan engine yang sudah ada, tetapi menambahkan kapabilitas self-build, self-repair, dan self-update. Setiap self-modification wajib melalui validasi 7-layer dan human approval untuk high-risk changes.
+> **Catatan:** LLM Agent Layer ini berfungsi sebagai **lapisan di atas** sistem trading existing. Tidak menggantikan engine yang sudah ada, tetapi menambahkan kapabilitas self-build, self-repair, dan self-update. Setiap self-modification wajib melalui validasi 7-layer dan human approval untuk high-risk changes. Untuk arsitektur lengkap yang menyatukan 5-agent layer + self-awareness + profitability guard menjadi "Gigantic AI", lihat `86-gigantic-ai-autonomous-trading-system.md`.

@@ -788,4 +788,4 @@ price = df["open"].shift(-1)  # Anti look-ahead
 
 ---
 
-> **Catatan:** Dokumen ini adalah analisis mendalam syarat robot/auto trading berdasarkan codebase nyata. Untuk implementasi detail, lihat source code di `src/trading_system/execution/`. Untuk flow dan testing, lihat `pustaka/19-flow-logic-testing-kpi.md`.
+> **Catatan:** Dokumen ini adalah analisis mendalam syarat robot/auto trading berdasarkan codebase nyata. Untuk implementasi detail, lihat source code di `src/trading_system/execution/`. Untuk flow dan testing, lihat `pustaka/19-flow-logic-testing-kpi.md`. Untuk visi AI otonom yang menggabungkan 12 pilar ini menjadi sistem yang berkembang sendiri, lihat `86-gigantic-ai-autonomous-trading-system.md`.

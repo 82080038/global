@@ -474,6 +474,8 @@ BULAN 12-23: L4 Self-Building
 | Deployment & DevOps | `27-deployment-devops-trading.md` |
 | GPU/CUDA | `34-performance-engineering-optimization.md` bagian 13 |
 | Capacity planning | `55-capacity-planning-load-stress-testing.md` |
+| Gigantic AI architecture | `86-gigantic-ai-autonomous-trading-system.md` |
+| Backtest-to-live gap | `85-backtest-to-live-gap-prevention.md` |
 
 ---
 

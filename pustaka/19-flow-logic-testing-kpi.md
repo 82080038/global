@@ -1439,4 +1439,4 @@ Kedua toggle mengupdate `os.environ` dan instance engine **tanpa restart server*
 
 ---
 
-> **Catatan:** Dokumen ini adalah referensi definitif untuk flow, logic, testing, aturan aplikasi, dan KPI. Untuk detail implementasi teknis, lihat source code di `src/trading_system/` dan dokumentasi di `docs/`. Untuk daftar modul dan engine, lihat `pustaka/18-modul-engine-data-wajib.md`.
+> **Catatan:** Dokumen ini adalah referensi definitif untuk flow, logic, testing, aturan aplikasi, dan KPI. Untuk detail implementasi teknis, lihat source code di `src/trading_system/` dan dokumentasi di `docs/`. Untuk daftar modul dan engine, lihat `pustaka/18-modul-engine-data-wajib.md`. Untuk strategi mencegah gap antara hasil testing dan trading nyata, lihat `85-backtest-to-live-gap-prevention.md`.
