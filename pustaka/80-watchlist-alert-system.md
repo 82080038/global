@@ -513,4 +513,16 @@ async def snooze_alert(alert_id: str, hours: int):
 
 ---
 
+## Referensi
+
+1. `src/trading_system/data/storage.py` — watchlist table
+2. `src/trading_system/api/app.py` — Watchlist & alert API endpoints
+3. `src/trading_system/utils/notifier.py` — Telegram & email notification
+4. `src/trading_system/monitoring/engine.py` — Alert generation
+5. `pustaka/56-notification-strategy-alert-fatigue.md` — Notification routing & dedup
+6. `pustaka/32-ui-ux-design-trading-app.md` — Dashboard & alert UI
+7. `pustaka/82-vendor-third-party-integration-management.md` — Telegram bot integration
+
+---
+
 > **Catatan:** Watchlist dan alert adalah fitur yang membuat user kembali ke aplikasi setiap hari. Tanpa alert, user harus cek manual — dan user yang cek manual akan cepat lelah. Alert yang tepat waktu dan relevan adalah kunci engagement harian.

@@ -279,4 +279,16 @@ Jika OJK audit, siapkan:
 
 ---
 
+## Referensi
+
+1. `src/trading_system/execution/automated.py` — Auto-trade execution (audit trail)
+2. `src/trading_system/data/storage.py` — audit_log table
+3. `pustaka/33-cybersecurity-trading-system.md` — Security audit trail
+4. `pustaka/40-oms-ems-architecture.md` — OMS order audit
+5. `pustaka/52-transaction-cost-analysis-execution-quality.md` — Best execution proof
+6. OJK Regulation No. 17/POJK.03/2014 — Internal Audit
+7. IOSCO Principles for Market Integrity
+
+---
+
 > **Catatan:** Trade surveillance bukan paranoia — adalah profesionalisme. "Audit diri sendiri sebelum diaudit orang lain." Setiap pattern mencurigakan yang terdeteksi adalah opportunity untuk improve trading discipline.

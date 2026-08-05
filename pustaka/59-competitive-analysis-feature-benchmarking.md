@@ -185,4 +185,17 @@
 
 ---
 
+## Referensi
+
+1. `src/trading_system/api/app.py` — API endpoints (94 total)
+2. `src/trading_system/decision/engine.py` — 6-factor decision engine (USP)
+3. `src/trading_system/ai_learning/deep_learning.py` — LSTM per-ticker prediction (USP)
+4. `src/trading_system/xai/engine.py` — XAI narrative in Bahasa Indonesia (USP)
+5. `pustaka/17-aplikasi-retail-pribadi.md` — Retail app feature analysis
+6. `pustaka/38-manajemen-aplikasi-ritel.md` — App management
+7. `pustaka/60-monetization-business-model.md` — Business model & pricing
+8. Stockbit, Bibit, Ajaib, IPOT, Mirae — competitor apps (public info)
+
+---
+
 > **Catatan:** Competitive analysis bukan untuk meniru kompetitor — untuk menemukan celah. "Don't be better, be different." Keunggulan kita adalah AI + XAI, bukan real-time price atau community. Fokus pada differentiators.

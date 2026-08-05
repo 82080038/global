@@ -885,4 +885,18 @@ Dengan mengikuti pola yang terbukti dari proyek `trading-system` dan pengetahuan
 
 ---
 
+## Referensi
+
+1. `src/trading_system/` — Complete trading system source code
+2. `pustaka/18-modul-engine-data-wajib.md` — Module & engine specification
+3. `pustaka/19-flow-logic-testing-kpi.md` — Flow, logic, testing, KPI
+4. `pustaka/20-syarat-robot-auto-trading.md` — 12 pilar robot trading
+5. `pustaka/11-knowledge-transfer-aplikasi.md` — Knowledge transfer dari proyek nyata
+6. `pustaka/17-aplikasi-retail-pribadi.md` — Retail app features
+7. FastAPI: https://fastapi.tiangolo.com/
+8. Next.js: https://nextjs.org/
+9. SQLite: https://www.sqlite.org/
+
+---
+
 > **Mulai dari:** `01-fundamental-pasar-modal.md` untuk pemula, atau `11-knowledge-transfer-aplikasi.md` untuk developer yang sudah familiar dengan pasar modal.

@@ -244,4 +244,16 @@ Deprecation: false
 
 ---
 
+## Referensi
+
+1. `src/trading_system/api/app.py` — API endpoints (current version)
+2. `src/trading_system/__init__.py` — Version string
+3. `pustaka/28-api-design-integration-patterns.md` — API design patterns
+4. `pustaka/33-cybersecurity-trading-system.md` — API security
+5. Semantic Versioning 2.0.0: https://semver.org/
+6. REST API Deprecation: https://datatracker.ietf.org/doc/html/rfc8594
+7. Stripe API versioning: https://stripe.com/docs/api/versioning
+
+---
+
 > **Catatan:** API versioning adalah tentang respect untuk client. "Breaking change adalah privilege, bukan right." Setiap breaking change harus punya migration path dan timeline yang jelas. Client yang sudah invest waktu untuk integrate tidak boleh di-surprise.

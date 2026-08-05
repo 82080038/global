@@ -553,4 +553,17 @@ CREATE TABLE IF NOT EXISTS vendor_evaluation (
 
 ---
 
+## Referensi
+
+1. `src/trading_system/data/acquisition.py` — Yahoo Finance data source
+2. `src/trading_system/execution/broker_adapter.py` — Broker API adapter (Mock + Sinarmas/BNI)
+3. `src/trading_system/utils/notifier.py` — Telegram notification
+4. `src/trading_system/data/rate_limiter.py` — Rate limiting for API vendors
+5. `pustaka/27-deployment-devops-trading.md` — Infrastructure vendor management
+6. `pustaka/33-cybersecurity-trading-system.md` — API key management
+7. `pustaka/56-notification-strategy-alert-fatigue.md` — Vendor health alerts
+8. `pustaka/48-disaster-recovery-business-continuity.md` — Vendor failover
+
+---
+
 > **Catatan:** Sistem trading adalah sistem yang dependen pada banyak vendor eksternal. Yahoo Finance bisa down, broker API bisa maintenance, IDX website bisa berubah struktur. Tanpa vendor management yang baik (health check, circuit breaker, fallback), satu vendor yang down bisa menghentikan seluruh sistem. Vendor management bukan opsional — adalah insurance policy.

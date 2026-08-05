@@ -595,4 +595,17 @@ def notify_upcoming_corporate_actions(storage: DataStorage, days_ahead: int = 5)
 
 ---
 
+## Referensi
+
+1. `src/trading_system/corporate/actions.py` — Corporate actions processing
+2. `src/trading_system/data/storage.py` — corporate_actions & dividends tables
+3. `src/trading_system/data/acquisition.py` — Corporate action data ingestion
+4. `alembic/versions/0003_ipo_suspension_delisting.py` — Schema for corporate actions
+5. `pustaka/26-post-trade-settlement-rekonsiliasi.md` — Settlement & reconciliation
+6. `pustaka/25-pajak-akuntansi-trading.md` — Dividend tax (PPh 10%)
+7. BEI/IDX: Corporate Action Announcement Guidelines
+8. KSEI: Corporate Action Processing Procedures
+
+---
+
 > **Catatan:** Corporate actions yang tidak diproses dengan benar akan menyebabkan: (1) backtest bias karena harga tidak adjusted, (2) position mismatch antara sistem dan broker, (3) cost basis salah → pajak salah, (4) user tidak tahu ada dividend yang harus diterima. Otomatisasi adalah kunci — sistem harus cek setiap hari bursa untuk corporate actions baru.

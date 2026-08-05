@@ -201,4 +201,16 @@ Break-even users (Elite): 7.7M / (299K - 70K) = 34 users
 
 ---
 
+## Referensi
+
+1. `src/trading_system/config.py` — TRADING_CAPITAL, API_KEY config
+2. `src/trading_system/api/app.py` — API endpoints (potential SaaS product)
+3. `pustaka/59-competitive-analysis-feature-benchmarking.md` — Competitive positioning
+4. `pustaka/38-manajemen-aplikasi-ritel.md` — App management & billing
+5. `pustaka/57-user-onboarding-journey-design.md` — Free → Pro → Elite conversion
+6. Stripe: Subscription billing API (stripe.com)
+7. OJK POJK 23/2014 — Lembaga Keuangan Berbasis Teknologi (fintech regulation)
+
+---
+
 > **Catatan:** Monetization bukan keserakahan — adalah sustainability. "Free forever tidak ada yang free — seseorang membayar, entah user, developer, atau investor." SaaS model memastikan sistem bertahan untuk melayani user jangka panjang.

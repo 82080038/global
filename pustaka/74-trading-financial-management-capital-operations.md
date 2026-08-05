@@ -1351,4 +1351,19 @@ CREATE TABLE IF NOT EXISTS capital_allocations (
 
 ---
 
+## Referensi
+
+1. `src/trading_system/execution/automated.py` — Auto-trade execution & condition check
+2. `src/trading_system/risk/costs.py` — CostModel (fees, slippage, tax)
+3. `src/trading_system/risk/engine.py` — Risk engine (position sizing, VaR)
+4. `src/trading_system/portfolio/engine.py` — Portfolio engine (PnL, NAV)
+5. `src/trading_system/config.py` — TRADING_CAPITAL, RISK_PER_TRADE
+6. `pustaka/07-manajemen-risiko.md` — Risk management fundamentals
+7. `pustaka/25-pajak-akuntansi-trading.md` — PPh final, cost basis, SPT
+8. `pustaka/40-oms-ems-architecture.md` — OMS/EMS order lifecycle
+9. `pustaka/83-advisory-system-screening-to-recommendation.md` — Advisory pipeline
+10. `pustaka/85-backtest-to-live-gap-prevention.md` — Realistic cost modeling
+
+---
+
 > **Catatan:** "Trading tanpa manajemen keuangan adalah judi." Sistem yang tidak tahu berapa modalnya, tidak tahu apakah modal cukup, dan tidak tahu apakah profit atau loss — bukan sistem trading, melainkan sistem spekulasi. Financial management adalah fondasi yang menentukan apakah sistem survive atau blow up.

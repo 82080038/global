@@ -712,4 +712,26 @@ MONTH 19-24: A4 (Fully Autonomous)
 
 ---
 
+## Referensi
+
+1. `src/trading_system/decision/engine.py` — 6-factor weighted decision (Layer 4)
+2. `src/trading_system/ai_learning/engine.py` — Dynamic weight optimization (Layer 2)
+3. `src/trading_system/ai_learning/deep_learning.py` — LSTM training (Layer 2)
+4. `src/trading_system/monitoring/engine.py` — System health monitor (Layer 5)
+5. `src/trading_system/xai/engine.py` — Explainable AI narrative (Layer 5)
+6. `src/trading_system/risk/circuit_breaker.py` — Circuit breaker (Layer 5)
+7. `src/trading_system/execution/automated.py` — Automated execution (Layer 4)
+8. `pustaka/67-llm-agent-layer-self-evolution.md` — 5-agent LLM layer (Layer 6)
+9. `pustaka/68-sandbox-execution-self-generated-code.md` — Sandbox execution (Layer 6)
+10. `pustaka/69-knowledge-base-persistent-memory.md` — Knowledge base (Layer 6)
+11. `pustaka/70-hot-swap-runtime-update.md` — Hot-swap mechanism (Layer 6)
+12. `pustaka/71-eval-gated-promotion-ab-testing.md` — Eval-gated promotion (Layer 6)
+13. `pustaka/72-human-in-the-loop-oversight.md` — Human oversight (Layer 6)
+14. `pustaka/73-self-evolving-ai-roadmap-recommendation.md` — Self-evolution roadmap
+15. `pustaka/85-backtest-to-live-gap-prevention.md` — Profitability guard foundation
+16. SelfEvolve (arxiv.org/abs/2604.16314, 2026) — Runtime self-extension
+17. Darwin Gödel Machine (arxiv.org/abs/2505.22954, 2025) — Self-improving agents
+
+---
+
 > **Catatan Akhir:** Gigantic AI bukan tentang membuat AI yang "sadar" dalam pengertian filosofis. Ini tentang membuat sistem yang **self-aware secara operasional** — tahu kondisi diri, tahu kapan performanya menurun, tahu kapan harus berhenti, dan tahu cara memperbaiki dirinya sendiri. Kombinasi 15+ engine existing + LLM agent layer + self-awareness layer + profitability guard = sistem yang bekerja mandiri, berkembang sendiri, dan tetap menguntungkan. Kunci utama bukan kecerdasan, tapi **disiplin validasi** — setiap keputusan dan setiap perubahan kode harus punya alasan empiris yang dapat dipertanggungjawabkan. Tanpa validasi, otonomi = kehancuran. Dengan validasi, otonomi = pertumbuhan berkelanjutan.

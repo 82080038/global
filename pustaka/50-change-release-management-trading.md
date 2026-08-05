@@ -387,4 +387,15 @@ echo "=== Verification Complete ==="
 
 ---
 
+## Referensi
+
+1. `src/trading_system/api/app.py` — API version endpoint
+2. `src/trading_system/__init__.py` — Version string
+3. `pyproject.toml` — Project version & tooling config
+4. `pustaka/27-deployment-devops-trading.md` — Docker, CI/CD, blue-green deploy
+5. `pustaka/47-operational-contract-runbook.md` — T-044 (monitoring) for post-deploy verification
+6. `pustaka/51-mlops-model-risk-management.md` — Model deployment follows change management
+
+---
+
 > **Catatan:** Change management untuk trading system adalah tentang disiplin, bukan bureaucracy. Goal: deploy dengan confidence, rollback dengan cepat, tidak surprise user. "Deploy slow, rollback fast."

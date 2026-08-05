@@ -518,4 +518,17 @@ async def update_progress(content_id: str, status: str, time_spent: int):
 
 ---
 
+## Referensi
+
+1. `frontend/app/page.tsx` — Data Inspection Dashboard (contextual help)
+2. `src/trading_system/api/app.py` — API endpoints for education content
+3. `pustaka/17-aplikasi-retail-pribadi.md` — Retail app features
+4. `pustaka/32-ui-ux-design-trading-app.md` — UI/UX, tooltip system
+5. `pustaka/57-user-onboarding-journey-design.md` — Onboarding & learning path
+6. `pustaka/81-gamification-engagement-design.md` — Gamification for learning
+7. Investopedia: Financial education content reference
+8. OJK: Literasi keuangan pasar modal
+
+---
+
 > **Catatan:** "Investor yang teredukasi adalah investor yang bertahan." Aplikasi yang hanya menyediakan tools tanpa edukasi akan kehilangan user dalam 3 bulan karena: (1) user tidak paham apa yang dilakukan sistem, (2) user panic saat loss, (3) user tidak tahu cara improve. Edukasi bukan cost center — adalah retention strategy.

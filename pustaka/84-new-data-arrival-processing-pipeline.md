@@ -920,4 +920,18 @@ Market Data Feed (real-time)
 
 ---
 
+## Referensi
+
+1. `src/trading_system/data/acquisition.py` — Data ingestion (Yahoo, Parquet, IDX)
+2. `src/trading_system/data/validation.py` — 8 quality checks, tier system
+3. `src/trading_system/data/storage.py` — SQLite storage & watermark
+4. `src/trading_system/analysis/pipeline.py` — 6-factor scoring pipeline
+5. `src/trading_system/analysis/pattern_reliability.py` — Pattern detection & reliability
+6. `scripts/daily_runner.py` — Daily pipeline orchestrator
+7. `pustaka/22-data-engineering-pipeline.md` — Data engineering pipeline
+8. `pustaka/53-data-governance-lineage.md` — Data governance & quality
+9. `pustaka/86-gigantic-ai-autonomous-trading-system.md` — Autonomous pipeline vision
+
+---
+
 > **Catatan:** Setiap data baru yang masuk bukan sekadar disimpan — data harus melalui 7 tahap: ingestion → pemeriksaan → testing → screening → penemuan pola → penandaan → post-processing. Setiap tahap menambahkan metadata, label, atau tag ke database. Inilah yang membedakan "database yang penuh data" dengan "database yang penuh pengetahuan." Data tanpa pemeriksaan adalah noise. Data tanpa labeling adalah harta karun yang tidak tergali. Data tanpa pattern discovery adalah angka tanpa makna. Untuk visi pipeline ini berjalan sepenuhnya otonom sebagai bagian dari "Gigantic AI", lihat `86-gigantic-ai-autonomous-trading-system.md`.

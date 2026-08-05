@@ -975,4 +975,18 @@ async def get_advisory(ticker: str, capital: float = TRADING_CAPITAL):
 
 ---
 
+## Referensi
+
+1. `src/trading_system/decision/engine.py` — 6-factor weighted decision engine
+2. `src/trading_system/risk/engine.py` — Position sizing, VaR, risk metrics
+3. `src/trading_system/xai/engine.py` — XAI narrative generation
+4. `src/trading_system/execution/automated.py` — Auto-execution with condition check
+5. `src/trading_system/api/app.py` — `/api/recommend/{ticker}`, `/api/explain/{ticker}`
+6. `pustaka/39-screening-aiml-pattern-memory.md` — Screening & AI/ML
+7. `pustaka/74-trading-financial-management-capital-operations.md` — Capital & position sizing
+8. `pustaka/85-backtest-to-live-gap-prevention.md` — Backtest-to-live gap prevention
+9. `pustaka/86-gigantic-ai-autonomous-trading-system.md` — Autonomous AI architecture
+
+---
+
 > **Catatan:** Aplikasi ini tidak sekadar menampilkan data — aplikasi ini **memberikan saran** yang konkret, lengkap, dan berbasis data empiris. Setiap saran (apa, berapa, kapan masuk, kapan keluar, berapa untung) disertai alasan yang dapat ditelusuri: skor 6 faktor, backtest historis, risk metrics, dan narrative XAI. Jika user mengaktifkan auto-trade, aplikasi sanggup mengeksekusi otomatis setelah semua tahapan perhitungan selesai dan semua kondisi terpenuhi. Inilah perbedaan antara "aplikasi menampilkan chart" dan "aplikasi yang menjadi trading advisor." Untuk memastikan saran yang menguntungkan di backtest juga menguntungkan di live trading, lihat `85-backtest-to-live-gap-prevention.md`. Untuk arsitektur AI otonom yang menjalankan advisory ini secara mandiri, lihat `86-gigantic-ai-autonomous-trading-system.md`.

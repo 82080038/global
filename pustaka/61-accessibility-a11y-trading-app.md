@@ -259,4 +259,16 @@ const seriesStyles = {
 
 ---
 
+## Referensi
+
+1. `frontend/app/page.tsx` — Data Inspection Dashboard (section IDs for accessibility)
+2. `frontend/app/components/TerminalLayout.tsx` — Layout & navigation
+3. `pustaka/32-ui-ux-design-trading-app.md` — UI/UX design
+4. `pustaka/43-mobile-app-architecture.md` — Mobile app accessibility
+5. WCAG 2.1: https://www.w3.org/TR/WCAG21/
+6. ARIA Authoring Practices: https://www.w3.org/WAI/ARIA/apg/
+7. Deque axe-core: Accessibility testing tool
+
+---
+
 > **Catatan:** Accessibility bukan fitur tambahan — adalah requirement. "Akses untuk semua adalah akses untuk lebih banyak orang." Trading app yang accessible melayani investor yang tidak terlayani oleh kompetitor.

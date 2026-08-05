@@ -393,4 +393,16 @@ Action: Improve paper trading UX, add gamification
 
 ---
 
+## Referensi
+
+1. `src/trading_system/paper_trading/engine.py` — Paper trading as onboarding step
+2. `src/trading_system/risk/engine.py` — Risk profiling integration
+3. `src/trading_system/api/app.py` — User preferences endpoints
+4. `pustaka/17-aplikasi-retail-pribadi.md` — Retail app features
+5. `pustaka/32-ui-ux-design-trading-app.md` — UI/UX design
+6. `pustaka/38-manajemen-aplikasi-ritel.md` — App management
+7. Nielsen Norman Group: User onboarding best practices
+
+---
+
 > **Catatan:** Onboarding adalah first impression. "User yang drop di onboarding tidak akan pernah tahu betapa bagusnya sistem Anda." Onboarding yang baik = user yang stay. Paper trading mandatory bukan obstacle — adalah safety net.

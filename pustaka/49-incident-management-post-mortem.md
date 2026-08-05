@@ -362,4 +362,15 @@ NNN = Sequential number per day (001, 002, ...)
 
 ---
 
+## Referensi
+
+1. `src/trading_system/monitoring/engine.py` — System health monitor (incident detection)
+2. `src/trading_system/utils/notifier.py` — Telegram notification for incident alerts
+3. `pustaka/47-operational-contract-runbook.md` — T-044 (monitoring), T-046 (audit log)
+4. `pustaka/48-disaster-recovery-business-continuity.md` — DR procedures
+5. Google SRE Book — Incident Management & Postmortem chapter
+6. NFPA 1600: Standard on Continuity, Emergency, and Crisis Management
+
+---
+
 > **Catatan:** Incident management adalah discipline, bukan ad-hoc. Setiap incident adalah opportunity untuk improve. "Fail forward" — setiap kegagalan membuat sistem lebih robust jika di-post-mortem dengan benar.

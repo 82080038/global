@@ -485,4 +485,17 @@ async def export_data(type: str, format: str = "csv"):
 
 ---
 
+## Referensi
+
+1. `src/trading_system/api/app.py` — API endpoints for report data
+2. `src/trading_system/portfolio/performance.py` — Performance data source
+3. `src/trading_system/risk/costs.py` — Cost data for tax reports
+4. `pustaka/25-pajak-akuntansi-trading.md` — PPh final, SPT reporting
+5. `pustaka/26-post-trade-settlement-rekonsiliasi.md` — Trade ledger data
+6. `pustaka/74-trading-financial-management-capital-operations.md` — PnL engine & trade ledger
+7. Jinja2: https://jinja.palletsprojects.com/
+8. OJK/DJP: Tax reporting requirements for securities trading
+
+---
+
 > **Catatan:** Laporan adalah bukti. Tanpa laporan yang lengkap dan dapat diakses, user tidak bisa: (1) mengisi SPT dengan benar, (2) mengevaluasi performa, (3) melihat riwayat transaksi, (4) memenuhi kewajiban regulasi. Reporting bukan fitur tambahan — adalah kewajiban.

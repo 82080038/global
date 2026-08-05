@@ -300,4 +300,16 @@ Migration:
 
 ---
 
+## Referensi
+
+1. `src/trading_system/ai_learning/deep_learning.py` — GPU/CUDA usage (PyTorch, cuda:1)
+2. `src/trading_system/data/storage.py` — SQLite database size monitoring
+3. `src/trading_system/analysis/relationship.py` — O(n²) relationship matrix
+4. `pustaka/27-deployment-devops-trading.md` — Infrastructure deployment
+5. `pustaka/34-performance-engineering-optimization.md` — Performance optimization
+6. `pustaka/47-operational-contract-runbook.md` — SLA per task
+7. `pustaka/48-disaster-recovery-business-continuity.md` — Stress test scenarios
+
+---
+
 > **Catatan:** Capacity planning adalah tentang antisipasi, bukan reaksi. "Plan for 2x, build for 3x, worry at 4x." Sistem trading yang lambat = opportunity lost — setiap menit pipeline lebih lama adalah menit di mana decisions tidak up-to-date.

@@ -330,4 +330,16 @@ Alert triggered
 
 ---
 
+## Referensi
+
+1. `src/trading_system/utils/notifier.py` — Telegram & email notification
+2. `src/trading_system/monitoring/engine.py` — Alert generation
+3. `src/trading_system/api/app.py` — WebSocket alert endpoints
+4. `pustaka/47-operational-contract-runbook.md` — T-045 (Telegram notification)
+5. `pustaka/49-incident-management-post-mortem.md` — Alert triggers incident response
+6. `pustaka/80-watchlist-alert-system.md` — Alert system implementation
+7. PagerDuty: Alerting best practices for reducing alert fatigue
+
+---
+
 > **Catatan:** Alert yang baik adalah alert yang ditindak. "Setiap alert yang di-ignore adalah noise yang mengurangi efektivitas alert yang penting." Quality over quantity — lebih baik 5 alert yang semua ditindak daripada 100 alert yang di-ignore.

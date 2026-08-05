@@ -561,4 +561,16 @@ CREATE TABLE IF NOT EXISTS xp_log (
 
 ---
 
+## Referensi
+
+1. `src/trading_system/api/app.py` — API endpoints for gamification data
+2. `src/trading_system/paper_trading/engine.py` — Paper trading streak tracking
+3. `pustaka/17-aplikasi-retail-pribadi.md` — Retail app engagement features
+4. `pustaka/57-user-onboarding-journey-design.md` — Onboarding & learning path
+5. `pustaka/79-education-content-management.md` — Education content & quiz
+6. Yu-kai Chou: Octalysis Framework (gamification design)
+7. Nir Eyal: *Hooked* — Habit-forming product design
+
+---
+
 > **Catatan:** Gamifikasi trading yang baik menghargai **proses**, bukan **hasil**. Badge untuk "mengikuti stop loss 30 hari" lebih berharga dari badge "profit 20%" — karena discipline adalah skill yang sustainable, sedangkan profit bisa dari luck. Gamifikasi yang salah akan mengubah investor menjadi gambler.

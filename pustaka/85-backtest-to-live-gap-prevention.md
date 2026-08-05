@@ -877,4 +877,20 @@ def monthly_review() -> dict:
 
 > Backtest yang selalu untung adalah **red flag**, bukan green light. Aplikasi sudah punya mekanisme untuk mencegah backtest menipu (next-bar execution, survivorship-free, walk-forward, realistic costs, circuit breaker). Tapi **backtest-to-live gap tidak bisa dihilangkan 100%** — hanya bisa diminimalkan. Solusinya adalah **disiplin proses**: backtest → walk-forward → paper trading (30 hari) → live (small size) → scale up. Jika paper trading rugi, **JANGAN lanjut ke live**. Jika live performance degrad > 50% vs backtest, **STOP dan re-validate**.
 
+## Referensi
+
+1. `src/trading_system/backtest/engine.py` — Next-bar-open execution, survivorship-free backtest
+2. `src/trading_system/backtest/metrics.py` — Walk-forward analysis, Monte Carlo
+3. `src/trading_system/risk/costs.py` — Realistic cost model (fees, slippage, tax)
+4. `src/trading_system/risk/circuit_breaker.py` — Circuit breaker & daily loss limit
+5. `src/trading_system/paper_trading/engine.py` — Paper trading simulator
+6. `src/trading_system/execution/automated.py` — Automated execution with risk checks
+7. `src/trading_system/ai_learning/walk_forward.py` — Walk-forward validation
+8. `pustaka/29-backtesting-strategy-validation.md` — Backtesting & validation
+9. `pustaka/51-mlops-model-risk-management.md` — Model degradation & drift detection
+10. Bailey & López de Prado (2014) — "The Deflated Sharpe Ratio"
+11. Pardo, R. (2008) — *The Evaluation and Optimization of Trading Strategies*
+
+---
+
 > **Ingat:** "Jika backtest terlalu bagus untuk jadi kenyataan, kemungkinan besar memang begitu." (Doc 29, §Catatan)

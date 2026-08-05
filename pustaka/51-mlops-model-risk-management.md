@@ -553,4 +553,19 @@ feature:
 
 ---
 
+## Referensi
+
+1. `src/trading_system/ai_learning/engine.py` — Dynamic weight optimization & model registry
+2. `src/trading_system/ai_learning/deep_learning.py` — LSTM training (PyTorch CUDA)
+3. `src/trading_system/ai_learning/walk_forward.py` — Walk-forward validation
+4. `src/trading_system/ai_learning/model_registry.py` — Model versioning & promotion
+5. `pustaka/23-machine-learning-trading.md` — ML pipeline, walk-forward, ensemble
+6. `pustaka/39-screening-aiml-pattern-memory.md` — Pattern memory & AI/ML screening
+7. `pustaka/58-feature-store-engineering-pipeline.md` — Feature store
+8. `pustaka/85-backtest-to-live-gap-prevention.md` — Model degradation & backtest-to-live gap
+9. Google MLOps: Continuous training & delivery for ML systems
+10. López de Prado, M. (2018) — *Advances in Financial Machine Learning* — Model risk management
+
+---
+
 > **Catatan:** MLOps untuk trading system adalah tentang disiplin: model bukan static artifact, tapi living system yang perlu dimonitor, di-retrain, dan di-retire. "Model yang tidak dimonitor adalah model yang sudah broken — Anda hanya belum tahu." Untuk pembahasan bagaimana model degradation berkontribusi pada gap backtest-to-live dan cara mencegahnya, lihat `85-backtest-to-live-gap-prevention.md`.

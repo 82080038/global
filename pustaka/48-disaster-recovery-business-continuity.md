@@ -536,4 +536,16 @@ Post-incident review: scheduled for {date}
 
 ---
 
+## Referensi
+
+1. `src/trading_system/data/storage.py` — Backup & restore utilities
+2. `src/trading_system/monitoring/engine.py` — Health monitoring for failure detection
+3. `scripts/daily_runner.py` — Scheduled backup trigger
+4. `pustaka/27-deployment-devops-trading.md` — Deployment & DevOps
+5. `pustaka/47-operational-contract-runbook.md` — T-008 (backup), T-044 (monitoring)
+6. NIST SP 800-34: Contingency Planning Guide for Federal Information Systems
+7. ISO 22301: Business Continuity Management Systems
+
+---
+
 > **Catatan:** DR plan adalah living document. Update setiap DR drill, setiap insiden, dan setiap perubahan arsitektur. DR plan yang tidak di-drill = ilusi keselamatan.

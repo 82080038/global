@@ -361,4 +361,18 @@ PATCH: Bug fix in computation (same formula, fixed code)
 
 ---
 
+## Referensi
+
+1. `src/trading_system/analysis/pipeline.py` — Feature computation pipeline
+2. `src/trading_system/analysis/technical.py` — Technical indicator features
+3. `src/trading_system/analysis/fundamental.py` — Fundamental features
+4. `src/trading_system/ai_learning/engine.py` — Feature consumption for ML
+5. `pustaka/22-data-engineering-pipeline.md` — Data pipeline feeds feature store
+6. `pustaka/23-machine-learning-trading.md` — ML feature engineering
+7. `pustaka/51-mlops-model-risk-management.md` — Feature store in MLOps lifecycle
+8. Feast: Open-source feature store (feast.dev)
+9. Tecton: Feature Store for Machine Learning
+
+---
+
 > **Catatan:** Feature store adalah single source of truth untuk features. "Compute once, use everywhere." Training/serving skew adalah silent killer — feature store mencegahnya dengan unified definition dan computation.

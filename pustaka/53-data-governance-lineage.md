@@ -418,4 +418,17 @@ def archive_table(table_name, retention_years):
 
 ---
 
+## Referensi
+
+1. `src/trading_system/data/storage.py` — Database schema & data access layer
+2. `src/trading_system/data/validation.py` — Data quality checks
+3. `alembic/versions/` — Schema migrations (0001-0003)
+4. `pustaka/22-data-engineering-pipeline.md` — Data pipeline & ETL
+5. `pustaka/41-uu-pdp-compliance-fintech.md` — PII compliance
+6. `pustaka/84-new-data-arrival-processing-pipeline.md` — 8 quality checks, tier system
+7. DAMA-DMBOK: Data Management Body of Knowledge
+8. Apache Atlas: Data governance & metadata framework
+
+---
+
 > **Catatan:** Data governance bukan bureaucracy — adalah foundation. "Trust your data, trust your decisions. Distrust your data, distrust everything." Setiap decision yang dihasilkan sistem hanya sebaik data yang masuk.

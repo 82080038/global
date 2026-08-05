@@ -499,4 +499,17 @@ def validate_idx_order(
 
 ---
 
+## Referensi
+
+1. `src/trading_system/execution/automated.py` — Auto-reject & circuit breaker checks
+2. `src/trading_system/risk/circuit_breaker.py` — CircuitBreaker implementation
+3. `src/trading_system/data/storage.py` — market_calendar table
+4. `src/trading_system/utils/market_status.py` — Market session detection
+5. `pustaka/24-market-microstructure-likuiditas.md` — Microstructure, spread, slippage
+6. `pustaka/36-gap-data-timezone-global-idx.md` — IDX trading hours & timezone
+7. BEI/IDX Trading Rules: https://www.idx.co.id
+8. POJK No. 6/POJK.03/2015 — Auto-Rejection & Trading Halt
+
+---
+
 > **Catatan:** Aplikasi trading IDX yang tidak mengikuti aturan fraksi harga, lot size, dan auto-reject akan menghasilkan order yang di-reject oleh bursa. Ini bukan optional — adalah aturan dasar yang harus diimplementasi sejak hari pertama.

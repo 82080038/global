@@ -556,4 +556,17 @@ async def get_performance_report(
 
 ---
 
+## Referensi
+
+1. `src/trading_system/portfolio/engine.py` — Portfolio performance tracking
+2. `src/trading_system/portfolio/performance.py` — Performance metrics
+3. `src/trading_system/analysis/attribution.py` — Performance attribution
+4. `src/trading_system/backtest/metrics.py` — Sharpe, Sortino, max drawdown
+5. `pustaka/07-manajemen-risiko.md` — Risk-adjusted returns
+6. `pustaka/31-risk-management-lanjutan.md` — VaR/CVaR, stress testing
+7. Brinson, G. & Fachler, N. (1985) — "Measuring Non-US Equity Portfolio Performance"
+8. López de Prado, M. (2018) — *Advances in Financial Machine Learning*
+
+---
+
 > **Catatan:** "Return tanpa konteks adalah angka kosong." 20% return bisa luar biasa jika IHSG turun 10% (alpha 30%), atau biasa saja jika IHSG naik 25% (alpha -5%). Performance attribution adalah alat untuk membedakan skill dari luck, dan untuk memahami dari mana return benar-benar berasal.

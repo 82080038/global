@@ -440,4 +440,17 @@ CREATE TABLE tca_log (
 
 ---
 
+## Referensi
+
+1. `src/trading_system/risk/costs.py` — CostModel (broker fees, slippage, tax)
+2. `src/trading_system/execution/engine.py` — ExecutionEngine (slippage estimation, fill simulation)
+3. `src/trading_system/backtest/engine.py` — BacktestEngine (realistic cost integration)
+4. `pustaka/24-market-microstructure-likuiditas.md` — Order book, spread, slippage modeling
+5. `pustaka/29-backtesting-strategy-validation.md` — Transaction cost modeling in backtests
+6. `pustaka/40-oms-ems-architecture.md` — OMS/EMS order data feeds TCA
+7. Kissell, R. (2013) — *The Science of Algorithmic Trading and Portfolio Management* — Implementation shortfall
+8. Almgren & Chriss (2000) — Optimal execution of portfolio transactions
+
+---
+
 > **Catatan:** TCA bukan luxury — adalah necessity untuk trading real. "Profit yang tidak diukur adalah profit yang tidak ada." Setiap basis point slippage yang dihemat = profit yang di-amankan.
