@@ -700,6 +700,173 @@ class MarketDataCache:
 
 ---
 
+## 11. Stale Data Detection & 7-State Market Data Model
+
+> **Gap teridentifikasi:** Dokumen ini membahas tick validation (§6) dan coalescing (§5) tetapi tidak membahas stale data detection — kondisi di mana feed terlihat connected tetapi data sudah basi. Stale data lebih berbahaya dari disconnected feed karena terlihat normal.
+
+### 11.1 Mengapa Stale Data Berbahaya
+
+```
+SCENARIO: Stale Book
+  Feed status:    CONNECTED ✓
+  Last update:    45 detik lalu
+  Market moved:   +2.3% since last tick
+  Your stop-loss: Masih di harga lama (sudah breached di market)
+  Your limit:      Masih di harga lama (sudah passed di market)
+  Hasil:          Order di harga yang sudah tidak relevan
+```
+
+Stale data adalah **silent failure** — tidak ada error, tidak ada disconnect, tapi data sudah tidak mencerminkan realitas pasar.
+
+### 11.2 7-State Market Data Model
+
+Setiap quote harus diberi label state yang menentukan behavior aplikasi:
+
+| State | Meaning | App Behavior | Trigger |
+|-------|---------|-------------|---------|
+| **LIVE** | WebSocket updates fresh (≤3s) | Tampilkan harga normal | Quote age ≤ 3s |
+| **DEGRADED** | Update mulai lambat (>3s) | Tampilkan harga, monitor ketat | Quote age 3-10s |
+| **STALE** | Data terlalu lama untuk trust | Request fallback snapshot | Quote age > 10s |
+| **FALLBACK** | REST snapshot dipakai karena WS stale | Tampilkan label "fallback" | REST snapshot berhasil setelah stale |
+| **RECOVERING** | WS resume tapi belum confirmed | Tunggu 3 tick fresh sebelum live | WS updates resume setelah fallback |
+| **DEAD** | Tidak ada harga reliable | Block trading, suppress alert | WS stale + REST fallback gagal |
+| **MARKET_CLOSED** | Session tutup, tick tidak expected | Tampilkan harga close terakhir | Market status = closed |
+
+### 11.3 Implementasi State Machine
+
+```python
+class MarketDataState:
+    """7-state market data freshness tracker."""
+
+    THRESHOLDS = {
+        "live": 3,        # seconds
+        "degraded": 10,   # seconds
+        "stale": 30,      # seconds
+    }
+
+    def __init__(self):
+        self.quotes = {}  # symbol → QuoteState
+
+    def update_quote(self, symbol: str, price: float, source: str = "ws"):
+        """Called when new tick arrives."""
+        q = self.quotes.setdefault(symbol, QuoteState(symbol))
+        q.price = price
+        q.source = source
+        q.exchange_ts = time.time()
+        q.received_ts = time.time()
+        if q.state == "FALLBACK" and source == "ws":
+            q.recovery_ticks += 1
+            if q.recovery_ticks >= 3:
+                q.state = "LIVE"
+                q.recovery_ticks = 0
+        elif source == "ws":
+            q.state = "LIVE"
+
+    def check_state(self, symbol: str, market_open: bool) -> str:
+        """Determine current state based on age."""
+        if not market_open:
+            return "MARKET_CLOSED"
+        q = self.quotes.get(symbol)
+        if not q:
+            return "DEAD"
+        age = time.time() - q.received_ts
+        if age <= self.THRESHOLDS["live"]:
+            return "LIVE"
+        elif age <= self.THRESHOLDS["degraded"]:
+            return "DEGRADED"
+        elif age <= self.THRESHOLDS["stale"]:
+            return "STALE"
+        else:
+            return "DEAD"
+```
+
+### 11.4 Quote Metadata Schema
+
+Setiap quote yang dikirim ke frontend/decision engine harus membawa metadata:
+
+| Field | Why It Matters |
+|-------|---------------|
+| `symbol` | Identifikasi instrumen |
+| `price` | Nilai harga terbaru |
+| `source` | `ws` / `rest_fallback` / `cached` / `prev_close` — mencegah fallback dikira live |
+| `exchange_timestamp` | Kapan event terjadi di exchange |
+| `received_timestamp` | Kapan aplikasi menerima |
+| `age_seconds` | Umur data — mencegah stale dikira fresh |
+| `state` | LIVE/DEGRADED/STALE/FALLBACK/RECOVERING/DEAD/MARKET_CLOSED |
+| `action` | display / display_with_warning / block_trading / suppress_alert |
+
+### 11.5 Heartbeat Detection per Symbol
+
+```python
+class HeartbeatMonitor:
+    """Per-symbol freshness monitoring."""
+
+    def __init__(self, expected_interval: dict = None):
+        # Default: expect update every 5s during market hours
+        self.expected = expected_interval or {"default": 5.0}
+        self.last_update = {}  # symbol → timestamp
+
+    def on_tick(self, symbol: str):
+        self.last_update[symbol] = time.time()
+
+    def is_stale(self, symbol: str, threshold_multiplier: float = 3.0) -> bool:
+        """Stale if no update for N * expected_interval."""
+        last = self.last_update.get(symbol)
+        if not last:
+            return True
+        expected = self.expected.get(symbol, self.expected["default"])
+        age = time.time() - last
+        return age > expected * threshold_multiplier
+```
+
+### 11.6 Sequence Number Monitoring
+
+Jika data source menyediakan sequence number (e.g., IDX DataFeed), wajib dimonitor:
+
+```python
+def check_sequence(self, symbol: str, seq: int) -> bool:
+    """Returns True if sequence is valid (no gap)."""
+    expected = self.last_seq.get(symbol, -1) + 1
+    if seq < expected:
+        return False  # Duplicate or reorder — discard
+    if seq > expected:
+        self._on_gap_detected(symbol, expected, seq)  # Gap — trigger recovery
+        return False
+    self.last_seq[symbol] = seq
+    return True
+```
+
+| Condition | Meaning | Action |
+|-----------|---------|--------|
+| `seq == expected` | Normal | Apply delta |
+| `seq < expected` | Duplicate/reorder | Discard |
+| `seq > expected` | Gap (missed messages) | Stop applying, trigger snapshot recovery |
+
+### 11.7 Frontend Behavior per State
+
+| State | UI Display | Trading | Alert |
+|-------|-----------|---------|-------|
+| LIVE | Harga normal, hijau | Enabled | Normal |
+| DEGRADED | Harga normal, kuning "delayed" | Enabled dengan warning | Warning |
+| STALE | Harga abu-abu "stale" | Disabled | Warning + auto-request fallback |
+| FALLBACK | Harga dengan label "fallback" | Disabled | Info |
+| RECOVERING | Harga dengan label "recovering" | Disabled | Info |
+| DEAD | "Tidak ada data" | Blocked | Critical |
+| MARKET_CLOSED | Harga close + "Pasar Tutup" | Disabled | Normal |
+
+### 11.8 5W1H
+
+| Aspect | Detail |
+|--------|--------|
+| **What** | 7-state market data freshness model + stale detection + heartbeat monitoring |
+| **Why** | Stale data lebih berbahaya dari disconnected — terlihat hidup tapi sudah basi. Stop-loss di harga stale = loss tidak terkendali |
+| **When** | Setiap tick yang masuk dan setiap query harga oleh frontend/decision engine |
+| **Where** | Ticker plant, WebSocket gateway, frontend price display, pre-trade validation |
+| **Who** | Market data engineer + frontend engineer |
+| **How** | Age-based state transition + heartbeat per symbol + sequence number gap detection + REST fallback path |
+
+---
+
 ## Referensi
 
 ### Internal
@@ -715,7 +882,10 @@ class MarketDataCache:
 - Server-Sent Events — https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events
 - Redis Pub/Sub — https://redis.io/docs/interprocess/pubsub/
 - Cloudflare CDN — https://www.cloudflare.com/cdn/
+- **EODHD Academy — Real-Time Market Data Reliability: Stale Price Detection, REST Fallback, WebSocket Recovery**
+- **NexusFi Academy — Data Quality and Integrity in Futures Trading (stale book, sequence gaps, heartbeat)**
+- **NexusFi Academy — Market Data Handling for Automated Trading Systems (staleness detection, tick-size compliance)**
 
 ---
 
-> **Catatan:** Untuk single-user system, WebSocket gateway cukup simple (1 connection). Ticker plant dan delta encoding tetap valuable untuk bandwidth optimization. Coalescing critical untuk mobile battery efficiency. Tick validation wajib untuk mencegah bad data mencapai decision engine.
+> **Catatan:** Untuk single-user system, WebSocket gateway cukup simple (1 connection). Ticker plant dan delta encoding tetap valuable untuk bandwidth optimization. Coalescing critical untuk mobile battery efficiency. Tick validation wajib untuk mencegah bad data mencapai decision engine. **Stale data detection (§11)** adalah pertahanan terakhir — data yang terlihat hidup tapi sudah basi lebih berbahaya dari data yang jelas putus.

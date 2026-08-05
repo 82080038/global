@@ -872,6 +872,7 @@ def monthly_review() -> dict:
 4. ❌ Regime detection terlambat
 5. ❌ Live degradation alert belum ada
 6. ❌ Mandatory paper period belum enforced
+7. ❌ **Deflated Sharpe Ratio belum dihitung** — tanpa DSR, walk-forward tidak cukup karena tidak mengontrol jumlah trial. Lihat `29-backtesting-strategy-validation.md` §16 untuk implementasi DSR.
 
 ### Pesan untuk User
 

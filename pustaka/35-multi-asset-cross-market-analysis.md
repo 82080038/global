@@ -891,4 +891,104 @@ Formula: `CII = (U + C + S + I) × event_multiplier + baseline_risk`
 
 ---
 
-> **Catatan:** Pasar tidak bergerak dalam isolasi. IDX sangat dipengaruhi oleh global market, commodity prices, dan USD/IDR. Sistem trading yang mengabaikan intermarket relationships akan kehilangan konteks penting dan membuat keputusan yang suboptimal. Implementasi: `src/trading_system/analysis/world_monitor.py`.
+## 13. Komoditas Spesifik IDX: Cross-Market Analysis
+
+### 13.1 Mengapa Komoditas Spesifik Berbeda dari Komoditas Global
+
+Dokumen ini sebelumnya membahas komoditas sebagai bagian dari global market (oil, gold). Namun untuk IDX, **komoditas spesifik** (CPO, batubara, nikel, tembaga, timah) jauh lebih relevan karena:
+
+1. **Direct revenue impact** — emiten IDX adalah produsen komoditas, bukan hanya konsumer
+2. **Trade balance effect** — ekspor komoditas = sumber devisa → rupiah → macro
+3. **Sector weight** — energi + material = ~35% market cap IDX
+4. **Specific correlation** — korelasi AALI vs CPO jauh lebih tinggi dari AALI vs S&P 500
+
+### 13.2 Komoditas yang Sudah Ada di Parquet
+
+Data 1,523 rows (2018-2026) di `raw/commodity/`:
+
+| Komoditas | Satuan | Emiten Terpengaruh | Tipe Hubungan |
+|-----------|--------|-------------------|---------------|
+| CPO | IDR/kg | AALI, LSIP, SIMP, DSNG, ANJT, SGRO, SSMS | Producer — harga naik = revenue naik |
+| Batubara | USD/ton | ADRO, PTBA, ITMG, HRUM, BYAN, INDY, BSSR | Producer — harga naik = revenue naik |
+| Nikel | USD/ton | INCO, ANTM, MDKA | Producer — harga naik = revenue naik |
+| Tembaga | USD/lb | ANTM, MDKA | Producer — harga naik = revenue naik |
+| Emas | USD/oz | ANTM, MDKA | Producer — harga naik = revenue naik |
+| Perak | USD/oz | ANTM | Producer — minor |
+| Timah | USD/ton | TINS | Producer — harga naik = revenue naik |
+| Aluminium | USD/ton | (tidak ada emiten besar) | — |
+| Gas | USD/MMBtu | PGAS | Distributor — hubungan kompleks |
+| Crude Oil | USD/bbl | MEDC, ENRG, BULL | Producer — harga naik = revenue naik |
+
+### 13.3 Cross-Market Correlation Analysis
+
+```
+KORELASI KOMODITAS → SAHAM IDX
+│
+├── Compute rolling correlation (30-day, 90-day, 180-day):
+│   ├── CPO price change vs AALI.JK return
+│   ├── Batubara price change vs ADRO.JK return
+│   ├── Nikel price change vs INCO.JK return
+│   ├── Tembaga price change vs ANTM.JK return
+│   └── Crude oil price change vs MEDC.JK return
+│
+├── Interpretasi:
+│   ├── Corr > 0.6 → strong positive, komoditas adalah driver utama
+│   ├── Corr 0.3-0.6 → moderate, komoditas salah satu driver
+│   ├── Corr -0.3 to 0.3 → weak, faktor lain lebih dominan
+│   └── Corr < -0.3 → negative (rare, mungkin structural shift)
+│
+├── Lead-lag analysis:
+│   ├── Cek apakah komoditas lead saham (komoditas naik dulu, saham follow)
+│   ├── Cross-correlation function (CCF) dengan lag -10 to +10 hari
+│   └── Jika komoditas lead 2-3 hari → predictive signal
+│
+└── Regime-dependent correlation:
+    ├── Bull market: korelasi komoditas-saham mungkin lebih tinggi
+    ├── Bear market: korelasi bisa breakdown (saham drop lebih cepat)
+    └── Crisis: korelasi spike (semua fall together)
+```
+
+### 13.4 Commodity-to-Stock Beta
+
+Beta mengukur seberapa sensitif saham terhadap perubahan harga komoditas:
+
+```
+Beta = Cov(saham_return, commodity_return) / Var(commodity_return)
+
+Interpretasi:
+- Beta > 1.5 → saham lebih volatile dari komoditas (operating leverage)
+- Beta 0.8-1.5 → saham move in line dengan komoditas
+- Beta 0.3-0.8 → saham less sensitive (diversified business)
+- Beta < 0.3 → saham tidak sensitive (bukan driver utama)
+```
+
+### 13.5 Implementasi
+
+Data komoditas sudah ada di parquet. Yang perlu dilakukan:
+
+1. **Migrate** `raw/commodity/` ke tabel `commodity_prices` di DB (rename kolom ID → EN)
+2. **Compute rolling correlation** komoditas vs saham menggunakan `analysis/relationship.py`
+3. **Compute commodity beta** per ticker menggunakan regression
+4. **Add commodity score** ke decision engine sebagai faktor ke-7 (weight 5-10%)
+5. **Backtest** commodity signal accuracy menggunakan 1,523 rows historical
+
+Lihat `91-komoditas-spesifik-idx.md` untuk detail lengkap mapping, implementasi, dan estimasi effort.
+
+### 13.6 Data Source untuk Update Forward
+
+| Komoditas | yfinance Ticker | Frekuensi | Notes |
+|-----------|----------------|-----------|-------|
+| CPO | `FCPO=F` | Daily | Bursa Malaysia futures |
+| Tembaga | `HG=F` | Daily | COMEX copper |
+| Emas | `GC=F` | Daily | COMEX gold |
+| Perak | `SI=F` | Daily | COMEX silver |
+| Crude Oil WTI | `CL=F` | Daily | NYMEX WTI |
+| Crude Oil Brent | `BZ=F` | Daily | ICE Brent |
+| Gas | `NG=F` | Daily | Henry Hub |
+| Batubara | (manual/API) | Weekly | Newcastle index |
+| Nikel | (manual/API) | Daily | LME nickel 3M |
+| Timah | (manual/API) | Daily | LME tin 3M |
+
+---
+
+> **Catatan:** Pasar tidak bergerak dalam isolasi. IDX sangat dipengaruhi oleh global market, commodity prices, dan USD/IDR. Sistem trading yang mengabaikan intermarket relationships akan kehilangan konteks penting dan membuat keputusan yang suboptimal. Implementasi: `src/trading_system/analysis/world_monitor.py`. **Komoditas spesifik IDX (§13)** — CPO, batubara, nikel, tembaga, dan timah adalah driver utama untuk ~35% market cap IDX. Data 1,523 rows sudah ada di parquet, tinggal migrate dan compute correlation. Lihat `91-komoditas-spesifik-idx.md` untuk detail lengkap.

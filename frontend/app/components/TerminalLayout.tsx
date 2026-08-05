@@ -13,6 +13,7 @@ export default function TerminalLayout({
 }) {
   const [time, setTime] = useState("");
   const [fullPage, setFullPage] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     const update = () => setTime(new Date().toLocaleTimeString("id-ID"));
@@ -20,6 +21,20 @@ export default function TerminalLayout({
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      document.documentElement.requestFullscreen();
+    }
+  };
 
   return (
     <main className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">
@@ -52,6 +67,16 @@ export default function TerminalLayout({
               <rect x="1" y="2" width="4" height="12" fill="currentColor" opacity={fullPage ? 0.2 : 0.5} rx="1" />
             </svg>
             <span className="text-[10px]">{fullPage ? "EXPAND" : "COLLAPSE"}</span>
+          </button>
+          <button
+            onClick={toggleFullscreen}
+            title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            className="flex items-center gap-1 text-zinc-500 hover:text-zinc-200 transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path d="M2 2v4M2 2h4M14 2v4M14 2h-4M2 14v-4M2 14h4M14 14v-4M14 14h-4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+            </svg>
+            <span className="text-[10px]">{isFullscreen ? "EXIT FS" : "FULLSCREEN"}</span>
           </button>
         </div>
       </header>

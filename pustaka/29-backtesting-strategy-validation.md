@@ -1112,4 +1112,144 @@ class TestResult:
 
 ---
 
-> **Catatan:** Backtest yang baik bukan yang menunjukkan return tertinggi, tetapi yang paling realistis. Jika backtest terlalu bagus untuk jadi kenyataan, kemungkinan besar memang begitu. Selalu gunakan walk-forward + Monte Carlo + realistic costs. Untuk pembahasan lengkap mengapa backtest bisa menipu di live trading dan bagaimana aplikasi mengatasinya, lihat `85-backtest-to-live-gap-prevention.md`. Implementasi: `src/trading_system/backtest/strategies.py`, `src/trading_system/backtest/metrics.py`, `src/trading_system/testing/prediction_test.py`.
+## 16. Deflated Sharpe Ratio & Multiple Testing Bias
+
+> **Gap teridentifikasi:** Dokumen ini membahas walk-forward validation (§14) dan Monte Carlo (§13) tetapi tidak membahas multiple testing bias — problem fundamental ketika researcher menguji banyak konfigurasi strategy dan memilih yang terbaik. Tanpa kontrol jumlah trial, walk-forward dan holdout tidak cukup.
+
+### 16.1 Problem: Multiple Testing / Data Snooping
+
+```
+SCENARIO:
+  Anda menguji 100 konfigurasi strategy (parameter grid sweep).
+  95 konfigurasi: Sharpe < 0.5 (noise)
+  5 konfigurasi:  Sharpe > 1.5 (terlihat bagus!)
+  
+  Anda pilih konfigurasi terbaik (Sharpe 1.8).
+  Anda jalankan walk-forward → masih terlihat bagus.
+  Anda deploy ke live → RUGI.
+  
+  Kenapa? Dari 100 trial acak, expected max Sharpe ≈ 1.5+ (purely by chance).
+  Sharpe 1.8 TIDAK statistically significant — itu adalah artifact dari selection bias.
+```
+
+### 16.2 Deflated Sharpe Ratio (DSR)
+
+Bailey & López de Prado (2014) memperkenalkan DSR untuk mengoreksi Sharpe Ratio terhadap:
+- **Jumlah trial (N)** — semakin banyak strategy diuji, semakin tinggi expected max Sharpe dari noise
+- **Skewness & kurtosis** — return non-normal mempengaruhi estimasi
+- **Panjang sample** — data pendek → estimasi tidak reliable
+
+**Formula:**
+
+```
+DSR = Φ⁻¹(1 - P(SR₀ > SR̂ | N, γ₃, γ₄, T))
+
+Dimana:
+  SR̂  = observed Sharpe Ratio
+  SR₀  = expected maximum Sharpe under null hypothesis (pure noise)
+  N    = number of independent trials
+  γ₃   = skewness of returns
+  γ₄   = kurtosis of returns  
+  T    = number of observations
+  Φ    = cumulative normal distribution function
+
+Interpretasi:
+  DSR < 0.95 → Tidak dapat menolak H₀ bahwa performance murni dari selection bias
+  DSR ≥ 0.95 → Performance statistically significant (setelah koreksi multiple testing)
+```
+
+### 16.3 Implementasi
+
+```python
+from scipy.stats import norm, skew, kurtosis
+import numpy as np
+
+def deflated_sharpe_ratio(returns: np.ndarray, n_trials: int) -> float:
+    """Calculate Deflated Sharpe Ratio.
+    
+    Args:
+        returns: Strategy returns series
+        n_trials: Number of independent strategy configurations tested
+    
+    Returns:
+        DSR value. < 0.95 means performance not statistically significant.
+    """
+    T = len(returns)
+    sr_hat = np.mean(returns) / np.std(returns, ddof=1) * np.sqrt(252)  # Annualized
+    
+    # Higher moments
+    g3 = skew(returns, bias=False)
+    g4 = kurtosis(returns, fisher=False, bias=False)
+    
+    # Expected max Sharpe under null (Bailey & López de Prado 2014)
+    # SR_0 ≈ sqrt(2 * ln(N)) * (1 - γ₃*SR + (γ₄-1)/4 * SR²)
+    # Simplified: expected max of N iid normal draws
+    sr_0 = np.sqrt(2 * np.log(n_trials)) if n_trials > 1 else 0
+    
+    # Variance of Sharpe estimator
+    sr_var = (1 - g3 * sr_hat + (g4 - 1) / 4 * sr_hat**2) / (T - 1)
+    
+    # DSR
+    z = (sr_hat - sr_0) / np.sqrt(sr_var)
+    dsr = norm.cdf(z)
+    
+    return dsr
+
+# Usage:
+# dsr = deflated_sharpe_ratio(strategy_returns, n_trials=50)
+# if dsr < 0.95:
+#     print(f"WARNING: DSR={dsr:.3f} — performance likely from selection bias, not skill")
+```
+
+### 16.4 Effective Number of Trials
+
+Tidak semua trial independen. Konfigurasi yang mirip (e.g., MA crossover 48-bar vs 50-bar) berkorelasi tinggi. Hitung **effective breadth**:
+
+```python
+def effective_n_trials(strategy_returns_matrix: np.ndarray) -> int:
+    """Estimate effective number of independent trials.
+    
+    Uses eigenvalue participation ratio of strategy return correlation matrix.
+    """
+    corr = np.corrcoef(strategy_returns_matrix)  # N x N correlation matrix
+    eigenvalues = np.linalg.eigvalsh(corr)
+    # Participation ratio: (Σλ)² / Σλ²
+    effective_n = (eigenvalues.sum() ** 2) / (eigenvalues ** 2).sum()
+    return int(effective_n)
+```
+
+### 16.5 Walk-Forward Pitfalls yang DSR Tutupi
+
+| Pitfall | Walk-Forward? | DSR? | Solusi |
+|---------|--------------|------|--------|
+| Parameter overfitting | Partial (purge gap) | Yes (controls trial count) | Kombinasi keduanya |
+| Selection bias (best of N) | **No** — WF eval setiap config sekali, tapi tidak koreksi N | **Yes** — koreksi untuk N trial | DSR wajib |
+| Retraining frequency optimization | **No** — cadence yang dipilih setelah lihat curve | **Yes** — cadence = trial | Fix cadence ex-ante |
+| Feature contamination | Partial (purge) | No | PIT-safe feature engineering |
+| Regime shift blindness | Partial (rolling window) | No | Regime detection + fold-level reporting |
+| Micro vs macro re-estimation | No | No | López de Prado: quarantine feature search per fold |
+
+### 16.6 Checklist Anti-Overfitting
+
+- [ ] Catat **jumlah trial** (N) untuk setiap backtest campaign
+- [ ] Hitung DSR sebelum percaya Sharpe Ratio
+- [ ] Fix retraining cadence ex-ante (bukan setelah lihat curve)
+- [ ] Laporkan DSR bersama Sharpe di KPI (doc 19, §10.2)
+- [ ] Gunakan effective_n_trials jika konfigurasi berkorelasi
+- [ ] Jika DSR < 0.95: **JANGAN deploy** — cari strategy dengan DSR ≥ 0.95
+- [ ] Tambahkan DSR ke backtest metrics output (`backtest/metrics.py`)
+
+### 16.7 5W1H
+
+| Aspect | Detail |
+|--------|--------|
+| **What** | Deflated Sharpe Ratio — koreksi Sharpe Ratio untuk multiple testing bias |
+| **Why** | Walk-forward saja tidak cukup: jika 100 strategy diuji dan 1 dipilih, Sharpe terbaik bisa murni dari chance. DSR mengontrol false discovery |
+| **When** | Setiap kali > 1 konfigurasi strategy diuji (parameter sweep, feature selection, model comparison) |
+| **Where** | Backtest metrics, walk-forward analysis, strategy selection gate |
+| **Who** | Quant/developer yang melakukan strategy research |
+| **How** | Hitung DSR dari observed Sharpe, N trials, skewness, kurtosis, dan sample length. DSR < 0.95 = reject strategy |
+
+---
+
+> **Catatan:** Backtest yang baik bukan yang menunjukkan return tertinggi, tetapi yang paling realistis. Jika backtest terlalu bagus untuk jadi kenyataan, kemungkinan besar memang begitu. Selalu gunakan walk-forward + Monte Carlo + realistic costs. **Deflated Sharpe Ratio (§16)** wajib dihitung jika lebih dari satu konfigurasi strategy diuji. Untuk pembahasan lengkap mengapa backtest bisa menipu di live trading dan bagaimana aplikasi mengatasinya, lihat `85-backtest-to-live-gap-prevention.md`. Implementasi: `src/trading_system/backtest/strategies.py`, `src/trading_system/backtest/metrics.py`, `src/trading_system/testing/prediction_test.py`.

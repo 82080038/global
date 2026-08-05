@@ -415,18 +415,109 @@ audit_entry = {
 
 ---
 
+## 8. Reformasi Pasar Modal 2026 (Update Kritis)
+
+### 8.1 UU P2SK (UU No. 4 Tahun 2026)
+
+Undang-Undang Nomor 4 Tahun 2026 tentang Perubahan atas UU No. 4 Tahun 2023 tentang Pengembangan dan Penguatan Sektor Keuangan (P2SK) disahkan 4 Juni 2026. Perubahan mendasar:
+
+| Perubahan | Pasal | Dampak ke Aplikasi |
+|-----------|-------|---------------------|
+| **Demutualisasi BEI** | Pasal 8 ayat (3) | BEI berubah dari mutual (berbasis anggota) ke demutual (berorientasi laba). Saham BEI dapat dimiliki perseorangan/badan hukum non-anggota bursa. |
+| **Pemegang saham negara** | Pasal 8B | Kemenkeu, BI, Danantara dapat menjadi pemegang saham BEI. |
+| **BEI dapat IPO** | Pasal 3 | BEI berpotensi menjadi perusahaan terbuka → perubahan tarif, governance, data access policy. |
+| **OJK sebagai regulator tunggal** | Pasal 100A | OJK berwenang mengajukan kepailitan/PKPU terhadap lembaga pasar modal. |
+
+**Implikasi untuk aplikasi:**
+- **Tarif bisa berubah** — demutualisasi berorientasi laba → potensi kenaikan biaya transaksi/data pasar. Aplikasi harus dynamically configurable untuk fee structure.
+- **Data access policy** — BEI sebagai profit-oriented entity dapat mengubah terms of service untuk data feed (ticker plant, WebSocket). Vendor management (doc 82) menjadi lebih critical.
+- **Governance perubahan** — pemisahan fungsi regulasi vs bisnis BEI dapat memengaruhi peraturan I-B/I-E. Monitor perubahan peraturan secara berkala.
+
+### 8.2 OJK 8 Rencana Aksi Reformasi (Februari 2026)
+
+OJK mengumumkan 8 rencana aksi dalam 4 klaster (SP 24/GKPB/OJK/II/2026, 1 Februari 2026):
+
+| Klaster | Rencana Aksi | Status | Dampak ke Aplikasi |
+|---------|-------------|--------|---------------------|
+| **Free float** | Naikkan minimum free float dari 7.5% ke 15% | Bertahap (IPO baru langsung 15%, existing diberi transisi) | Update gorengan detector (doc 14): free float < 15% = risk flag |
+| **Transparansi** | Ultimate Beneficial Owner (UBO) transparency | Berjalan | Data emiten perlu field UBO; screening dapat filter emiten dengan UBO tidak transparan |
+| **Data kepemilikan** | Penguatan data kepemilikan saham (sub-tipe investor) | KSEI → BEI publikasi | Foreign flow & broker flow data dapat menjadi lebih granular |
+| **Tata kelola** | Demutualisasi BEI | POJK target Q3 2026 | Lihat §8.1 |
+| **Enforcement** | Penegakan manipulasi transaksi | Diperkuat | Manipulation detector (doc 54) perlu update pattern sesuai enforcement baru |
+| **Tata kelola emiten** | Pendidikan berkelanjutan direksi/komisaris + sertifikasi | Baru | Fundamental analysis perlu pertimbangkan governance score |
+| **Sinergitas** | Penguatan investor institusi domestik | Berjalan | Impact pada foreign flow pattern analysis |
+| **Sinergitas** | Perluasan basis investor | Berjalan | Potensi peningkatan retail participation → aplikasi harus scale |
+
+### 8.3 POJK 3 Tahun 2026 — Perusahaan Efek (29 April 2026)
+
+POJK Nomor 3 Tahun 2026 tentang Penyelenggaraan Kegiatan Usaha Perusahaan Efek (PEE/PPE) mengubah klasifikasi:
+
+| Kategori | Modal Disetor Min | MKBD Min | Kegiatan |
+|----------|-------------------|----------|----------|
+| **PEKU 1** | Rp1 miliar | Rp500 juta | Pemasaran efek terbatas |
+| **PEKU 2** | Rp55 miliar | Rp50 miliar | PEE atau PPE secara terbatas |
+| **PEKU 3** | Rp110 miliar | Rp100 miliar | PEE + PPE lengkap (margin, produk terstruktur, transaksi luar negeri) |
+
+**Dampak ke aplikasi:** Broker adapter (doc 28, doc 82) perlu mengetahui kategori PEKU broker untuk menentukan kemampuan:
+- PEKU 1: hanya pemasaran → tidak ada order execution API
+- PEKU 2: trading terbatas → mungkin tidak support margin/short
+- PEKU 3: full service → margin, short, produk terstruktur
+
+### 8.4 POJK 5 Tahun 2026 — Manajer Investasi (29 April 2026)
+
+POJK Nomor 5 Tahun 2026 mengklasifikasikan MI menjadi MIKU 1 (terbatas, modal Rp25M) dan MIKU 2 (lengkap, modal Rp50M). Relevan jika aplikasi mengintegrasikan reksa dana/managed portfolio.
+
+### 8.5 JATS Multi Matching Engine (MME) 2026
+
+BEI melakukan pembaruan sistem perdagangan terbesar sejak 2009:
+
+| Spesifikasi | JATS Next-G (saat ini) | JATS MME (2026) | Dampak |
+|-------------|------------------------|-----------------|--------|
+| **Order capacity** | 15 juta/hari | 120 juta/hari | 8x lipat |
+| **Trade capacity** | 7.5 juta/hari | 30 juta/hari | 4x lipat |
+| **Throughput** | 12,500-15,000 order/detik | 50,000-100,000 order/detik | 4-7x lipat |
+| **Latency** | ~100 microsecond | < 5 microsecond | 20x lebih cepat |
+| **Core network** | Standard | Low latency | Mendukung HFT-ready |
+| **Target 2030** | — | 170,000 order/detik | Roadmap kapasitas |
+
+**Dampak ke aplikasi:**
+- **Broker API dapat berubah** — JATS MME dapat mengubah FIX protocol message format, order type support, atau session protocol. Broker adapter perlu update.
+- **Latency expectation shift** — dengan BEI di <5μs, aplikasi yang masih butuh detik untuk compute scores akan menjadi bottleneck. Performance engineering (doc 34) lebih critical.
+- **Order type baru** — MME dapat mendukung order type yang lebih advanced (iceberg, pegged, midpoint). OMS (doc 40) perlu extensible order type.
+- **Auto-rejection band** — dapat berubah dengan sistem baru. Market status monitor perlu update.
+- **Load size reduction** — BEI merencanakan penurunan lot size untuk meningkatkan partispartisipasi retail. Position sizing dan lot calculation perlu configurable.
+- **Lisensi Nasdaq 10 tahun** — sistem baru berbasis Nasdaq matching engine. Standar FIX protocol dapat lebih aligned dengan global.
+
+### 8.6 Checklist Compliance Update 2026
+
+- [ ] Update fee structure menjadi configurable (antisipasi perubahan tarif demutualisasi)
+- [ ] Monitor perubahan peraturan I-B/I-E pasca-demutualisasi
+- [ ] Update gorengan detector: free float < 15% = risk flag
+- [ ] Broker adapter: support PEKU kategori (1/2/3) untuk menentukan kemampuan broker
+- [ ] Monitor JATS MME migration timeline untuk update broker API adapter
+- [ ] Update auto-rejection band jika berubah dengan JATS MME
+- [ ] UBO transparency: tambah field di fundamental_data schema
+- [ ] Position sizing: configurable lot size (antisipasi load size reduction)
+
+---
+
 ## Referensi
 
 1. UU No. 8 Tahun 1995 tentang Pasar Modal
 2. UU No. 4 Tahun 2023 tentang Penguatan dan Pengembangan Sektor Keuangan
-3. UU No. 21 Tahun 2011 tentang Otoritas Jasa Keuangan
-4. OJK — Buku Saku Pasar Modal 2023
-5. BEI — Peraturan I-B dan I-E
-6. SEC — Securities Act of 1933, Securities Exchange Act of 1934
-7. EU — MiFID II, GDPR, MiCA
-8. FCA — Consumer Duty (2023)
-9. POJK 5/2022, 11/2022, 13/2023, 16/2023, 20/2023, 27/2023
+3. **UU No. 4 Tahun 2026 (UU P2SK) — Perubahan atas UU No. 4/2023 (disahkan 4 Juni 2026)**
+4. UU No. 21 Tahun 2011 tentang Otoritas Jasa Keuangan
+5. OJK — Buku Saku Pasar Modal 2023
+6. BEI — Peraturan I-B dan I-E
+7. SEC — Securities Act of 1933, Securities Exchange Act of 1934
+8. EU — MiFID II, GDPR, MiCA
+9. FCA — Consumer Duty (2023)
+10. POJK 5/2022, 11/2022, 13/2023, 16/2023, 20/2023, 27/2023
+11. **POJK 3 Tahun 2026 — Penyelenggaraan Usaha Perusahaan Efek (PEE/PPE)**
+12. **POJK 5 Tahun 2026 — Penyelenggaraan Usaha Manajer Investasi**
+13. **OJK SP 24/GKPB/OJK/II/2026 — 8 Rencana Aksi Reformasi Pasar Modal (1 Februari 2026)**
+14. **Nasdaq-IDX Partnership (17 Juni 2024) — JATS MME upgrade 2026**
 
 ---
 
-> **Catatan:** Regulasi terus berubah. Selalu konsultasi dengan legal advisor untuk compliance terkini. Untuk implementasi teknis, lihat `11-knowledge-transfer-aplikasi.md` dan `12-panduan-membangun-aplikasi-pasar-modal.md`.
+> **Catatan:** Regulasi terus berubah. Selalu konsultasi dengan legal advisor untuk compliance terkini. Untuk implementasi teknis, lihat `11-knowledge-transfer-aplikasi.md` dan `12-panduan-membangun-aplikasi-pasar-modal.md`. **Update 2026:** UU P2SK, POJK 3/5 2026, dan JATS MME adalah perubahan terbesar sejak 2009 — pastikan aplikasi mengakomodasi perubahan ini.

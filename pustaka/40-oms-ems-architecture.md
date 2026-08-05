@@ -1162,4 +1162,212 @@ CREATE TABLE reconciliation_results (
 
 ---
 
-> **Catatan:** OMS adalah komponen paling critical di platform trading. Bug di OMS = kerugian finansial langsung. Investasi waktu di testing (unit, integration, stress) adalah wajib, bukan opsional.
+## 13. Concurrency & Race Condition Patterns
+
+> **Gap teridentifikasi:** Dokumen ini membahas idempotency (§6) tetapi tidak membahas race condition pada balance reservation, concurrency control untuk concurrent order submission, saga pattern untuk distributed order processing, dan materialized view pattern untuk position serving. Bagian ini mengisi gap tersebut.
+
+### 13.1 TOCTOU Race Condition pada Balance Check
+
+**Problem (Time-Of-Check-Time-Of-Use):**
+
+```
+User balance: Rp100.000.000
+
+Request A (BUY 50jt): read balance=100jt → check 100jt >= 50jt ✓ → write balance=50jt
+Request B (BUY 50jt): read balance=100jt → check 100jt >= 50jt ✓ → write balance=50jt
+                                                                    ↓
+                                              Hasil: balance=50jt (harusnya 0jt)
+                                              Kedua order lolos, user overdraw
+```
+
+**Solution: Conditional UPDATE (atomic check-and-decrement):**
+
+```python
+class BalanceReservation:
+    """Atomic balance reservation using conditional UPDATE."""
+
+    def reserve_balance(self, user_id: str, amount: float) -> dict:
+        """Reserve balance atomically. Fails if insufficient."""
+        result = self.storage.execute(
+            """
+            UPDATE user_balance
+            SET available = available - :amount,
+                reserved = reserved + :amount
+            WHERE user_id = :user_id
+              AND available >= :amount
+            """,
+            {"user_id": user_id, "amount": amount},
+        )
+        if result.rowcount == 0:
+            return {"status": "rejected", "reason": "INSUFFICIENT_BALANCE"}
+        return {"status": "reserved", "amount": amount}
+```
+
+**Tiga pattern atomicity (urutan robustness):**
+
+| Pattern | Cara Kerja | Kapan Pakai |
+|---------|-----------|-------------|
+| **Conditional UPDATE** | `UPDATE ... WHERE balance >= amount` dalam satu statement | Simple check-and-decrement |
+| **SELECT FOR UPDATE** | Transaction + row lock: `SELECT ... FOR UPDATE` → check → update | Multi-step validation dalam transaction |
+| **Optimistic concurrency** | Version column: `UPDATE ... WHERE version = :expected` | High contention, read-heavy |
+
+### 13.2 Saga Pattern untuk Distributed Order Processing
+
+**Problem:** Order processing melibatkan multiple steps (reserve balance → submit to broker → process fills → settle). Jika step N gagal, steps 1..N-1 harus di-rollback.
+
+**Solution: Orchestrator-Based Saga dengan Compensation:**
+
+```python
+class OrderSaga:
+    """Saga orchestrator untuk order processing dengan compensation."""
+
+    STEPS = [
+        ("reserve_funds", "release_funds"),
+        ("submit_order", "cancel_order"),
+        ("process_fills", "reverse_fills"),
+        ("settle", "reverse_settlement"),
+    ]
+
+    async def execute(self, order: Order) -> dict:
+        completed = []
+        for step_name, compensation_name in self.STEPS:
+            try:
+                # Persist state BEFORE executing (crash recovery)
+                await self._save_saga_state(order.id, step_name, "in_progress")
+                await getattr(self, f"_{step_name}")(order)
+                completed.append((step_name, compensation_name))
+                await self._save_saga_state(order.id, step_name, "done")
+            except Exception as e:
+                # Run compensations in reverse for completed steps
+                for done_step, comp_name in reversed(completed):
+                    await getattr(self, f"_{comp_name}")(order)
+                return {"status": "failed", "failed_at": step_name, "error": str(e)}
+        return {"status": "settled"}
+```
+
+| Step | Forward | Compensation |
+|------|---------|-------------|
+| 1. reserve_funds | `balance.hold(amount)` | `balance.release(amount)` |
+| 2. submit_order | `broker.submit(order)` | `broker.cancel(order_id)` |
+| 3. process_fills | Debit/credit per fill | Mirror credit/debit |
+| 4. settle | Record settlement + release excess | Mark settlement reversed |
+
+**Crash recovery:** State `in_progress` di DB → `recoverInFlight()` pada boot menyelesaikan atau meng-compensate.
+
+### 13.3 Materialized View Pattern untuk Position Serving
+
+**Problem:** Position P&L dihitung dari event stream (fills). User query position setiap detik → tidak boleh hit event store setiap kali.
+
+**Solution:** Pre-compute position di queryable store, update via event subscription:
+
+```python
+class PositionService:
+    """Serve positions from materialized view, not from event stream."""
+
+    def __init__(self):
+        self.event_store = OrderEventStore()
+        self.position_cache = {}  # In production: Redis/DynamoDB
+
+    def on_fill(self, fill_event: dict):
+        """Update materialized view on fill event (idempotent)."""
+        key = (fill_event["user_id"], fill_event["ticker"])
+        if self._is_processed(fill_event["fill_id"]):
+            return  # Idempotent: skip duplicate
+        pos = self.position_cache.setdefault(key, {"qty": 0, "avg_price": 0, "pnl": 0})
+        # Atomic update
+        new_qty = pos["qty"] + fill_event["quantity"]
+        pos["avg_price"] = (
+            (pos["avg_price"] * pos["qty"] + fill_event["price"] * fill_event["quantity"])
+            / new_qty if new_qty != 0 else 0
+        )
+        pos["qty"] = new_qty
+        self._mark_processed(fill_event["fill_id"])
+
+    def get_position(self, user_id: str, ticker: str) -> dict:
+        """User queries pre-computed position, not event stream."""
+        return self.position_cache.get((user_id, ticker), {"qty": 0, "avg_price": 0, "pnl": 0})
+```
+
+### 13.4 Claim-Before-Dispatch Pattern untuk Workers
+
+**Problem:** Multiple workers dapat mengambil order yang sama dari queue secara bersamaan.
+
+**Solution:** Atomic claim sebelum eksekusi:
+
+```python
+class OrderWorker:
+    """Claim order atomically before processing."""
+
+    def claim_next_order(self) -> Optional[Order]:
+        """Atomically transition order from pending to processing."""
+        result = self.storage.execute(
+            """
+            UPDATE orders
+            SET status = 'processing', claimed_at = :now
+            WHERE id = (
+                SELECT id FROM orders
+                WHERE status = 'pending'
+                ORDER BY created_at ASC
+                LIMIT 1
+            )
+            RETURNING *
+            """,
+            {"now": datetime.utcnow()},
+        )
+        return Order(**result.fetchone()) if result.rowcount > 0 else None
+```
+
+**Untuk PostgreSQL:** Gunakan `FOR UPDATE SKIP LOCKED` untuk concurrent claim:
+```sql
+SELECT * FROM orders WHERE status = 'pending'
+ORDER BY created_at ASC
+FOR UPDATE SKIP LOCKED
+LIMIT 1
+```
+
+### 13.5 Concurrency Matrix untuk Trading System
+
+| Domain | Parallelism | Serialization Key | Protection |
+|--------|------------|-------------------|------------|
+| Order placement | Per-user/symbol/side | `user_id:symbol:side` | Idempotency key + balance lock |
+| Order dispatch | Per-order | `order_id` | Claim-before-dispatch |
+| Fill processing | Per-fill | `fill_id` | Idempotency (fill_exists check) |
+| Position update | Per-user/symbol | `user_id:symbol` | Atomic increment |
+| Balance update | Per-user | `user_id` | Conditional UPDATE |
+| Strategy execution | Per-strategy/symbol | `strategy_id:symbol` | Execution lock |
+| Reconciliation | Per-batch | `batch_id` | Bounded worker pool |
+
+### 13.6 5W1H
+
+| Aspect | Detail |
+|--------|--------|
+| **What** | Concurrency patterns: TOCTOU prevention, saga, materialized view, claim-before-dispatch |
+| **Why** | Race condition di money path = kerugian finansial langsung. Dua order concurrent dapat overdraw balance. Lost fill dapat corrupt position |
+| **When** | Saat sistem mendukung concurrent order submission, multiple workers, atau async broker callback |
+| **Where** | OMS core, balance management, position service, fill processor, worker pool |
+| **Who** | Backend engineer yang implementasi OMS/EMS |
+| **How** | Conditional UPDATE untuk atomicity, saga untuk multi-step, materialized view untuk read path, claim untuk worker dispatch |
+
+---
+
+## Referensi
+
+### Internal
+- `20-syarat-robot-auto-trading.md` — 12 pilar syarat robot trading
+- `28-api-design-integration-patterns.md` — REST, WebSocket, FIX protocol
+- `26-post-trade-settlement-rekonsiliasi.md` — Post-trade & settlement
+- `24-market-microstructure-likuiditas.md` — Market microstructure IDX
+
+### External
+- HLD Handbook — Brokerage Platform Design (Robinhood/E*TRADE/IB)
+- Algovantis — End-to-End Algorithmic Trading System Design
+- Gegobyteapps — Trading System Architecture Guide 2026
+- FCA — Multi-firm review of algorithmic trading controls (RTS 6)
+- FIX Protocol Ltd — FIX 4.4 specification
+- **DashDevs — Real-Time Trading Platform Development (concurrency, idempotency, backpressure)**
+- **Manuel Fedele — High-Throughput Trading Platform Architecture on AWS (materialized view, saga)**
+- **QuantDinger — Concurrency Model for Trading Backend (serialization matrix)**
+
+---
+
+> **Catatan:** OMS adalah komponen paling critical di platform trading. Bug di OMS = kerugian finansial langsung. Investasi waktu di testing (unit, integration, stress) adalah wajib, bukan opsional. **Concurrency patterns (§13)** adalah pertahanan terhadap race condition yang paling sulit dideteksi — bug hanya muncul saat dua request tiba dalam window milidetik yang sama.

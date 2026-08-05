@@ -572,4 +572,120 @@ class GorenganReport:
 
 ---
 
-> **Catatan:** Untuk implementasi dalam aplikasi (red flag detection, HSC indicator, likuiditas scoring), lihat `12-panduan-membangun-aplikasi-pasar-modal.md`. Implementasi kode: `src/trading_system/analysis/gorengan_detector.py`.
+## 12. Kendala Infrastruktur IDX 2026: JATS MME & Reformasi Regulasi
+
+> **Gap teridentifikasi:** Dokumen ini membahas kendala struktural pasar modal (likuiditas, transparansi, gorengan) tetapi tidak membahas kendala infrastruktur teknologi — pembaruan sistem perdagangan JATS MME 2026 dan reformasi regulasi (UU P2SK, POJK 3/5 2026) yang berdampak langsung pada arsitektur aplikasi.
+
+### 12.1 JATS Multi Matching Engine (MME) — Migration Risk
+
+BEI melakukan pembaruan sistem perdagangan terbesar sejak 2009 (lisensi Nasdaq, 10 tahun):
+
+| Risk | Detail | Mitigasi untuk Aplikasi |
+|------|--------|--------------------------|
+| **Broker API breaking change** | JATS MME dapat mengubah FIX protocol message format, order type, session protocol | Broker adapter (doc 28) harus versioned; support old + new protocol selama transisi |
+| **Auto-rejection band change** | Band bisa berubah dengan engine baru | Market status monitor perlu configurable auto-rejection parameters |
+| **Latency expectation shift** | BEI: 100μs → <5μs. Aplikasi yang lambat menjadi bottleneck | Performance engineering (doc 34) lebih critical; cache strategy, async I/O |
+| **Order type expansion** | MME dapat support iceberg, pegged, midpoint orders | OMS (doc 40) perlu extensible order type enum |
+| **Load size reduction** | BEI merencanakan penurunan lot size untuk retail participation | Position sizing dan lot calculation perlu configurable, bukan hardcoded |
+| **Data feed format change** | DataFeed protocol dapat berubah | Ticker plant (doc 66) perlu adapter pattern untuk multiple feed formats |
+| **Migration timeline uncertainty** | BEI: pengembangan + pengujian, target 2026 | Monitor timeline; design adapter untuk hot-swap capability |
+
+### 12.2 UU P2SK & Demutualisasi — Structural Risk
+
+| Risk | Detail | Mitigasi untuk Aplikasi |
+|------|--------|--------------------------|
+| **Tarif perubahan** | BEI berorientasi laba → potensi kenaikan biaya transaksi, data fee | Fee structure configurable (doc 25, doc 52); bukan hardcoded constants |
+| **Data access policy** | BEI sebagai profit entity dapat membatasi/charge data feed | Vendor management (doc 82); multi-source data strategy |
+| **Peraturan I-B/I-E change** | Pemisahan fungsi regulasi vs bisnis → peraturan dapat berubah | Monitor perubahan; compliance module perlu updatable |
+| **Free float 15%** | Emiten dengan free float < 15% = risk flag | Update gorengan detector (§11): tambah free float check |
+| **PEKU kategori broker** | Broker dikategorikan PEKU 1/2/3 dengan kemampuan berbeda | Broker adapter perlu mengetahui kategori → tentukan capability (margin, short, dll) |
+| **UBO transparency** | Ultimate Beneficial Owner perlu di-track | Fundamental data schema perlu field UBO |
+
+### 12.3 Timeline Reformasi 2026
+
+```
+Q1 2026  ─── UU P2SK disahkan (4 Juni 2026)
+Q2 2026  ─── POJK 3 & 5 Tahun 2026 terbit (29 April 2026)
+Q3 2026  ─── POJK Demutualisasi target efektif
+2026     ─── JATS MME launch (pengembangan + pengujian)
+2030     ─── JATS MME target 170,000 order/detik
+```
+
+### 12.4 5W1H
+
+| Aspect | Detail |
+|--------|--------|
+| **What** | Kendala infrastruktur: JATS MME migration + UU P2SK reformasi + POJK 3/5 2026 |
+| **Why** | Perubahan terbesar sejak 2009 — broker API, tarif, data access, dan peraturan dapat berubah. Aplikasi yang tidak antisipasi akan break |
+| **When** | 2026 (JATS MME launch, demutualisasi POJK Q3, POJK 3/5 sudah berlaku) |
+| **Where** | Broker adapter, OMS, market data feed, fee structure, compliance module |
+| **Who** | Arsitek aplikasi + compliance officer + broker integration engineer |
+| **How** | Configurable parameters, versioned adapters, multi-source data, monitor timeline |
+
+---
+
+## 13. Geopolitik & Event Shock: Dampak ke IDX
+
+### 13.1 Mengapa Geopolitik Penting
+
+IDX adalah emerging market yang **sangat sensitif** terhadap event shock global. Investor asing (foreign flow) merupakan driver likuiditas besar, dan mereka reaksi cepat terhadap geopolitical risk.
+
+### 13.2 Histori Event Shock ke IDX
+
+| Event | Periode | IHSG Impact | Durasi Recovery | Catatan |
+|-------|---------|-------------|-----------------|---------|
+| Asian Financial Crisis | 1997-1998 | -65% | 10 tahun | Krisis terbesar sejarah IDX |
+| Global Financial Crisis | 2008-2009 | -55% | 2 tahun | Subprime mortgage crisis |
+| European Debt Crisis | 2011 | -15% | 6 bulan | Greece/Italy contagion |
+| Taper Tantrum | 2013 | -20% | 8 bulan | Fed tapering announcement |
+| China Stock Crash | 2015 | -12% | 4 bulan | China bubble burst |
+| Trump Election | Nov 2016 | -3% | 1 bulan | Short-lived shock |
+| Trade War US-China | 2018-2019 | -10% | 12 bulan | Prolonged uncertainty |
+| COVID-19 Crash | Mar 2020 | -38% | 8 bulan | Fastest crash + recovery |
+| Russia-Ukraine War | Feb 2022 | -5% | 2 bulan | Oil + commodity shock |
+| Fed Aggressive Hiking | 2022 | -8% | 6 bulan | EM outflow |
+| Middle East Escalation | 2024-2025 | -3% | 1 bulan | Oil price spike |
+
+### 13.3 Tipe Event Shock dan Mekanisme Transmisi
+
+| Tipe | Mekanisme | Aset Terpengaruh | Durasi |
+|------|-----------|-----------------|--------|
+| **Konflik/perang** | Oil up → inflasi → rate hike risk → EM outflow | Oil stocks naik, tech/consumer turun | 1-6 bulan |
+| **Pemilu** | Policy uncertainty → wait-and-see → volume turun | Semua sektor, terutama infra/property | 1-3 bulan pre/post |
+| **Pandemi** | Economic shutdown → earnings collapse → crash | Consumer, travel, property crash; healthcare up | 6-24 bulan |
+| **Trade war** | Tariff → supply chain disruption → export down | Export-oriented stocks (coal, CPO, manufacturing) | 6-18 bulan |
+| **Bencana alam** | Localized disruption → insurance claims → rebuild | Region-specific; construction up post-event | 3-12 bulan |
+| **Financial crisis** | Contagion → global selloff → liquidity crunch | Semua sektor; financials paling terpukul | 6-24 bulan |
+
+### 13.4 Indikator Geopolitical Risk
+
+| Indikator | Source | Interpretasi |
+|-----------|--------|--------------|
+| VIX | yfinance `^VIX` | > 30 = panic, > 40 = crisis |
+| DXY | yfinance `DX-Y.NYB` | Naik tajam = flight to USD = EM outflow |
+| Gold price | yfinance `GC=F` | Naik tajam = safe haven demand = risk-off |
+| Oil price | yfinance `CL=F` | Naik tajam = supply disruption = inflation risk |
+| US 10Y yield | yfinance `^TNX` | Turun tajam = flight to safety = risk-off |
+| CDS spread Indonesia | Bloomberg/Reuters | Naik = sovereign risk perception naik |
+
+### 13.5 Strategi Mitigasi untuk Personal Investor
+
+1. **Deteksi early warning** — monitor VIX > 25, DXY naik > 2% dalam seminggu, gold naik > 5%
+2. **Reduce position** — saat event shock terkonfirmasi, kurangi exposure ke cyclical/commodity stocks
+3. **Increase cash** — cash adalah hedge terbaik saat uncertainty tinggi
+4. **Avoid catching falling knife** — jangan beli di tengah crash kecuali ada thesis kuat
+5. **Staged re-entry** — setelah stabil, masuk bertahap (1/3, 1/3, 1/3) bukan all-in
+6. **External events table** — DB sudah punya `external_events` (119 rows) dan `policy_events` (179 rows) — gunakan untuk tracking
+
+### 13.6 Data yang Sudah Ada di Parquet
+
+- `raw/event_eksternal/` — 119 rows geopolitical events (konflik, pandemi, trade war)
+- `raw/kebijakan_regulasi/` — 179 rows policy events (BI rate, OJK, BEI)
+- `archive/tables/external_events.parquet` — 119 rows (sudah di DB)
+- `archive/tables/policy_events.parquet` — 179 rows (sudah di DB)
+
+Lihat `90-analisis-parquet-data-awal.md` §5 untuk detail migration.
+
+---
+
+> **Catatan:** Untuk implementasi dalam aplikasi (red flag detection, HSC indicator, likuiditas scoring), lihat `12-panduan-membangun-aplikasi-pasar-modal.md`. Implementasi kode: `src/trading_system/analysis/gorengan_detector.py`. **Kendala infrastruktur 2026 (§12)** — JATS MME migration dan UU P2SK reformasi adalah perubahan struktural terbesar sejak 2009 yang perlu diantisipasi aplikasi. **Geopolitik & event shock (§13)** — IDX sangat sensitif terhadap global event; data `external_events` dan `policy_events` sudah ada di DB tapi belum ada engine yang consume.

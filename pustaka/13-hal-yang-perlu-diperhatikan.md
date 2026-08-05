@@ -641,4 +641,84 @@ class NoTradeResult:
 
 ---
 
-> **Catatan:** Untuk implementasi dalam aplikasi (fitur mitigasi bias, risk score, checklist otomatis), lihat `12-panduan-membangun-aplikasi-pasar-modal.md`. Untuk analisis lengkap fitur aplikasi retail, lihat `17-aplikasi-retail-pribadi.md`. Implementasi No-Trade Engine: `src/trading_system/analysis/no_trade.py`.
+## 14. Seasonal & Kalender: Pola Berulang di IDX
+
+### 14.1 Mengapa Seasonal Penting
+
+Pola seasonal adalah kecenderungan harga saham/IHSG bergerak ke arah tertentu di periode tertentu secara berulang. Bukan jaminan, tapi **probabilitas** yang bisa dimanfaatkan. Data OHLCV 29 tahun (1997-2026) di trading-system cukup untuk verifikasi pola.
+
+### 14.2 Pola Seasonal di IDX
+
+| Pola | Periode | Hipotesis | Cara Verifikasi | Catatan |
+|------|---------|-----------|-----------------|---------|
+| **January effect** | Awal tahun | Small caps outperform di January (tax-loss recovery, new year allocation) | Backtest monthly returns per ticker, bandingkan Jan vs rata-rata bulan lain | Di IDX, efek mungkin lemah karena tidak ada tax-loss selling culture seperti US |
+| **Year-end rally** | Nov-Des | IHSG cenderung naik akhir tahun (window dressing oleh manajer investasi, bonus distribution, optimism tahun baru) | Backtest IHSG returns Nov-Des vs rata-rata | Cukup konsisten di IDX |
+| **Lebaran effect** | Ramadhan-Lebaran | Consumer stocks (retail, F&B) naik sebelum Lebaran (demand surge), normalisasi setelah | Backtest consumer stocks returns selama Ramadhan vs normal | Spesifik Indonesia, cukup kuat |
+| **Earnings season** | Q1: Apr-Mei, Q2: Jul-Agu, Q3: Okt-Nov, Q4: Feb-Mar | Volatility naik sebelum/saat earnings release. Post-earnings: drift sesuai surprise | Track earnings calendar, compute pre/post returns | Perlu forward earnings calendar |
+| **Month-end effect** | 3 hari terakhir bulan | Rebalancing flow dari manajer investasi → volume naik → liquidity effect | Backtest volume dan returns di 3 hari terakhir vs rata-rata | Minor effect |
+| **Quarter-end effect** | 3 hari terakhir quarter | Window dressing lebih kuat di quarter-end vs month-end | Backtest quarter-end vs month-end | Minor effect |
+| **Holiday effect** | Sebelum libur nasional | Volume turun (investor early exit), pre-holiday drift positif (optimism) | Backtest returns 1-2 hari sebelum holiday vs normal | Minor effect |
+| **Monday effect** | Senin | Monday cenderung lebih bearish (weekend news absorption) | Backtest daily returns by day of week | Lemah di IDX |
+| **Idul Fitri closing** | Hari terakhir sebelum Idul Fitri | Volume sangat rendah, price movement minimal | Observasi | Market half-day atau closed |
+
+### 14.3 Cara Menggunakan Data Seasonal
+
+```
+SEASONAL SCORE (0-100)
+│
+├── Untuk setiap ticker, compute:
+│   ├── Average return di bulan X (historical 10+ tahun)
+│   ├── Win rate: % tahun yang return positif di bulan X
+│   └── Standard deviation: konsistensi pola
+│
+├── Score:
+│   ├── Win rate > 70% + avg return > 2% → score 80-100 (strong seasonal)
+│   ├── Win rate 60-70% + avg return 1-2% → score 60-80 (moderate)
+│   ├── Win rate 50-60% → score 40-60 (neutral)
+│   └── Win rate < 50% → score 0-40 (negative seasonal)
+│
+├── Usage:
+│   ├── Sebagai minor factor di decision engine (weight 5%)
+│   ├── Sebagai timing signal: "Bulan X historically bullish untuk ticker Y"
+│   └── Sebagai risk flag: "Bulan X historically bearish, pertimbangkan reduce"
+```
+
+### 14.4 Backtest Seasonal dari Data Existing
+
+Data OHLCV 29 tahun (1997-2026, 2.9M rows) sudah cukup untuk:
+
+```python
+# Contoh: January effect untuk BBCA.JK
+import pandas as pd
+
+# Load OHLCV
+df = pd.read_sql("SELECT * FROM ohlcv WHERE ticker='BBCA.JK'", conn)
+df['date'] = pd.to_datetime(df['timestamp'])
+df['month'] = df['date'].dt.month
+df['year'] = df['date'].dt.year
+
+# Compute monthly returns
+monthly = df.groupby(['year', 'month'])['close'].last().pct_change()
+january_returns = monthly[monthly.index.get_level_values('month') == 1]
+
+print(f"January avg return: {january_returns.mean():.2%}")
+print(f"January win rate: {(january_returns > 0).mean():.0%}")
+print(f"Other months avg: {monthly[monthly.index.get_level_values('month') != 1].mean():.2%}")
+```
+
+### 14.5 Limitasi
+
+- **Sample size** — 29 tahun data, tapi beberapa ticker baru listed < 10 tahun → sample terbatas
+- **Regime change** — pola seasonal bisa berubah karena structural shift (e.g., post-COVID behavior)
+- **Multiple testing** — jika test 12 bulan × 928 tickers = 11,136 tests, pasti ada false positive. Gunakan Deflated Sharpe Ratio (lihat `29-backtesting-strategy-validation.md` §16)
+- **Bukan sinyal standalone** — seasonal adalah konteks tambahan, bukan sinyal utama
+
+### 14.6 Data yang Sudah Ada
+
+- `market_calendar` (365 rows) — kalender bursa 2026, ada is_trading_day dan holiday_name
+- OHLCV 2.9M rows — 29 tahun data, cukup untuk seasonal backtest
+- Tidak ada forward earnings calendar — perlu scraping BEI disclosure
+
+---
+
+> **Catatan:** Untuk implementasi dalam aplikasi (fitur mitigasi bias, risk score, checklist otomatis), lihat `12-panduan-membangun-aplikasi-pasar-modal.md`. Untuk analisis lengkap fitur aplikasi retail, lihat `17-aplikasi-retail-pribadi.md`. Implementasi No-Trade Engine: `src/trading_system/analysis/no_trade.py`. **Seasonal & kalender (§14)** — pola berulang seperti year-end rally, Lebaran effect, dan earnings season dapat di-backtest dari 29 tahun OHLCV existing; gunakan sebagai minor factor (5% weight) atau timing signal, bukan sinyal utama.
