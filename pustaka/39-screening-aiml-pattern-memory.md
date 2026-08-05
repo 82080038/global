@@ -807,4 +807,56 @@ Pola tidak dievaluasi dalam isolasi — **konteks mempengaruhi reliabilitas**:
 
 ---
 
-> **Kesimpulan:** Screening saham, AI/ML untuk pola, dan pattern memory adalah **tiga komponen wajib** yang saling terintegrasi. Codebase `trading-system` v0.1.11 sudah punya **fondasi engine-level** yang production-ready untuk ketiganya — screener (2 file), AI/ML (7 file), pattern memory (1 file + DB table 2,386 rows). Yang perlu dilakukan untuk aplikasi ritel adalah **membungkus engine yang sudah ada dengan UI user-friendly** dan menambah beberapa komponen pendukung (gorengan detector production code, pattern evaluation scheduler, context tagging). Estimasi total: 6-9 bulan untuk full implementation, 2-3 bulan untuk MVP.
+## 15. Implementasi: Factor Engine (Cross-Sectional Ranking)
+
+> **Sumber:** `src/trading_system/analysis/factor_engine.py` (316 baris), `src/trading_system/analysis/factor_screener.py` (126 baris)
+
+Sistem `trading-system` mengimplementasikan 6 faktor dengan cross-sectional percentile ranking, liquidity filter, dan factor versioning.
+
+### 15.1 Faktor
+
+| Faktor | Formula | Min History |
+|--------|---------|-------------|
+| **Momentum** | Mean(1M, 3M, 6M, 12M returns) | 22 hari |
+| **Low volatility** | -std(60-day returns) | 60 hari |
+| **Quality** | mean(60d returns) / std(60d returns) | 60 hari |
+| **Beta** | cov(r, benchmark) / var(benchmark) | 60 hari |
+| **Size** | Market cap (proxy: price × volume) | 20 hari |
+| **Value** | PE, PB ratio (dari fundamental_data) | Fundamental |
+
+### 15.2 Pipeline
+
+```
+Universe (928 equity tickers)
+  → Liquidity filter (volume > 100K, min 60 bars)
+  → Compute raw factor values per ticker
+  → Cross-sectional percentile rank (0-1)
+  → Composite rank (weighted average)
+  → Top N screening
+```
+
+### 15.3 Factor Versioning
+
+```python
+FACTOR_VERSION = "1.0"
+MIN_HISTORY_DAYS = 60
+LIQUIDITY_MIN_VOLUME = 100_000
+```
+
+Setiap perubahan formula → versi naik → backtest ulang dengan versi baru.
+
+### 15.4 FactorScreenerService
+
+```python
+class FactorScreenerService:
+    def screen(self, top_n=20, min_composite=0.0,
+               factor_filter=None, min_factor_rank=0.0) -> dict:
+        """Returns: as_of, factor_version, universe_size, results"""
+
+    def explain(self, symbol) -> dict:
+        """Returns: composite_rank, factor breakdown with tier (top/above/average/below/bottom quintile)"""
+```
+
+---
+
+> **Kesimpulan:** Screening saham, AI/ML untuk pola, dan pattern memory adalah **tiga komponen wajib** yang saling terintegrasi. Codebase `trading-system` v0.1.11 sudah punya **fondasi engine-level** yang production-ready untuk ketiganya — screener (2 file), AI/ML (7 file), pattern memory (1 file + DB table 2,386 rows). Yang perlu dilakukan untuk aplikasi ritel adalah **membungkus engine yang sudah ada dengan UI user-friendly** dan menambah beberapa komponen pendukung (gorengan detector production code, pattern evaluation scheduler, context tagging). Estimasi total: 6-9 bulan untuk full implementation, 2-3 bulan untuk MVP. Implementasi Factor Engine: `src/trading_system/analysis/factor_engine.py`, `src/trading_system/analysis/factor_screener.py`.

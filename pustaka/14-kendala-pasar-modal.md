@@ -526,4 +526,41 @@ def detect_red_flags(ticker, data):
 
 ---
 
-> **Catatan:** Untuk implementasi dalam aplikasi (red flag detection, HSC indicator, likuiditas scoring), lihat `12-panduan-membangun-aplikasi-pasar-modal.md`.
+## 11. Implementasi: Gorengan Detector
+
+> **Sumber:** `src/trading_system/analysis/gorengan_detector.py` (252 baris)
+
+Sistem `trading-system` mengimplementasikan deteksi otomatis saham gorengan dari kombinasi price spike, weak fundamental, dan low liquidity.
+
+### 11.1 Algoritma Deteksi
+
+| Komponen | Deteksi | Threshold |
+|----------|---------|-----------|
+| **Price spike** | Return 5 hari > 50% atau 10 hari > 30% | > 50% (5d), > 30% (10d) |
+| **Volume spike** | Volume > 3x rata-rata 20 hari | > 3x median |
+| **Weak fundamental** | PE > 100, PE < 0, atau tidak ada data fundamental | PE invalid |
+| **Low liquidity** | Volume harian < 1 juta lembar | < 1M shares/day |
+
+Kombinasi **price spike + weak fundamental + low liquidity = gorengan** (risk score tinggi).
+
+### 11.2 Output
+
+```python
+@dataclass
+class GorenganReport:
+    symbol: str
+    is_gorengan: bool          # True jika risk_score > threshold
+    risk_score: float          # 0-100
+    flags: list[GorenganFlag]  # Detail per komponen
+```
+
+### 11.3 Integrasi
+
+- **Screener:** Filter gorengan dari hasil screen
+- **Pre-trade checklist:** Block order jika `is_gorengan = True`
+- **Warning UI:** Tampilkan gorengan warning di frontend
+- **Watchlist:** Flag gorengan di watchlist display
+
+---
+
+> **Catatan:** Untuk implementasi dalam aplikasi (red flag detection, HSC indicator, likuiditas scoring), lihat `12-panduan-membangun-aplikasi-pasar-modal.md`. Implementasi kode: `src/trading_system/analysis/gorengan_detector.py`.

@@ -757,12 +757,98 @@ def detect_data_gaps(df: pd.DataFrame, ticker: str, expected_freq: str = "D"):
 3. `src/trading_system/data/validation.py` — Data validation
 4. `src/trading_system/data/idx_scraper.py` — IDX scraper
 5. `src/trading_system/data/rate_limiter.py` — Rate limiting
-6. `pustaka/18-modul-engine-data-wajib.md` — Module & data registry
-7. `pustaka/19-flow-logic-testing-kpi.md` — Data flow end-to-end
-8. TimescaleDB Documentation: https://docs.timescale.com
-9. Apache Parquet Documentation: https://parquet.apache.org
-10. "Designing Data-Intensive Applications" — Martin Kleppmann
+6. `src/trading_system/data/adaptive_rate_limiter.py` — Adaptive rate limiter with circuit breaker
+7. `src/trading_system/data/macro_adapters.py` — FRED/BPS/BI macro data adapters
+8. `pustaka/18-modul-engine-data-wajib.md` — Module & data registry
+9. `pustaka/19-flow-logic-testing-kpi.md` — Data flow end-to-end
+10. TimescaleDB Documentation: https://docs.timescale.com
+11. Apache Parquet Documentation: https://parquet.apache.org
+12. "Designing Data-Intensive Applications" — Martin Kleppmann
 
 ---
 
-> **Catatan:** Data engineering adalah fondasi sistem trading. Data buruk → analisis buruk → keputusan buruk → kerugian. Investasi waktu terbesar harus di pipeline data.
+## 12. Implementasi: Adaptive Rate Limiter
+
+> **Sumber:** `src/trading_system/data/adaptive_rate_limiter.py` (439 baris)
+
+Sistem `trading-system` mengimplementasikan rate limiter adaptif untuk web scraping dan API calls dengan fitur:
+
+- **Network latency measurement** — auto-tune delay berdasarkan response time
+- **Sliding window request limit** — max 2000 req/jam (configurable)
+- **Exponential backoff with jitter** — base 1.5x, max 30s wait
+- **Circuit breaker** — CLOSED → OPEN (10 consecutive failures) → HALF_OPEN (60s reset)
+- **Per-symbol failure tracking** — track failure per ticker, skip jika persisten
+- **Adaptive delay** — speed up saat sukses, slow down saat error
+
+### 12.1 Circuit Breaker State Machine
+
+```
+CLOSED (normal)
+  │ 10 consecutive failures
+  ▼
+OPEN (reject all, wait 60s)
+  │ timeout expired
+  ▼
+HALF_OPEN (1 probe request)
+  │ success → CLOSED
+  │ failure → OPEN
+```
+
+### 12.2 Konfigurasi (env vars)
+
+| Env Var | Default | Fungsi |
+|---------|---------|--------|
+| `RATE_LIMIT_MIN_DELAY` | 0.3s | Minimum delay between requests |
+| `RATE_LIMIT_MAX_DELAY` | 2.0s | Maximum delay |
+| `RATE_LIMIT_MAX_REQUESTS` | 2000 | Max requests per window |
+| `RATE_LIMIT_WINDOW_SECONDS` | 3600 | Sliding window size |
+| `RATE_LIMIT_MAX_RETRIES` | 3 | Max retry attempts |
+| `RATE_LIMIT_BACKOFF_BASE` | 1.5 | Exponential backoff base |
+| `RATE_LIMIT_CIRCUIT_THRESHOLD` | 10 | Consecutive failures to open |
+| `RATE_LIMIT_CIRCUIT_RESET_SECONDS` | 60 | Seconds before half-open |
+| `RATE_LIMIT_ADAPTIVE` | true | Enable adaptive delay tuning |
+
+---
+
+## 13. Implementasi: Macro Data Adapters
+
+> **Sumber:** `src/trading_system/data/macro_adapters.py` (576 baris)
+
+Adapter pattern untuk sumber data makroekonomi — semua menggunakan `AdaptiveRateLimiter` dan menyimpan ke tabel `macro_data`.
+
+### 13.1 FRED Adapter (Federal Reserve Economic Data)
+
+| Series ID | Label | Frekuensi |
+|-----------|-------|-----------|
+| `DGS10` | US Treasury 10Y | Daily |
+| `DGS2` | US Treasury 2Y | Daily |
+| `DGS30` | US Treasury 30Y | Daily |
+| `FEDFUNDS` | Fed Funds Rate | Monthly |
+| `T10Y2Y` | Yield Curve 10Y-2Y | Daily |
+| `DCOILWTICO` | WTI Crude Oil | Daily |
+| `GOLDAMGBD228NLBM` | Gold London PM | Daily |
+| `GDP` | US GDP | Quarterly |
+| `CPIAUCSL` | US CPI | Monthly |
+| `UNRATE` | US Unemployment | Monthly |
+| `VIXCLS` | VIX | Daily |
+| `DTWEXBGS` | Trade-Weighted USD Index | Daily |
+
+### 13.2 BPS Adapter (Badan Pusat Statistik)
+
+GDP, inflasi, perdagangan, populasi Indonesia.
+
+### 13.3 BI Adapter (Bank Indonesia)
+
+BI rate, exchange rate, money supply.
+
+### 13.4 Pola Adapter
+
+Semua adapter mengikuti interface yang sama:
+1. Fetch data via HTTP API / web scrape (dengan rate limiting)
+2. Parse response ke DataFrame
+3. Normalize ke schema: `series_name, date, value, unit, source, frequency`
+4. Save via `DataStorage.save_macro_data()`
+
+---
+
+> **Catatan:** Data engineering adalah fondasi sistem trading. Data buruk → analisis buruk → keputusan buruk → kerugian. Investasi waktu terbesar harus di pipeline data. Implementasi: `src/trading_system/data/adaptive_rate_limiter.py`, `src/trading_system/data/macro_adapters.py`.

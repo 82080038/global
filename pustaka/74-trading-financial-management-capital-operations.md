@@ -1366,4 +1366,91 @@ CREATE TABLE IF NOT EXISTS capital_allocations (
 
 ---
 
-> **Catatan:** "Trading tanpa manajemen keuangan adalah judi." Sistem yang tidak tahu berapa modalnya, tidak tahu apakah modal cukup, dan tidak tahu apakah profit atau loss — bukan sistem trading, melainkan sistem spekulasi. Financial management adalah fondasi yang menentukan apakah sistem survive atau blow up.
+## 16. Implementasi: Pre-Trade Checklist
+
+> **Sumber:** `src/trading_system/risk/pre_trade_checklist.py` (396 baris)
+
+Sistem `trading-system` mengimplementasikan 9 automated pre-trade checks sebelum eksekusi order.
+
+### 16.1 Checklist Items
+
+| # | Check | Threshold | Status |
+|---|-------|-----------|--------|
+| 1 | Fundamental score | ≥ 40 | PASS/FAIL/WARN |
+| 2 | Liquidity (volume) | ≥ 100K shares/day | PASS/FAIL |
+| 3 | Position sizing | Risk ≤ 2% capital | PASS/FAIL |
+| 4 | Sector concentration | ≤ 30% per sector | PASS/FAIL/WARN |
+| 5 | Free float | ≥ 15% (reformasi 2026) | PASS/FAIL/WARN |
+| 6 | Risk/Reward ratio | ≥ 1:2 | PASS/FAIL/WARN |
+| 7 | Behavioral risk | Score < 70 | PASS/FAIL/WARN |
+| 8 | Gorengan detection | Not gorengan | PASS/FAIL |
+| 9 | Market regime | Not crisis/unknown | PASS/FAIL |
+
+### 16.2 Output
+
+```python
+@dataclass
+class PreTradeReport:
+    ticker: str
+    checks: list[ChecklistResult]
+    can_proceed: bool       # True jika tidak ada FAIL
+
+    @property
+    def fail_count(self) -> int
+    @property
+    def warn_count(self) -> int
+    @property
+    def pass_count(self) -> int
+```
+
+### 16.3 Integrasi
+
+- **Execution gate:** `can_proceed = False` → block order
+- **Warning UI:** Tampilkan WARN items sebagai peringatan
+- **Audit log:** Simpan hasil checklist untuk setiap order
+
+---
+
+## 17. Implementasi: Profit Tracker & Strategy Selector
+
+> **Sumber:** `src/trading_system/portfolio/profit_tracker.py` (202 baris), `src/trading_system/portfolio/strategy_selector.py` (184 baris)
+
+### 17.1 Profit Tracker
+
+Memecah return portofolio berdasarkan sumber:
+
+| Komponen | Formula |
+|----------|---------|
+| Capital gain | `(current_price - avg_cost) × shares` |
+| Dividend income | Sum of dividends received |
+| Total return | Capital gain + dividends |
+| ROI | `Total return / cost_basis` |
+| Yield on cost | `Dividends / cost_basis` |
+
+### 17.2 Strategy Selector
+
+Pemilihan strategi berdasarkan profil investor:
+
+| Modal | Risk Tolerance | Strategi | Expected Return |
+|-------|---------------|----------|-----------------|
+| < Rp 1jt | Any | DCA Blue Chip | 8-12% p.a. |
+| Rp 1-10jt | Low-Moderate | Value + DCA | 10-15% p.a. |
+| Rp 10-100jt | Moderate | Multi-strategy | 12-18% p.a. |
+| > Rp 100jt | High | Active + SW | 15-25% p.a. |
+
+```python
+@dataclass
+class InvestorProfile:
+    capital: float
+    risk_tolerance: str    # low, moderate, high
+    hours_per_week: float  # waktu tersedia
+    timeframe: str         # short, medium, long
+    goal: str              # growth, income, stability
+    age: int | None
+    has_emergency_fund: bool
+    uses_cold_money: bool
+```
+
+---
+
+> **Catatan:** "Trading tanpa manajemen keuangan adalah judi." Sistem yang tidak tahu berapa modalnya, tidak tahu apakah modal cukup, dan tidak tahu apakah profit atau loss — bukan sistem trading, melainkan sistem spekulasi. Financial management adalah fondasi yang menentukan apakah sistem survive atau blow up. Implementasi: `src/trading_system/risk/pre_trade_checklist.py`, `src/trading_system/portfolio/profit_tracker.py`, `src/trading_system/portfolio/strategy_selector.py`.

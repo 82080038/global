@@ -760,4 +760,43 @@ def vwap_schedule(total_qty: int, volume_profile: list):
 
 ---
 
-> **Catatan:** Microstructure understanding adalah competitive advantage. Trader yang memahami likuiditas, spread, dan impact akan menghindari biaya tersembunyi yang menggerus return.
+## 12. Implementasi: Order Book Analyzer
+
+> **Sumber:** `src/trading_system/analysis/order_book.py` (381 baris)
+
+Sistem `trading-system` mengimplementasikan analisis gap dan support/resistance dari data OHLCV — pure pandas/numpy, tanpa dependency eksternal.
+
+### 12.1 Fitur
+
+| Fitur | Deskripsi | Parameter |
+|-------|-----------|-----------|
+| **Price gap detection** | Deteksi gap antar candle > threshold | `gap_threshold = 0.02` (2%) |
+| **Volume gap detection** | Deteksi perubahan volume > threshold | `volume_threshold = 0.5` (50%) |
+| **Support/Resistance** | Level yang diuji ≥ 3x dengan toleransi 1% | `test_count ≥ 3`, `tolerance = 1%` |
+| **Gap strength scoring** | Ukur kekuatan gap berdasarkan rasio | `gap_ratio` |
+| **Gap fill prediction** | Prediksi gap fill menuju equilibrium | Berdasarkan historical fill rate |
+
+### 12.2 Output
+
+```python
+class OrderBookAnalyzer:
+    def detect_price_gaps(self, data: pd.DataFrame) -> list[dict]:
+        """Returns list of gaps with direction (UP/DOWN) and strength."""
+
+    def detect_volume_gaps(self, data: pd.DataFrame) -> list[dict]:
+        """Returns list of volume anomalies (INCREASE/DECREASE)."""
+
+    def identify_support_resistance(self, data: pd.DataFrame) -> list[dict]:
+        """Returns S/R levels with test count and strength."""
+```
+
+### 12.3 Use Case
+
+- **Pre-trade:** Cek apakah harga dekat support/resistance kuat
+- **Risk management:** Gap risk → adjust stop loss placement
+- **Pattern discovery:** Gap fill prediction sebagai trading signal
+- **Liquidity analysis:** Volume gap → deteksi perubahan minat investor
+
+---
+
+> **Catatan:** Microstructure understanding adalah competitive advantage. Trader yang memahami likuiditas, spread, dan impact akan menghindari biaya tersembunyi yang menggerus return. Implementasi: `src/trading_system/analysis/order_book.py`.

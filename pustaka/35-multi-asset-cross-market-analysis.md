@@ -831,4 +831,55 @@ GLOBAL_DATA_SOURCES = {
 
 ---
 
-> **Catatan:** Pasar tidak bergerak dalam isolasi. IDX sangat dipengaruhi oleh global market, commodity prices, dan USD/IDR. Sistem trading yang mengabaikan intermarket relationships akan kehilangan konteks penting dan membuat keputusan yang suboptimal.
+## 12. Implementasi: World Monitor & Country Instability Index (CII)
+
+> **Sumber:** `src/trading_system/analysis/world_monitor.py` (336 baris)
+
+Sistem `trading-system` mengimplementasikan dua konsep dari worldmonitor (TypeScript, reverse-engineered ke Python):
+
+### 12.1 7-Signal Market Composite
+
+Deteksi pola cross-source dari news + market data streams:
+
+| Signal | Deskripsi |
+|--------|-----------|
+| **Convergence** | Multiple sources mengkonfirmasi tren yang sama |
+| **Velocity** | Kecepatan perubahan sentimen/harga |
+| **Divergence** | Source conflict (mis. harga naik tapi news negatif) |
+| **Sector cascade** | Efek domino antar sektor |
+| **Volume anomaly** | Volume tidak wajar vs baseline |
+| **Sentiment shift** | Perubahan sentimen tajam |
+| **Correlation breakdown** | Korelasi historis putus |
+
+### 12.2 Country Instability Index (CII)
+
+4-component geopolitical risk score per negara:
+
+| Komponen | Kode | Deskripsi |
+|----------|------|-----------|
+| **Unrest** | U | Kerusuhan/protes sipil |
+| **Conflict** | C | Konflik bersenjata/sengketa |
+| **Security** | S | Tingkat keamanan |
+| **Information** | I | Akses informasi/transparansi |
+
+Formula: `CII = (U + C + S + I) × event_multiplier + baseline_risk`
+
+### 12.3 Country Weights (sample)
+
+| Negara | Baseline Risk | Event Multiplier |
+|--------|---------------|-------------------|
+| US | 5 | 0.3 |
+| CN | 25 | 2.5 |
+| ID | 15 | 0.8 |
+| JP | 5 | 0.5 |
+| RU | 35 | 2.0 |
+
+### 12.4 Integrasi
+
+- **Global market engine:** CII sebagai input untuk risk premium
+- **Decision engine:** CII tinggi → kurangi exposure ke pasar terkait
+- **Alert system:** CII spike → notifikasi geopolitical risk warning
+
+---
+
+> **Catatan:** Pasar tidak bergerak dalam isolasi. IDX sangat dipengaruhi oleh global market, commodity prices, dan USD/IDR. Sistem trading yang mengabaikan intermarket relationships akan kehilangan konteks penting dan membuat keputusan yang suboptimal. Implementasi: `src/trading_system/analysis/world_monitor.py`.

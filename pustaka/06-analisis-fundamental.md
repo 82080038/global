@@ -765,4 +765,60 @@ def peer_comparison(target_ratios, peer_ratios_list, metrics):
 
 ---
 
-> **Catatan:** Untuk implementasi produksi dalam aplikasi, lihat `11-knowledge-transfer-aplikasi.md` dan `12-panduan-membangun-aplikasi-pasar-modal.md`.
+## 14. Implementasi: Fundamental Red Flags Detection
+
+> **Sumber:** `src/trading_system/analysis/red_flags.py` (307 baris)
+
+Sistem `trading-system` mengimplementasikan deteksi red flags kesehatan keuangan perusahaan dari data fundamental.
+
+### 14.1 Tiga Kategori Red Flags
+
+**Earnings Quality:**
+
+| Metric | Formula | Red Flag Threshold |
+|--------|---------|-------------------|
+| Cash conversion ratio | `Operating CF / Net Income` | < 0.5 (earnings tidak didukung cash) |
+| Accrual ratio | `(NI - OCF) / Total Assets` | > 0.1 (accruals tinggi) |
+| Days sales outstanding | `(AR / Revenue) × 365` | > 90 hari (koleksi lambat) |
+| Inventory turnover | `COGS / Inventory` | < 4x (inventory menumpuk) |
+
+**Balance Sheet Health:**
+
+| Metric | Formula | Red Flag Threshold |
+|--------|---------|-------------------|
+| Current ratio | `Current Assets / Current Liabilities` | < 1.0 (likuiditas buruk) |
+| Debt to equity | `Total Debt / Equity` | > 3.0 (overleveraged) |
+| Goodwill ratio | `Goodwill / Total Assets` | > 30% (overpay untuk akuisisi) |
+| Short-term debt ratio | `Short-term Debt / Total Debt` | > 60% (refinancing risk) |
+
+**Corporate Governance:**
+
+| Flag | Deteksi |
+|------|---------|
+| Revenue concentration | > 70% dari 1 customer |
+| Related party transactions | > 20% revenue dari pihak berelasi |
+| Auditor change | Switch auditor tanpa alasan jelas |
+| Frequent restructuring | > 3x dalam 5 tahun |
+
+### 14.2 Output
+
+```python
+@dataclass
+class RedFlag:
+    flag_type: str       # EARNINGS_QUALITY, BALANCE_SHEET, GOVERNANCE
+    severity: str        # low, medium, high, critical
+    description: str
+    value: float | None
+    threshold: float | None
+```
+
+### 14.3 Integrasi
+
+- **Fundamental engine:** Red flags mengurangi fundamental score
+- **Pre-trade checklist:** Critical flag → block order
+- **Screener:** Filter saham dengan red flags tinggi
+- **XAI:** Tampilkan red flags dalam narasi explanation
+
+---
+
+> **Catatan:** Untuk implementasi produksi dalam aplikasi, lihat `11-knowledge-transfer-aplikasi.md` dan `12-panduan-membangun-aplikasi-pasar-modal.md`. Implementasi: `src/trading_system/analysis/red_flags.py`.

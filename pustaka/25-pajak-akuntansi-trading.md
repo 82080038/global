@@ -678,4 +678,55 @@ CREATE INDEX IF NOT EXISTS idx_cost_basis_ticker_date ON cost_basis_lots(ticker,
 
 ---
 
-> **Catatan:** Pajak saham di Indonesia relatif sederhana (PPh final 0,1% penjualan + 10% dividen, sudah dipotong di sumber). Namun aplikasi wajib melacak dan melaporkan untuk SPT tahunan. Konsultasi dengan konsultan pajak untuk kasus khusus.
+## 11. Implementasi: Indonesia Tax Calculator
+
+> **Sumber:** `src/trading_system/execution/tax.py` (200 baris)
+
+Sistem `trading-system` mengimplementasikan kalkulator pajak spesifik untuk pasar saham Indonesia.
+
+### 11.1 Tarif Pajak (TaxRates)
+
+| Komponen | Tarif | Keterangan |
+|----------|-------|------------|
+| PPh dividen | 10% | Dipotong di sumber oleh emitenn |
+| PPh final penjualan | 0.1% | Dipotong oleh broker saat jual |
+| Broker fee | 0.2% | Komisi broker (dapat nego) |
+| Clearing fee | 0.03% | KPEI clearing |
+| Custody fee | 0.01% | KSEI custody |
+
+### 11.2 Data Class
+
+```python
+@dataclass
+class TransactionCostBreakdown:
+    gross_amount: float
+    broker_fee: float
+    clearing_fee: float
+    custody_fee: float
+    transaction_tax: float
+    total_cost: float
+    net_amount: float
+
+@dataclass
+class TradeResult:
+    entry_price: float
+    exit_price: float
+    position_size: int
+    gross_pnl: float
+    buy_costs: TransactionCostBreakdown
+    sell_costs: TransactionCostBreakdown
+    transaction_tax: float
+    net_pnl: float
+    net_pnl_pct: float
+```
+
+### 11.3 Integrasi
+
+- **Execution engine:** Hitung biaya total sebelum order placement
+- **Backtest:** Simulasi realistis dengan biaya transaksi lengkap
+- **Portfolio tracker:** Track cost basis dan realized PnL after tax
+- **Reporting:** Generate laporan pajak untuk SPT tahunan
+
+---
+
+> **Catatan:** Pajak saham di Indonesia relatif sederhana (PPh final 0,1% penjualan + 10% dividen, sudah dipotong di sumber). Namun aplikasi wajib melacak dan melaporkan untuk SPT tahunan. Konsultasi dengan konsultan pajak untuk kasus khusus. Implementasi: `src/trading_system/execution/tax.py`.

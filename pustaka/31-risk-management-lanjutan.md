@@ -853,4 +853,78 @@ IDX_RISK_PARAMS = {
 
 ---
 
-> **Catatan:** Risk management bukan opsional — ia adalah survival. Trader yang baik bukan yang paling untung, tetapi yang paling lama bertahan. VaR, stress test, dan drawdown management adalah tiga pilar risk management yang wajib ada di setiap sistem trading.
+## 14. Implementasi: Correlation-Aware Position Sizing
+
+> **Sumber:** `src/trading_system/risk/corr_sizing.py` (132 baris)
+
+Sistem `trading-system` mengimplementasikan position sizing yang mempertimbangkan korelasi antar aset untuk meningkatkan diversifikasi.
+
+### 14.1 Correlation Penalty
+
+```python
+class CorrelationPositionSizing:
+    @staticmethod
+    def correlation_penalty(corr_matrix: np.ndarray, weights: np.ndarray) -> float:
+        """Higher correlation = higher penalty = less effective diversification.
+        Returns: Penalty factor (0 to 1). 1 = no penalty, 0 = max penalty."""
+```
+
+### 14.2 Risk Parity Weights
+
+```python
+    @staticmethod
+    def risk_parity_weights(volatilities: np.ndarray, corr_matrix: np.ndarray) -> np.ndarray:
+        """Compute risk parity weights (equal risk contribution).
+        Inverse volatility weighting as starting point, then adjust for correlation."""
+```
+
+### 14.3 Use Case
+
+- **Portfolio construction:** Weight alokasi berdasarkan risk contribution, bukan nominal
+- **Sector diversification:** Kurangi weight jika korelasi antar holding tinggi
+- **Dynamic rebalancing:** Adjust weight saat korelasi berubah (regime shift)
+
+---
+
+## 15. Implementasi: Kelly Criterion & Expectancy
+
+> **Sumber:** `src/trading_system/risk/kelly.py` (140 baris), `src/trading_system/risk/expectancy.py` (79 baris)
+
+### 15.1 Kelly Criterion
+
+Formula: `f* = (bp - q) / b` di mana b = avg_win/avg_loss, p = win_rate, q = 1-p
+
+```python
+@dataclass
+class KellyResult:
+    kelly_fraction: float      # Full Kelly (aggressive)
+    half_kelly: float          # 0.5x Kelly (moderate)
+    quarter_kelly: float       # 0.25x Kelly (conservative)
+    expected_return: float
+    win_rate: float
+    avg_win: float
+    avg_loss: float
+```
+
+**Rekomendasi:** Gunakan **half-Kelly** atau **quarter-Kelly** untuk IDX — full Kelly terlalu agresif untuk pasar emerging dengan volatilitas tinggi.
+
+### 15.2 Trading Expectancy
+
+```python
+class TradingExpectancy:
+    @staticmethod
+    def compute(trades: list[TradeResult]) -> dict[str, float]:
+        """Returns: win_rate, avg_win, avg_loss, rrr, expectancy, kelly_fraction"""
+```
+
+Expectancy = `(win_rate × avg_win) - (loss_rate × avg_loss)` — positif = profitable, negatif = losing system.
+
+### 15.3 Integrasi
+
+- **Position sizing:** Kelly fraction → max position size per trade
+- **Strategy evaluation:** Expectancy > 0 required sebelum deploy strategy
+- **Walk-forward validation:** Kelly fraction stabil across folds = robust strategy
+
+---
+
+> **Catatan:** Risk management bukan opsional — ia adalah survival. Trader yang baik bukan yang paling untung, tetapi yang paling lama bertahan. VaR, stress test, dan drawdown management adalah tiga pilar risk management yang wajib ada di setiap sistem trading. Implementasi: `src/trading_system/risk/corr_sizing.py`, `src/trading_system/risk/kelly.py`, `src/trading_system/risk/expectancy.py`.

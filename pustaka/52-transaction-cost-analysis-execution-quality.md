@@ -453,4 +453,60 @@ CREATE TABLE tca_log (
 
 ---
 
-> **Catatan:** TCA bukan luxury — adalah necessity untuk trading real. "Profit yang tidak diukur adalah profit yang tidak ada." Setiap basis point slippage yang dihemat = profit yang di-amankan.
+## 10. Implementasi: CostModel Singleton
+
+> **Sumber:** `src/trading_system/risk/costs.py` (202 baris)
+
+Sistem `trading-system` mengimplementasikan single source of truth untuk ATR, broker fee, levy, dan slippage.
+
+### 10.1 CostModel Class
+
+```python
+class CostModel:
+    buy_fee: float = 0.0015       # 0.15% beli
+    sell_fee: float = 0.0025      # 0.15% broker + 0.1% PPh
+    levy: float = 0.0000043       # 0.00043% levy bursa
+    slippage: float = 0.0005      # 0.05% slippage default
+
+    def buy_cost_pct(self) -> float:   # Total: fee + levy + slippage
+    def sell_cost_pct(self) -> float:  # Total: fee + levy + slippage
+
+    def compute_fees(self, order_value, action) -> dict:
+        """Returns: brokerage, levy, tax, total"""
+
+    def estimate_slippage(self, order_value, avg_daily_value) -> float:
+        """3-tier: <0.1% ADV = base, <1% = 2x, >1% = 4x"""
+
+    def simulate_fill(self, action, shares, last_price, avg_daily_value) -> dict:
+        """Returns: fill_price, gross_value, fees, net_value, slippage_pct"""
+
+    def check_feasibility(self, shares, price, cash, avg_daily_value) -> dict:
+        """Returns: feasible, required_cash, available_cash, slippage_pct"""
+```
+
+### 10.2 Adaptive Slippage (3-Tier)
+
+| Order Size vs ADV | Slippage Multiplier | Rationale |
+|--------------------|---------------------|-----------|
+| < 0.1% ADV | 1x (0.05%) | Negligible market impact |
+| 0.1% - 1% ADV | 2x (0.10%) | Moderate impact |
+| > 1% ADV | 4x (0.20%) | Significant impact, warn user |
+
+### 10.3 ATR Consolidation
+
+`compute_atr()` dan `get_latest_atr()` dipindahkan ke `costs.py` sebagai single source — digunakan oleh risk engine, execution engine, backtest engine, dan enhanced risk.
+
+### 10.4 Singleton Pattern
+
+```python
+_default_cost_model = CostModel()
+
+def get_default_cost_model() -> CostModel:
+    return _default_cost_model
+```
+
+Semua modul menggunakan instance yang sama → perubahan tarif hanya di satu tempat.
+
+---
+
+> **Catatan:** TCA bukan luxury — adalah necessity untuk trading real. "Profit yang tidak diukur adalah profit yang tidak ada." Setiap basis point slippage yang dihemat = profit yang di-amankan. Implementasi: `src/trading_system/risk/costs.py`.

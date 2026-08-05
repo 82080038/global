@@ -542,4 +542,51 @@ Prinsip *nudge* (dorongan lembut) untuk membantu retail membuat keputusan lebih 
 
 ---
 
-> **Catatan:** Untuk implementasi produksi dalam aplikasi, lihat `11-knowledge-transfer-aplikasi.md` dan `12-panduan-membangun-aplikasi-pasar-modal.md`. Untuk analisis lengkap fitur aplikasi retail, lihat `17-aplikasi-retail-pribadi.md`.
+## 11. Implementasi: Behavioral Risk Score dari Data OHLCV
+
+> **Sumber:** `src/trading_system/analysis/behavioral_risk.py` (272 baris)
+
+Sistem `trading-system` mengimplementasikan deteksi 6 bias kognitif langsung dari pola price/volume OHLCV — tanpa memerlukan data psikologis investor.
+
+### 11.1 Arsitektur
+
+```python
+@dataclass
+class BehavioralBias:
+    bias_type: str       # FOMO, LOSS_AVERSION, OVERCONFIDENCE, RECENCY, ANCHORING, MENTAL_ACCOUNTING
+    severity: str        # low, medium, high
+    description: str
+    value: float | None
+    threshold: float | None
+
+@dataclass
+class BehavioralRiskReport:
+    score: float         # 0-100, higher = more behavioral risk
+    biases: list[BehavioralBias]
+
+    @property
+    def has_high_risk(self) -> bool:
+        return any(b.severity == "high" for b in self.biases)
+```
+
+### 11.2 Algoritma Deteksi
+
+| Bias | Deteksi dari OHLCV | Threshold |
+|------|---------------------|-----------|
+| **FOMO/Herding** | Harga naik tajam + volume spike dalam 10 hari | Return > 15%, Volume > 2x median |
+| **Loss Aversion** | Harga di bawah MA50 lama, volume menurun | Harga < MA50, Volume < 0.7x median |
+| **Overconfidence** | Turnover tinggi (volume/market cap) | Volume/Float > 3x rata-rata |
+| **Recency Bias** | Return jangka pendek tidak proporsional vs panjang | 1M return > 3x 12M return |
+| **Anchoring** | Harga oscillate di sekitar level tertentu tanpa breakout | Std < 2% dari anchor, > 20 hari |
+| **Mental Accounting** | Pola profit-taking (sell winners, hold losers) | Deteksi dari trade history pattern |
+
+### 11.3 Integrasi dengan Decision Engine
+
+Behavioral risk score digunakan sebagai:
+- **Pre-trade gate:** Score > 70 → warning, > 85 → block order
+- **Decision Engine input:** Mengurangi conviction score jika behavioral risk tinggi
+- **Portfolio monitoring:** Flag posisi yang mungkin dipengaruhi bias
+
+---
+
+> **Catatan:** Untuk implementasi produksi dalam aplikasi, lihat `11-knowledge-transfer-aplikasi.md` dan `12-panduan-membangun-aplikasi-pasar-modal.md`. Untuk analisis lengkap fitur aplikasi retail, lihat `17-aplikasi-retail-pribadi.md`. Implementasi kode: `src/trading_system/analysis/behavioral_risk.py`.

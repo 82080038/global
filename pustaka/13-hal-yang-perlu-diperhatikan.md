@@ -588,4 +588,48 @@ Empat pilar reformasi (Februari 2026):
 
 ---
 
-> **Catatan:** Untuk implementasi dalam aplikasi (fitur mitigasi bias, risk score, checklist otomatis), lihat `12-panduan-membangun-aplikasi-pasar-modal.md`. Untuk analisis lengkap fitur aplikasi retail, lihat `17-aplikasi-retail-pribadi.md`.
+## 13. Implementasi: No-Trade Engine
+
+> **Sumber:** `src/trading_system/analysis/no_trade.py` (259 baris)
+
+Sistem `trading-system` mengimplementasikan 7 gate untuk menentukan kapan **TIDAK** trade — no-trade adalah keputusan sama pentingnya dengan trade.
+
+### 13.1 Gate Checklist
+
+| Gate | Kondisi NO_TRADE | Parameter |
+|------|------------------|-----------|
+| **Data quality** | Stale data > 7 hari | `max_stale_days = 7` |
+| **Confidence** | Composite alpha < 0.3 | `min_composite_alpha = 0.3` |
+| **Liquidity** | Volume < 100K | `min_liquidity_volume = 100_000` |
+| **Event risk** | Earnings/corporate action dalam 5 hari | `event_risk_window_days = 5` |
+| **Model disagreement** | Model agreement < 60% | `min_model_agreement = 0.6` |
+| **Regime uncertainty** | Crisis atau unknown regime | `regime_blocklist = ["crisis", "unknown"]` |
+| **IPO lockup** | Saham baru listing < 20 hari history | `ipo_min_history_days = 20` |
+
+### 13.2 Output
+
+```python
+@dataclass
+class NoTradeResult:
+    instrument_id: int
+    symbol: str
+    decision: str           # "NO_TRADE" or "PROCEED"
+    gates_failed: list[str]
+    gates_passed: list[str]
+    reason_codes: list[str]
+```
+
+### 13.3 Filosofi
+
+> "The best traders don't trade most of the time." — No-trade engine memastikan sistem hanya bertindak ketika semua kondisi mendukung. Setiap gate yang gagal = satu alasan untuk tidak trade.
+
+### 13.4 Integrasi
+
+- **Pipeline:** No-trade check sebelum decision engine
+- **Screener:** Filter NO_TRADE dari hasil screening
+- **Execution:** Block order jika `decision = "NO_TRADE"`
+- **Monitoring:** Track NO_TRADE rate sebagai health metric
+
+---
+
+> **Catatan:** Untuk implementasi dalam aplikasi (fitur mitigasi bias, risk score, checklist otomatis), lihat `12-panduan-membangun-aplikasi-pasar-modal.md`. Untuk analisis lengkap fitur aplikasi retail, lihat `17-aplikasi-retail-pribadi.md`. Implementasi No-Trade Engine: `src/trading_system/analysis/no_trade.py`.

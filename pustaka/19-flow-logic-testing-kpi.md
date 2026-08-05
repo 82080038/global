@@ -1439,4 +1439,45 @@ Kedua toggle mengupdate `os.environ` dan instance engine **tanpa restart server*
 
 ---
 
-> **Catatan:** Dokumen ini adalah referensi definitif untuk flow, logic, testing, aturan aplikasi, dan KPI. Untuk detail implementasi teknis, lihat source code di `src/trading_system/` dan dokumentasi di `docs/`. Untuk daftar modul dan engine, lihat `pustaka/18-modul-engine-data-wajib.md`. Untuk strategi mencegah gap antara hasil testing dan trading nyata, lihat `85-backtest-to-live-gap-prevention.md`.
+## 16. Implementasi: No-Trade Engine dalam Flow Pipeline
+
+> **Sumber:** `src/trading_system/analysis/no_trade.py` (259 baris)
+
+No-Trade Engine berada **sebelum** Decision Engine dalam pipeline — sebagai gate yang menentukan apakah suatu saham layak diproses lebih lanjut.
+
+### 16.1 Posisi dalam Flow
+
+```
+Data Acquisition → Validation → Technical/Fundamental/Macro/Global/Sentiment
+  → No-Trade Engine (7 gates)
+    → if NO_TRADE: skip, log reason
+    → if PROCEED: continue to Decision Engine
+      → Decision Engine (conviction scoring)
+        → Risk Engine (position sizing, SL/TP)
+          → Pre-Trade Checklist (9 checks)
+            → Execution or Skip
+```
+
+### 16.2 Gate Flow Detail
+
+| Gate | Input | Output |
+|------|-------|--------|
+| Data quality | `last_bar_date` vs today | PASS if < 7 days stale |
+| Confidence | `composite_alpha` | PASS if ≥ 0.3 |
+| Liquidity | `avg_volume_20d` | PASS if ≥ 100K |
+| Event risk | `corporate_actions` within 5 days | PASS if no event |
+| Model agreement | `model_agreement_ratio` | PASS if ≥ 0.6 |
+| Regime | `macro_regime` | PASS if not crisis/unknown |
+| IPO lockup | `listing_date`, `bars_since_listing` | PASS if ≥ 20 bars |
+
+### 16.3 KPI: NO_TRADE Rate
+
+| Metric | Target | Action if Off |
+|--------|--------|---------------|
+| NO_TRADE rate | 30-60% | < 30%: gates too loose; > 60%: gates too strict |
+| Top reason | Track distribution | If "data quality" dominates → fix data pipeline |
+| False positive rate | < 10% | Monitor via manual review |
+
+---
+
+> **Catatan:** Dokumen ini adalah referensi definitif untuk flow, logic, testing, aturan aplikasi, dan KPI. Untuk detail implementasi teknis, lihat source code di `src/trading_system/` dan dokumentasi di `docs/`. Untuk daftar modul dan engine, lihat `pustaka/18-modul-engine-data-wajib.md`. Untuk strategi mencegah gap antara hasil testing dan trading nyata, lihat `85-backtest-to-live-gap-prevention.md`. Implementasi No-Trade Engine: `src/trading_system/analysis/no_trade.py`.

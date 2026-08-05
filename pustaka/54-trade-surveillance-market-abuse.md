@@ -291,4 +291,51 @@ Jika OJK audit, siapkan:
 
 ---
 
-> **Catatan:** Trade surveillance bukan paranoia — adalah profesionalisme. "Audit diri sendiri sebelum diaudit orang lain." Setiap pattern mencurigakan yang terdeteksi adalah opportunity untuk improve trading discipline.
+## 8. Implementasi: Manipulation Detection Engine
+
+> **Sumber:** `src/trading_system/analysis/manipulation.py` (179 baris)
+
+Sistem `trading-system` mengimplementasikan deteksi 6 pattern manipulasi pasar langsung dari data OHLCV.
+
+### 8.1 Pattern Detection
+
+| Pattern | Deteksi | Threshold |
+|---------|---------|-----------|
+| **Volume anomaly** | Volume spike vs median 20 hari | > 5x median |
+| **Price-volume divergence** | Harga naik tapi volume turun (atau sebaliknya) | Divergence > 30% |
+| **Marking the close** | Price spike di menit-menit akhir sesi | Return 15:30-15:50 > 2x daily return |
+| **Pump & dump** | Sharp rise + volume spike + sharp decline | Rise > 20% lalu drop > 15% |
+| **Wash trading** | High volume tapi price change kecil | Volume > 3x median, price change < 1% |
+| **Spread anomaly** | High-low range spike | Range > 3x rata-rata |
+
+### 8.2 Output
+
+```python
+@dataclass
+class ManipulationFlag:
+    check: str          # Nama pattern
+    date: str           # Tanggal deteksi
+    severity: str       # low, medium, high
+    detail: str         # Deskripsi
+
+@dataclass
+class ManipulationReport:
+    symbol: str
+    flags: list[ManipulationFlag]
+    risk_score: float   # 0-100
+
+    @property
+    def has_danger(self) -> bool:
+        return any(f.severity == "high" for f in self.flags)
+```
+
+### 8.3 Integrasi
+
+- **Pre-trade checklist:** Block order jika `has_danger = True`
+- **Surveillance dashboard:** Tampilkan manipulation flags untuk monitoring
+- **Compliance log:** Simpan ke audit_log untuk laporan OJK
+- **Alert system:** Notifikasi jika risk_score > 70
+
+---
+
+> **Catatan:** Trade surveillance bukan paranoia — adalah profesionalisme. "Audit diri sendiri sebelum diaudit orang lain." Setiap pattern mencurigakan yang terdeteksi adalah opportunity untuk improve trading discipline. Implementasi: `src/trading_system/analysis/manipulation.py`.
