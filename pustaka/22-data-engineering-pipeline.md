@@ -773,6 +773,15 @@ def detect_data_gaps(df: pd.DataFrame, ticker: str, expected_freq: str = "D"):
 
 Sistem `trading-system` mengimplementasikan rate limiter adaptif untuk web scraping dan API calls dengan fitur:
 
+| 5W1H | Detail |
+|------|--------|
+| **What** | Adaptive Rate Limiter: sliding window + exponential backoff + circuit breaker + per-symbol failure tracking |
+| **Why** | Yahoo Finance dan idx.co.id membatasi request — tanpa rate limiter, IP di-ban dan data acquisition berhenti |
+| **When** | Setiap HTTP request ke Yahoo Finance, FRED, BPS, BI, idx.co.id |
+| **Where** | Data layer: adaptive_rate_limiter.py → acquisition.py + macro_adapters.py + idx_batch.py |
+| **Who** | Dipanggil oleh semua data fetcher modules |
+| **How** | Measure latency → tune delay; sliding window 2000 req/jam; backoff 1.5x on failure; circuit breaker 10 fail = OPEN |
+
 - **Network latency measurement** — auto-tune delay berdasarkan response time
 - **Sliding window request limit** — max 2000 req/jam (configurable)
 - **Exponential backoff with jitter** — base 1.5x, max 30s wait
@@ -816,6 +825,15 @@ HALF_OPEN (1 probe request)
 
 Adapter pattern untuk sumber data makroekonomi — semua menggunakan `AdaptiveRateLimiter` dan menyimpan ke tabel `macro_data`.
 
+| 5W1H | Detail |
+|------|--------|
+| **What** | Macro Data Adapters: FRED, BPS, Bank Indonesia — adapter pattern untuk data makroekonomi |
+| **Why** | Data makro (interest rate, inflation, GDP) dibutuhkan oleh macro engine — perlu fetch otomatis dari multiple sources |
+| **When** | Scheduled fetch (daily/weekly/monthly tergantung frekuensi series) |
+| **Where** | Data layer: macro_adapters.py → macro.py (analysis) → decision engine (15% weight) |
+| **Who** | Dipanggil oleh CLI `fetch --macro` dan scheduled tasks |
+| **How** | HTTP API call dengan rate limiting → parse response → normalize ke schema → save ke macro_data table |
+
 ### 13.1 FRED Adapter (Federal Reserve Economic Data)
 
 | Series ID | Label | Frekuensi |
@@ -851,4 +869,42 @@ Semua adapter mengikuti interface yang sama:
 
 ---
 
-> **Catatan:** Data engineering adalah fondasi sistem trading. Data buruk → analisis buruk → keputusan buruk → kerugian. Investasi waktu terbesar harus di pipeline data. Implementasi: `src/trading_system/data/adaptive_rate_limiter.py`, `src/trading_system/data/macro_adapters.py`.
+## 14. Implementasi: IDX Batch Scraper
+
+> **Sumber:** `src/trading_system/data/idx_batch.py` (376 baris)
+
+**What:** Batch scraper untuk data ringkasan perdagangan dan broker flow dari idx.co.id.
+**Why:** Data Yahoo Finance terbatas pada OHLCV — IDX scraper menyediakan foreign flow, broker flow, dan summary perdagangan yang tidak tersedia di Yahoo.
+**When:** Daily/scheduled setelah market close (17:00 WIB).
+**Where:** Data acquisition pipeline, complement Yahoo Finance data.
+**Who:** Dipanggil oleh CLI `fetch-idx-foreign-flow` dan `fetch-idx-broker-flow`.
+
+### 14.1 Data yang Di-Scrape
+
+| Data | URL | Headers | Output |
+|------|-----|---------|--------|
+| **Stock summary** | `/id/data-pasar/ringkasan-perdagangan/ringkasan-saham/` | AJAX headers | OHLCV + foreign flow per saham |
+| **Broker summary** | `/id/data-pasar/ringkasan-perdagangan/ringkasan-broker/` | AJAX headers | Broker flow per broker |
+
+### 14.2 Fitur
+
+- **curl_cffi** untuk bypass Cloudflare (fallback ke requests jika tidak installed)
+- **AdaptiveRateLimiter** untuk rate limiting
+- **Trading date generation** — hanya tanggal bursa (skip weekend/holiday)
+- **Default 47 saham liquid** (ADRO, AKRA, ANTM, ASII, ... WSBP)
+- **Archive to Parquet** di `DATA_ARCHIVE_DIR`
+
+### 14.3 5W1H
+
+| Aspect | Detail |
+|--------|--------|
+| **What** | Batch scraper idx.co.id untuk foreign & broker flow |
+| **Why** | Data IDX tidak tersedia di Yahoo Finance, perlu scrape langsung |
+| **When** | Daily setelah market close, atau on-demand |
+| **Where** | Data acquisition layer, complement Yahoo OHLCV |
+| **Who** | CLI subcommands `fetch-idx-foreign-flow`, `fetch-idx-broker-flow` |
+| **How** | curl_cffi + AJAX headers + rate limiting + Parquet archive |
+
+---
+
+> **Catatan:** Data engineering adalah fondasi sistem trading. Data buruk → analisis buruk → keputusan buruk → kerugian. Investasi waktu terbesar harus di pipeline data. Implementasi: `src/trading_system/data/adaptive_rate_limiter.py`, `src/trading_system/data/macro_adapters.py`, `src/trading_system/data/idx_batch.py`.

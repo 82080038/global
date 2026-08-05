@@ -1022,4 +1022,42 @@ PRAGMA wal_autocheckpoint=1000; # Auto-checkpoint every 1000 pages
 
 ---
 
-> **Catatan:** Deployment dan DevOps adalah fondasi operasional. Sistem trading yang tidak reliable secara infrastruktur akan kehilangan peluang trading dan kepercayaan investor, terlepas dari seberapa bagus strateginya.
+## 12. Implementasi: Structured Logging Configuration
+
+> **Sumber:** `src/trading_system/utils/logging_config.py` (89 baris)
+
+**What:** Structured logging dengan rotation untuk sistem trading.
+**Why:** Sistem trading memerlukan audit trail yang dapat di-trace — setiap keputusan, error, dan warning harus tercatat dengan timestamp dan konteks.
+**When:** Dipanggil sekali di startup via `setup_logging()`.
+**Where:** Entry point aplikasi (API, CLI, scripts).
+**Who:** Semua modul menggunakan logger yang sama.
+
+### 12.1 Konfigurasi
+
+| Komponen | Format | Level | Output |
+|----------|--------|-------|--------|
+| **Console** | `%(asctime)s [%(levelname)s] %(name)s: %(message)s` | `LOG_LEVEL` (default: INFO) | stdout |
+| **File** | `%(asctime)s [%(levelname)s] %(name)s %(filename)s:%(lineno)d: %(message)s` | DEBUG | `logs/trading_system.log` (rotating, 5MB × 3) |
+| **Error file** | Same as file | ERROR+ | `logs/trading_system_error.log` (rotating, 5MB × 3) |
+
+### 12.2 Env Vars
+
+| Env Var | Default | Fungsi |
+|---------|---------|--------|
+| `LOG_LEVEL` | INFO | Minimum level untuk console output |
+| `LOG_DIR` | `logs/` | Directory untuk log files |
+
+### 12.3 5W1H
+
+| Aspect | Detail |
+|--------|--------|
+| **What** | Structured logging dengan rotation (3 handlers) |
+| **Why** | Audit trail untuk trading decisions, debugging, dan compliance |
+| **When** | Startup — `setup_logging()` dipanggil sekali |
+| **Where** | `utils/logging_config.py`, dipanggil dari API/CLI entry point |
+| **Who** | Semua modul via `logging.getLogger(__name__)` |
+| **How** | `dictConfig` dengan RotatingFileHandler + StreamHandler |
+
+---
+
+> **Catatan:** Deployment dan DevOps adalah fondasi operasional. Sistem trading yang tidak reliable secara infrastruktur akan kehilangan peluang trading dan kepercayaan investor, terlepas dari seberapa bagus strateginya. Implementasi logging: `src/trading_system/utils/logging_config.py`.

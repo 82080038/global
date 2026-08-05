@@ -837,6 +837,15 @@ GLOBAL_DATA_SOURCES = {
 
 Sistem `trading-system` mengimplementasikan dua konsep dari worldmonitor (TypeScript, reverse-engineered ke Python):
 
+| 5W1H | Detail |
+|------|--------|
+| **What** | World Monitor: 7-signal market composite + Country Instability Index (CII) |
+| **Why** | IDX dipengaruhi geopolitical risk dan global market patterns — sistem trading perlu awareness konteks global |
+| **When** | Global market analysis dan decision engine (15% weight) |
+| **Where** | Analysis layer: world_monitor.py → global_market engine + decision engine |
+| **Who** | Dipanggil oleh global_market.py dan advanced_context.py (XAI) |
+| **How** | 7-signal pattern detection dari news + market data; CII = (U+C+S+I) × event_multiplier + baseline |
+
 ### 12.1 7-Signal Market Composite
 
 Deteksi pola cross-source dari news + market data streams:

@@ -813,6 +813,15 @@ Pola tidak dievaluasi dalam isolasi — **konteks mempengaruhi reliabilitas**:
 
 Sistem `trading-system` mengimplementasikan 6 faktor dengan cross-sectional percentile ranking, liquidity filter, dan factor versioning.
 
+| 5W1H | Detail |
+|------|--------|
+| **What** | Factor Engine: 6 faktor (momentum, low vol, quality, beta, size, value) dengan cross-sectional ranking |
+| **Why** | Screening berbasis single metric (PE, ROE) tidak cukup — multi-factor ranking memberikan view holistik |
+| **When** | Screening harian, compute-scores, dan API `/api/factors` |
+| **Where** | Analysis layer: factor_engine.py → factor_screener.py → API + CLI |
+| **Who** | Dipanggil oleh factor_screener.py, API endpoint, dan CLI `screen` |
+| **How** | Compute raw factor values per ticker → percentile rank (0-1) → composite rank → top N screening |
+
 ### 15.1 Faktor
 
 | Faktor | Formula | Min History |
@@ -859,4 +868,112 @@ class FactorScreenerService:
 
 ---
 
-> **Kesimpulan:** Screening saham, AI/ML untuk pola, dan pattern memory adalah **tiga komponen wajib** yang saling terintegrasi. Codebase `trading-system` v0.1.11 sudah punya **fondasi engine-level** yang production-ready untuk ketiganya — screener (2 file), AI/ML (7 file), pattern memory (1 file + DB table 2,386 rows). Yang perlu dilakukan untuk aplikasi ritel adalah **membungkus engine yang sudah ada dengan UI user-friendly** dan menambah beberapa komponen pendukung (gorengan detector production code, pattern evaluation scheduler, context tagging). Estimasi total: 6-9 bulan untuk full implementation, 2-3 bulan untuk MVP. Implementasi Factor Engine: `src/trading_system/analysis/factor_engine.py`, `src/trading_system/analysis/factor_screener.py`.
+## 16. Implementasi: Alpha Composer
+
+> **Sumber:** `src/trading_system/analysis/alpha_composer.py` (173 baris)
+
+**What:** Menggabungkan factor scores dengan regime/sector/macro multipliers menjadi composite alpha signal.
+**Why:** Factor scores mentah perlu diadjust berdasarkan kondisi pasar — momentum bagus di bull market tapi berbahaya di crisis.
+**When:** Setelah factor engine compute, sebelum decision engine.
+**Where:** Pipeline: Factor Engine → Alpha Composer → Decision Engine.
+**Who:** Dipanggil oleh analysis pipeline, konsumsi oleh decision engine.
+
+### 16.1 Regime Multipliers
+
+| Regime | Multiplier | Arti |
+|--------|------------|------|
+| bull | 1.0 | Full alpha exposure |
+| risk_on | 1.0 | Full alpha exposure |
+| neutral | 0.7 | Reduce alpha |
+| sideways | 0.5 | Significant reduce |
+| bear | 0.2 | Minimal exposure |
+| risk_off | 0.2 | Minimal exposure |
+| crisis | 0.0 | Zero alpha |
+| unknown | 0.0 | Zero alpha (safety) |
+
+### 16.2 Factor Weights (default)
+
+| Faktor | Weight |
+|--------|--------|
+| Momentum | 25% |
+| Low volatility | 20% |
+| Quality | 20% |
+| Value | 15% |
+| Size | 10% |
+| Beta | 10% |
+
+### 16.3 Output
+
+Composite alpha per instrument dengan component breakdown dan reason codes. Versioned (`ALPHA_VERSION = "1.0"`).
+
+---
+
+## 17. Implementasi: Alpha Validation Lab
+
+> **Sumber:** `src/trading_system/analysis/alpha_validation.py` (185 baris)
+
+**What:** Workflow validasi alpha factor sebelum production.
+**Why:** Factor yang bagus in-sample bisa overfit — perlu OOS test, parameter robustness, dan cost-adjusted returns.
+**When:** Sebelum deploy factor baru atau perubahan parameter.
+**Where:** Research/testing pipeline, terpisah dari production.
+**Who:** Quant developer menjalankan eksperimen validasi.
+
+### 17.1 Validation Criteria
+
+| Kriteria | Threshold | Status |
+|----------|-----------|--------|
+| OOS Sharpe | ≥ 0.3 | VALID / WATCH / REJECT |
+| In-sample Sharpe | ≥ 0.5 | |
+| Sortino | ≥ 0.7 | |
+| Calmar | ≥ 0.3 | |
+| Max drawdown | ≤ 25% | |
+| Hit rate | ≥ 45% | |
+| Robustness score | ≥ 0.6 | |
+| Turnover | ≤ 2.0 (annualized) | |
+
+### 17.2 Validation Flow
+
+```
+ExperimentConfig (factor_name, hypothesis, date range)
+  → Run backtest with walk-forward
+  → Compute in-sample & OOS metrics
+  → Parameter robustness test (perturb params ±20%)
+  → Regime segmentation (bull/bear/neutral performance)
+  → Leakage & survivorship bias check
+  → Cost-adjusted returns
+  → ValidationResult: VALID / WATCH / REJECT
+```
+
+---
+
+## 18. Implementasi: Liquidity Filter
+
+> **Sumber:** `src/trading_system/analysis/liquidity_filter.py` (87 baris)
+
+**What:** Filter saham illiquid berdasarkan average daily volume.
+**Why:** Saham illiquid → slippage tinggi, manipulasi mudah, exit sulit. Sistem trading tidak boleh merekomendasikan saham yang tidak bisa dieksekusi.
+**When:** Sebelum screening, factor compute, dan backtest.
+**Where:** Integrasi dengan `screener.py` dan `factor_screener.py`.
+**Who:** Dipanggil otomatis oleh screener dan factor engine.
+
+### 18.1 Parameter
+
+| Parameter | Default | Fungsi |
+|-----------|---------|--------|
+| `min_volume` | 100,000 shares | Minimum avg daily volume |
+| `min_trading_days` | 20 hari | Minimum history untuk filter |
+
+### 18.2 Method
+
+```python
+class LiquidityFilter:
+    def is_liquid(self, data: pd.DataFrame, window: int = 20) -> bool:
+        """True jika avg volume ≥ min_volume dan history ≥ min_trading_days."""
+
+    def filter_liquid(self, tickers_data: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+        """Filter dict ticker→DataFrame, keep only liquid stocks."""
+```
+
+---
+
+> **Kesimpulan:** Screening saham, AI/ML untuk pola, dan pattern memory adalah **tiga komponen wajib** yang saling terintegrasi. Codebase `trading-system` v0.1.11 sudah punya **fondasi engine-level** yang production-ready untuk ketiganya — screener (2 file), AI/ML (7 file), pattern memory (1 file + DB table 2,386 rows). Yang perlu dilakukan untuk aplikasi ritel adalah **membungkus engine yang sudah ada dengan UI user-friendly** dan menambah beberapa komponen pendukung (gorengan detector production code, pattern evaluation scheduler, context tagging). Estimasi total: 6-9 bulan untuk full implementation, 2-3 bulan untuk MVP. Implementasi Factor Engine: `src/trading_system/analysis/factor_engine.py`, `src/trading_system/analysis/factor_screener.py`. Alpha Composer: `src/trading_system/analysis/alpha_composer.py`. Alpha Validation: `src/trading_system/analysis/alpha_validation.py`. Liquidity Filter: `src/trading_system/analysis/liquidity_filter.py`.

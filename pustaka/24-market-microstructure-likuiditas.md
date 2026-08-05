@@ -766,6 +766,15 @@ def vwap_schedule(total_qty: int, volume_profile: list):
 
 Sistem `trading-system` mengimplementasikan analisis gap dan support/resistance dari data OHLCV — pure pandas/numpy, tanpa dependency eksternal.
 
+| 5W1H | Detail |
+|------|--------|
+| **What** | Order Book Analyzer: price gap, volume gap, S/R detection, gap fill prediction |
+| **Why** | Gap dan S/R levels adalah microstructure signal penting untuk entry/exit timing di IDX |
+| **When** | Pre-trade analysis, backtest, dan screening |
+| **Where** | Analysis layer, dapat dipanggil oleh screener dan XAI |
+| **Who** | Dipanggil oleh screener.py dan advanced_context.py (XAI) |
+| **How** | Detect gaps > 2% antar candle, volume change > 50%, S/R tested ≥ 3x dengan 1% tolerance |
+
 ### 12.1 Fitur
 
 | Fitur | Deskripsi | Parameter |

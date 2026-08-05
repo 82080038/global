@@ -684,6 +684,15 @@ CREATE INDEX IF NOT EXISTS idx_cost_basis_ticker_date ON cost_basis_lots(ticker,
 
 Sistem `trading-system` mengimplementasikan kalkulator pajak spesifik untuk pasar saham Indonesia.
 
+| 5W1H | Detail |
+|------|--------|
+| **What** | Indonesia tax calculator: PPh final 0.1% jual, 10% dividen, broker fee, clearing, custody |
+| **Why** | Sistem trading harus tahu net PnL setelah semua biaya — tanpa ini, profit gross menyesatkan |
+| **When** | Setiap order simulation, backtest, dan portfolio PnL calculation |
+| **Where** | Execution layer: tax.py → costs.py → execution engine + backtest engine |
+| **Who** | Dipanggil oleh execution engine, backtest engine, dan portfolio tracker |
+| **How** | Hitung buy costs (broker + clearing + custody) dan sell costs (+ PPh 0.1%), return net PnL |
+
 ### 11.1 Tarif Pajak (TaxRates)
 
 | Komponen | Tarif | Keterangan |

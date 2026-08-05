@@ -548,6 +548,15 @@ Prinsip *nudge* (dorongan lembut) untuk membantu retail membuat keputusan lebih 
 
 Sistem `trading-system` mengimplementasikan deteksi 6 bias kognitif langsung dari pola price/volume OHLCV — tanpa memerlukan data psikologis investor.
 
+| 5W1H | Detail |
+|------|--------|
+| **What** | Behavioral risk score 0-100 dari 6 bias kognitif |
+| **Why** | Investor retail IDX rentan FOMO, loss aversion, anchoring — deteksi otomatis membantu mitigasi |
+| **When** | Setiap compute-scores, pre-trade checklist, dan portfolio monitoring |
+| **Where** | Pipeline: analysis → behavioral_risk.py → decision engine + pre-trade checklist |
+| **Who** | Dipanggil oleh pipeline.py, konsumsi oleh decision engine dan XAI |
+| **How** | Pattern matching pada OHLCV: price spike + volume surge = FOMO; price < MA + volume decline = loss aversion |
+
 ### 11.1 Arsitektur
 
 ```python

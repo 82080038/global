@@ -459,6 +459,15 @@ CREATE TABLE tca_log (
 
 Sistem `trading-system` mengimplementasikan single source of truth untuk ATR, broker fee, levy, dan slippage.
 
+| 5W1H | Detail |
+|------|--------|
+| **What** | CostModel singleton: buy/sell fee, levy, slippage, ATR — satu instance untuk semua modul |
+| **Why** | Tanpa singleton, tarif bisa inconsistent antar modul — backtest pakai fee berbeda dari execution = gap backtest-to-live |
+| **When** | Setiap order calculation, backtest, dan risk assessment |
+| **Where** | Risk layer: costs.py → execution engine, backtest engine, risk engine, enhanced risk |
+| **Who** | Dipanggil oleh semua modul yang butuh fee/slippage/ATR |
+| **How** | Singleton pattern via `get_default_cost_model()`, adaptive slippage 3-tier berdasarkan order size vs ADV |
+
 ### 10.1 CostModel Class
 
 ```python

@@ -297,6 +297,15 @@ Jika OJK audit, siapkan:
 
 Sistem `trading-system` mengimplementasikan deteksi 6 pattern manipulasi pasar langsung dari data OHLCV.
 
+| 5W1H | Detail |
+|------|--------|
+| **What** | Manipulation Detection Engine: 6 pattern (volume anomaly, P-V divergence, marking close, pump & dump, wash trading, spread anomaly) |
+| **Why** | IDX punya riwayat manipulasi (gorengan, wash trading) — sistem trading harus deteksi dan hindari saham yang dimanipulasi |
+| **When** | Pre-trade checklist, surveillance monitoring, dan screening |
+| **Where** | Analysis layer: manipulation.py → pre-trade checklist + XAI + surveillance |
+| **Who** | Dipanggil oleh pre_trade_checklist.py dan score_context.py (XAI) |
+| **How** | Pattern matching pada OHLCV: volume > 5x median, price-volume divergence > 30%, marking close, pump & dump sequence |
+
 ### 8.1 Pattern Detection
 
 | Pattern | Deteksi | Threshold |

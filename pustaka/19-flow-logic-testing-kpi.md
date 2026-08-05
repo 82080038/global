@@ -1445,6 +1445,15 @@ Kedua toggle mengupdate `os.environ` dan instance engine **tanpa restart server*
 
 No-Trade Engine berada **sebelum** Decision Engine dalam pipeline — sebagai gate yang menentukan apakah suatu saham layak diproses lebih lanjut.
 
+| 5W1H | Detail |
+|------|--------|
+| **What** | No-Trade Engine flow: 7 gate berurutan sebelum decision engine |
+| **Why** | Mencegah decision engine memproses saham yang tidak layak — hemat compute dan mencegah false signal |
+| **When** | Setiap compute-scores run, sebelum decision engine |
+| **Where** | Pipeline: analysis → no_trade.py → decision engine (gate sebelum conviction scoring) |
+| **Who** | Dipanggil oleh pipeline.py, output dikonsumsi decision engine dan monitoring |
+| **How** | 7 gate check: data quality, confidence, liquidity, event risk, model agreement, regime, IPO lockup |
+
 ### 16.1 Posisi dalam Flow
 
 ```

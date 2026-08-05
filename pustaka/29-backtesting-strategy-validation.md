@@ -981,4 +981,135 @@ def idx_backtest_adjustments(df: pd.DataFrame, ticker: str):
 
 ---
 
-> **Catatan:** Backtest yang baik bukan yang menunjukkan return tertinggi, tetapi yang paling realistis. Jika backtest terlalu bagus untuk jadi kenyataan, kemungkinan besar memang begitu. Selalu gunakan walk-forward + Monte Carlo + realistic costs. Untuk pembahasan lengkap mengapa backtest bisa menipu di live trading dan bagaimana aplikasi mengatasinya, lihat `85-backtest-to-live-gap-prevention.md`.
+## 13. Implementasi: Backtest Strategies
+
+> **Sumber:** `src/trading_system/backtest/strategies.py` (144 baris)
+
+Sistem `trading-system` mengimplementasikan 3 strategi benchmark untuk validasi.
+
+### 13.1 Strategi
+
+| Strategi | Class | Logika | Warmup |
+|----------|-------|--------|--------|
+| **Buy & Hold** | `BuyAndHold` | Beli di hari pertama, hold sampai akhir | 0 baris |
+| **MA Crossover** | `MovingAverageCrossover` | Fast MA > Slow MA → BUY, sebaliknya → SELL | `slow` baris (default 50) |
+| **Conviction** | `ConvictionStrategy` | Replay skor historis dari tabel `scores` — conviction ≥ 70 → BUY, < EXIT_THRESHOLD → SELL | 0 baris |
+
+### 13.2 Point-in-Time Safety
+
+- **MA Crossover:** Sinyal hanya pada crossing (menggunakan current + previous bar), bukan look-ahead
+- **Conviction:** Menggunakan `pd.merge_asof(direction="backward")` — hanya skor yang tersedia pada tanggal T, tidak bocor ke masa depan
+- **Warmup periods:** Tidak ada sinyal sampai data cukup (mencegah false signal di awal)
+
+### 13.3 Conviction Strategy Detail
+
+Strategi conviction mereplay historis multi-factor scores dari DB:
+1. Load scores dari `storage.load_scores(ticker)` 
+2. Group by `as_of`, average across engines → conviction per timestamp
+3. Merge ke OHLCV dengan `merge_asof(backward)` — PIT safe
+4. Track position state: BUY saat conviction ≥ 70, SELL saat < EXIT_CONVICTION_THRESHOLD
+
+---
+
+## 14. Implementasi: Backtest Metrics & Monte Carlo
+
+> **Sumber:** `src/trading_system/backtest/metrics.py` (399 baris)
+
+### 14.1 compute_metrics()
+
+Menghitung 15+ metrik dari equity curve dan trade history:
+
+| Metrik | Formula | Keterangan |
+|--------|---------|------------|
+| Total return | `end/start - 1` | Return total |
+| CAGR | `(end/start)^(1/years) - 1` | Annualized return |
+| Max drawdown | `min((equity - cummax) / cummax)` | Worst peak-to-trough |
+| Sharpe ratio | `mean(excess) / std × √252` | Risk-adjusted return (rf=5%) |
+| Sortino ratio | `mean(excess) / downside_std × √252` | Downside-only risk |
+| Calmar ratio | `CAGR / |max_dd|` | Return/drawdown |
+| Win rate | `wins / total_trades` | Persentase trade profit |
+| Profit factor | `sum(wins) / |sum(losses)|` | Gross profitability |
+| Expectancy | `mean(pnl)` | Expected PnL per trade |
+| Beta | `cov(r, bm) / var(bm)` | Market sensitivity |
+| Alpha | `excess - beta × bm_excess` | Excess return vs benchmark |
+
+### 14.2 Monte Carlo Simulation
+
+```python
+def monte_carlo_simulation(
+    returns: pd.Series,
+    n_simulations: int = 1000,
+    n_periods: int = 252,
+    initial_capital: float = 100_000_000,
+    confidence_levels: tuple = (0.05, 0.50, 0.95),
+    block_size: int | None = None,   # Block bootstrap untuk autocorrelation
+    use_gpu: bool = True,            # GPU acceleration via PyTorch CUDA
+) -> dict
+```
+
+**GPU Path:** Saat `n_simulations >= 2000` dan CUDA tersedia, seluruh simulasi di-vectorize di GPU (cuda:1 preferred). 10-50x lebih cepat dari CPU loop. Auto-fallback ke CPU jika VRAM tidak cukup.
+
+**Block Bootstrap:** Saat `block_size` di-set, resampling menggunakan contiguous blocks untuk preserve autocorrelation dan volatility clustering — lebih realistis untuk financial data.
+
+**Output:** Percentile bands (5%, 50%, 95%) untuk final_equity, max_drawdown, sharpe_ratio.
+
+### 14.3 Walk-Forward Validation
+
+> **Sumber:** `src/trading_system/ai_learning/walk_forward.py` (5711 baris)
+
+Walk-forward split: train pada window [T-k, T], test pada [T, T+h], slide T forward. Mengukur stability across time.
+
+---
+
+## 15. Implementasi: Prediction Testing Harness
+
+> **Sumber:** `src/trading_system/testing/prediction_test.py` (502 baris)
+
+Menguji apakah prediksi sistem trading benar secara walk-forward.
+
+### 15.1 Cara Kerja
+
+Untuk setiap tanggal T dalam range:
+1. **Load** OHLCV up to T (PIT-safe, tidak bocor ke masa depan)
+2. **Compute** technical indicators pada slice data tersebut
+3. **Generate** prediction (BUY/HOLD/SELL) berdasarkan strategy
+4. **Fast-forward** ke T+horizon, dapat actual return
+5. **Compare:** prediction correct?
+
+### 15.2 Output
+
+```python
+@dataclass
+class TestResult:
+    date: str              # Tanggal T
+    prediction: str        # BUY / HOLD / SELL
+    conviction: float      # 0-100
+    actual_return: float   # Return T → T+horizon
+    actual_direction: str  # UP / DOWN / FLAT
+    correct: bool          # Prediction match actual?
+    price_at_t: float
+    price_at_t_plus: float
+    indicators: dict       # Snapshot indikator saat prediksi
+```
+
+### 15.3 Metrics
+
+- **Accuracy:** Persentase prediksi benar
+- **Hit rate:** Persentase BUY yang benar-benah naik
+- **Confusion matrix:** BUY/HOLD/SELL vs UP/FLAT/DOWN
+- **Equity curve:** Simulasi PnL jika mengikuti prediksi
+
+### 15.4 5W1H
+
+| Aspect | Detail |
+|--------|--------|
+| **What** | Walk-forward prediction accuracy test |
+| **Why** | Memvalidasi bahwa engine menghasilkan prediksi yang benar, bukan hanya skor |
+| **When** | Setiap kali strategy atau engine diubah, sebelum deploy ke live |
+| **Where** | Testing harness, dijalankan via CLI atau script |
+| **Who** | Developer/quant yang memvalidasi strategy |
+| **How** | PIT-safe slice + indicator compute + prediction + actual comparison |
+
+---
+
+> **Catatan:** Backtest yang baik bukan yang menunjukkan return tertinggi, tetapi yang paling realistis. Jika backtest terlalu bagus untuk jadi kenyataan, kemungkinan besar memang begitu. Selalu gunakan walk-forward + Monte Carlo + realistic costs. Untuk pembahasan lengkap mengapa backtest bisa menipu di live trading dan bagaimana aplikasi mengatasinya, lihat `85-backtest-to-live-gap-prevention.md`. Implementasi: `src/trading_system/backtest/strategies.py`, `src/trading_system/backtest/metrics.py`, `src/trading_system/testing/prediction_test.py`.

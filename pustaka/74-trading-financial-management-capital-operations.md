@@ -1372,6 +1372,15 @@ CREATE TABLE IF NOT EXISTS capital_allocations (
 
 Sistem `trading-system` mengimplementasikan 9 automated pre-trade checks sebelum eksekusi order.
 
+| 5W1H | Detail |
+|------|--------|
+| **What** | Pre-Trade Checklist: 9 gate (fundamental, liquidity, position size, sector, free float, R/R, behavioral, gorengan, regime) |
+| **Why** | Trading discipline — otomatisasi checks yang seharusnya dilakukan manual sebelum setiap order |
+| **When** | Sebelum setiap order placement (buy signal dari decision engine) |
+| **Where** | Risk layer: pre_trade_checklist.py → execution engine gate |
+| **Who** | Dipanggil oleh execution engine sebelum order placement |
+| **How** | 9 checks berurutan, any FAIL = block order, WARN = tampilkan peringatan |
+
 ### 16.1 Checklist Items
 
 | # | Check | Threshold | Status |
@@ -1416,6 +1425,15 @@ class PreTradeReport:
 > **Sumber:** `src/trading_system/portfolio/profit_tracker.py` (202 baris), `src/trading_system/portfolio/strategy_selector.py` (184 baris)
 
 ### 17.1 Profit Tracker
+
+| 5W1H | Detail |
+|------|--------|
+| **What** | Profit Tracker: breakdown return ke capital gain + dividend income + ROI + yield on cost |
+| **Why** | Investor perlu tahu sumber return — apakah dari price appreciation atau dividend |
+| **When** | Portfolio review dan reporting |
+| **Where** | Portfolio layer: profit_tracker.py → portfolio engine + reporting |
+| **Who** | Dipanggil oleh portfolio engine dan API reporting |
+| **How** | Compute (current_price - avg_cost) × shares + sum dividends, return breakdown |
 
 Memecah return portofolio berdasarkan sumber:
 

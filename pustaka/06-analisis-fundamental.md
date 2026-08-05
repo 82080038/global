@@ -771,6 +771,15 @@ def peer_comparison(target_ratios, peer_ratios_list, metrics):
 
 Sistem `trading-system` mengimplementasikan deteksi red flags kesehatan keuangan perusahaan dari data fundamental.
 
+| 5W1H | Detail |
+|------|--------|
+| **What** | Fundamental Red Flags: 3 kategori (earnings quality, balance sheet, governance) dengan severity level |
+| **Why** | Saham dengan red flags fundamental berisiko bangkrut atau fraud — sistem trading harus deteksi sebelum rekomendasi |
+| **When** | Fundamental analysis, screening, dan pre-trade checklist |
+| **Where** | Analysis layer: red_flags.py → fundamental engine + pre-trade checklist + XAI |
+| **Who** | Dipanggil oleh fundamental.py dan score_context.py (XAI) |
+| **How** | Compute financial ratios dari fundamental_data, compare ke threshold, flag jika melanggar |
+
 ### 14.1 Tiga Kategori Red Flags
 
 **Earnings Quality:**

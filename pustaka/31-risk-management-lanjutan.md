@@ -859,6 +859,15 @@ IDX_RISK_PARAMS = {
 
 Sistem `trading-system` mengimplementasikan position sizing yang mempertimbangkan korelasi antar aset untuk meningkatkan diversifikasi.
 
+| 5W1H | Detail |
+|------|--------|
+| **What** | Correlation-aware position sizing: adjust weight berdasarkan correlation matrix |
+| **Why** | Portfolio dengan holding yang berkorelasi tinggi tidak terdiversifikasi — risk lebih besar dari yang terlihat |
+| **When** | Portfolio construction, rebalancing, dan position sizing |
+| **Where** | Risk layer: corr_sizing.py → portfolio engine + rebalancer |
+| **Who** | Dipanggil oleh portfolio engine dan rebalancer |
+| **How** | Compute correlation penalty (0-1), risk parity weights (equal risk contribution) |
+
 ### 14.1 Correlation Penalty
 
 ```python
@@ -891,6 +900,15 @@ class CorrelationPositionSizing:
 > **Sumber:** `src/trading_system/risk/kelly.py` (140 baris), `src/trading_system/risk/expectancy.py` (79 baris)
 
 ### 15.1 Kelly Criterion
+
+| 5W1H | Detail |
+|------|--------|
+| **What** | Kelly Criterion: optimal position size dari win rate dan R/R ratio |
+| **Why** | Position sizing terlalu besar = blow up risk, terlalu kecil = suboptimal return — Kelly memberikan theoretical optimal |
+| **When** | Strategy evaluation dan position sizing |
+| **Where** | Risk layer: kelly.py → risk engine + AI learning (weight optimization) |
+| **Who** | Dipanggil oleh risk engine dan expectancy calculator |
+| **How** | f* = (bp - q) / b, dengan b = avg_win/avg_loss, p = win_rate, q = 1-p |
 
 Formula: `f* = (bp - q) / b` di mana b = avg_win/avg_loss, p = win_rate, q = 1-p
 

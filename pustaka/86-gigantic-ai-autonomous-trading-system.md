@@ -734,4 +734,78 @@ MONTH 19-24: A4 (Fully Autonomous)
 
 ---
 
-> **Catatan Akhir:** Gigantic AI bukan tentang membuat AI yang "sadar" dalam pengertian filosofis. Ini tentang membuat sistem yang **self-aware secara operasional** — tahu kondisi diri, tahu kapan performanya menurun, tahu kapan harus berhenti, dan tahu cara memperbaiki dirinya sendiri. Kombinasi 15+ engine existing + LLM agent layer + self-awareness layer + profitability guard = sistem yang bekerja mandiri, berkembang sendiri, dan tetap menguntungkan. Kunci utama bukan kecerdasan, tapi **disiplin validasi** — setiap keputusan dan setiap perubahan kode harus punya alasan empiris yang dapat dipertanggungjawabkan. Tanpa validasi, otonomi = kehancuran. Dengan validasi, otonomi = pertumbuhan berkelanjutan.
+## 12. Implementasi: XAI Context Providers
+
+> **Sumber:** `src/trading_system/xai/advanced_context.py` (256 baris), `src/trading_system/xai/correlation_context.py` (314 baris), `src/trading_system/xai/score_context.py` (346 baris)
+
+XAI Engine menggunakan 3 context provider untuk menghasilkan narasi penjelasan yang kaya dan kontekstual.
+
+### 12.1 AdvancedAnalysisProvider (`advanced_context.py`)
+
+**What:** Menyediakan konteks dari engine analisis lanjutan ke XAI narrative.
+**Why:** XAI perlu menjelaskan tidak hanya skor, tapi juga regime pasar, cross-asset pattern, dan factor ranking.
+**When:** Saat user request `/api/explain/{ticker}` atau CLI `explain`.
+**Where:** Dipanggil oleh `ExplainableAIEngine` sebelum generate narrative.
+**Who:** XAI Engine sebagai pemanggil, user sebagai konsumen.
+
+| Engine | Konteks yang Disediakan |
+|--------|-------------------------|
+| EnhancedRegimeEngine | Regime global (risk_on/risk_off/neutral), confidence, top components |
+| CrossAssetEngine | Cross-asset beta, correlation, risk-on/off consistency |
+| PatternReliabilityEngine | Historical pattern win-rate |
+| NoTradeEngine | Gate status (NO_TRADE/PROCEED, gates failed) |
+| FactorEngine | Cross-sectional ranking (momentum, vol, quality, beta, size, value) |
+
+**Best-effort pattern:** Jika engine gagal atau data tidak tersedia, context mengembalikan `available=False` dan XAI melanjutkan tanpa bagian tersebut.
+
+### 12.2 CorrelationContextProvider (`correlation_context.py`)
+
+**What:** Menyediakan konteks hubungan dan pola data untuk narasi.
+**Why:** User perlu memahami mengapa saham direkomendasikan/tidak — termasuk foreign flow, broker activity, dan lead-lag relationship.
+
+| Konteks | Sumber Data | Output |
+|---------|-------------|--------|
+| **Foreign flow** | `foreign_flow` table | Akumulasi/distribusi asing + persistence score |
+| **Lead-lag** | `ohlcv` cross-ticker | Saham leader/follower vs ticker lain |
+| **Broker concentration** | `broker_flow` table | HHI pasar + dominasi broker |
+| **Foreign flow prediction** | `foreign_flow` vs forward return | Korelasi → prediksi arah |
+
+**Lead-lag universe:** 20 saham liquid (BBCA, BBRI, BMRI, TLKM, ASII, UNVR, ANTM, ICBP, GGRM, KLBF, CPIN, ADRO, PTBA, MDKA, MEDC, PGAS, INCO, TINS, INDF, MYOR).
+
+**Forward horizons:** 1, 3, 5, 10 hari untuk evaluasi prediksi.
+
+### 12.3 ScoreBreakdownProvider (`score_context.py`)
+
+**What:** Load dan interpret breakdown detail dari tabel `scores` untuk setiap engine.
+**Why:** XAI perlu menjelaskan **mengapa** skor technical/fundamental/macro tinggi/rendah — bukan hanya angka final.
+
+| Engine | Breakdown Interpretation |
+|--------|--------------------------|
+| **Technical** | Trend direction, RSI level, MACD signal, volatility regime, volume anomaly |
+| **Fundamental** | PE/PB/ROE/D/E assessment, sector comparison |
+| **Macro** | Interest rate environment, inflation, currency, commodity impact |
+| **Global** | US market direction, regional sentiment, risk-on/off |
+| **Relationship** | Correlation with benchmark, sector peers, lead-lag |
+| **Sentiment** | Foreign flow direction, broker sentiment, news tone |
+
+**Manipulation & Red Flags:** ScoreBreakdownProvider juga memanggil `analysis/manipulation.py` dan `analysis/red_flags.py` untuk menambahkan warning ke narasi jika terdeteksi.
+
+### 12.4 Integrasi XAI Pipeline
+
+```
+User request /api/explain/BBCA.JK
+  → ScoreBreakdownProvider.get_all_contexts()
+    → Load scores breakdown dari DB
+    → Interpret per engine
+  → AdvancedAnalysisProvider.get_all_contexts()
+    → Run EnhancedRegime, CrossAsset, PatternReliability, NoTrade, FactorEngine
+  → CorrelationContextProvider.get_all_contexts()
+    → Load foreign_flow, broker_flow, compute lead-lag
+  → ExplainableAIEngine.generate_narrative()
+    → Combine all contexts → human-readable narrative
+    → Output: recommendation + reasoning + risk warnings
+```
+
+---
+
+> **Catatan Akhir:** Gigantic AI bukan tentang membuat AI yang "sadar" dalam pengertian filosofis. Ini tentang membuat sistem yang **self-aware secara operasional** — tahu kondisi diri, tahu kapan performanya menurun, tahu kapan harus berhenti, dan tahu cara memperbaiki dirinya sendiri. Kombinasi 15+ engine existing + LLM agent layer + self-awareness layer + profitability guard = sistem yang bekerja mandiri, berkembang sendiri, dan tetap menguntungkan. Kunci utama bukan kecerdasan, tapi **disiplin validasi** — setiap keputusan dan setiap perubahan kode harus punya alasan empiris yang dapat dipertanggungjawabkan. Tanpa validasi, otonomi = kehancuran. Dengan validasi, otonomi = pertumbuhan berkelanjutan. Implementasi XAI: `src/trading_system/xai/advanced_context.py`, `src/trading_system/xai/correlation_context.py`, `src/trading_system/xai/score_context.py`.

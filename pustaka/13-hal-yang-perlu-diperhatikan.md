@@ -594,6 +594,15 @@ Empat pilar reformasi (Februari 2026):
 
 Sistem `trading-system` mengimplementasikan 7 gate untuk menentukan kapan **TIDAK** trade — no-trade adalah keputusan sama pentingnya dengan trade.
 
+| 5W1H | Detail |
+|------|--------|
+| **What** | No-Trade Engine: 7 gate yang menentukan NO_TRADE atau PROCEED |
+| **Why** | Trading yang baik bukan tentang selalu entry, tapi tentang tahu kapan TIDAK trade — 7 gate mencegah entry pada kondisi berisiko |
+| **When** | Setiap compute-scores dan sebelum decision engine |
+| **Where** | Pipeline: analysis → no_trade.py → decision engine (gate sebelum scoring) |
+| **Who** | Dipanggil oleh pipeline.py, konsumsi oleh decision engine dan XAI |
+| **How** | 7 gate check berurutan: data quality, confidence, liquidity, event risk, model agreement, regime, IPO lockup — any FAIL = NO_TRADE |
+
 ### 13.1 Gate Checklist
 
 | Gate | Kondisi NO_TRADE | Parameter |

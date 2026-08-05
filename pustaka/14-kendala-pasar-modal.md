@@ -532,6 +532,15 @@ def detect_red_flags(ticker, data):
 
 Sistem `trading-system` mengimplementasikan deteksi otomatis saham gorengan dari kombinasi price spike, weak fundamental, dan low liquidity.
 
+| 5W1H | Detail |
+|------|--------|
+| **What** | Gorengan detector: price spike + weak fundamental + low liquidity = risk score 0-100 |
+| **Why** | Saham gorengan adalah masalah struktural IDX — retail terpikat price spike tanpa fundamental, lalu trapped saat harga jatuh |
+| **When** | Setiap screening, pre-trade checklist, dan compute-scores |
+| **Where** | Pipeline: analysis → gorengan_detector.py → screener + pre-trade checklist |
+| **Who** | Dipanggil oleh screener.py dan pre_trade_checklist.py |
+| **How** | Kombinasi 4 komponen: price spike detection, volume spike, fundamental check (PE invalid), liquidity check |
+
 ### 11.1 Algoritma Deteksi
 
 | Komponen | Deteksi | Threshold |
