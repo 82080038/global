@@ -2,7 +2,7 @@
 
 > **Tujuan:** Dokumen ini mengadaptasi dan mengintegrasikan pola arsitektur, praktik terbaik, pelajaran dari bug, dan keputusan desain dari proyek `trading-system` (v0.1.11) ke dalam knowledge base pasar modal. Ini adalah jembatan antara teori pasar modal dan implementasi aplikasi nyata.
 >
-> **Sumber:** Proyek `trading-system` — sistem decision support untuk saham IDX/Indonesia, 80+ modul Python, 600+ unit tests, 94 API endpoints, SQLite + Parquet archive, 991 tickers, ~3M rows OHLCV.
+> **Sumber:** Proyek `trading-system` — sistem decision support untuk saham IDX/Indonesia, 80+ modul Python, 750+ unit tests, 88 API endpoints (86 REST + 2 WebSocket), SQLite + Parquet archive, 951 tickers aktif (928 equity + 23 non-equity), ~2.9M rows OHLCV.
 >
 > **Lokasi source code:** `/home/petrick/projects/global` — aplikasi ini telah pernah dibangun dan dijalankan. Kode, arsitektur, modul, dan pelajaran dari proyek tersebut **dapat diadopsi atau dicopy** sebagian maupun seluruhnya ke aplikasi baru. Dokumen ini berfungsi sebagai panduan adopsi: setiap section menandai pola/modul yang siap direuse.
 >
@@ -47,7 +47,7 @@ src/trading_system/
   backtest/       # Engine + strategies + metrics
   ai_learning/    # LR, DL, ensemble, walk-forward
   xai/            # Explainable AI narrative
-  api/            # FastAPI (94 endpoints)
+  api/            # FastAPI (88 endpoints)
   cli.py          # 17 subcommands
   config.py       # Single source of truth
 ```
@@ -766,14 +766,14 @@ if entry <= stop:
 
 | Metrik | Nilai |
 |--------|-------|
-| Total tickers | 991 (972 IDX + 19 global) |
-| OHLCV rows | 2,904,119 |
-| Date range | 1997-07-02 to 2026-08-03 |
-| Total rows all tables | ~3,088,972 |
-| Total tables | 41 |
-| API endpoints | 94 |
-| Unit test files | 45 |
-| Unit tests | 600+ |
+| Total tickers | 951 aktif (928 equity + 23 non-equity) |
+| OHLCV rows | 2,906,406 |
+| Date range | 1997-07-02 to 2026-08-04 |
+| Total rows all tables | ~3,100,000 |
+| Total tables | 39 |
+| API endpoints | 88 (86 REST + 2 WebSocket) |
+| Unit test files | 51 |
+| Unit tests | 752 |
 
 ---
 

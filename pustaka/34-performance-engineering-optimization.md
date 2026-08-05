@@ -28,10 +28,10 @@
 | Metric | Value | Growth Rate |
 |--------|-------|-------------|
 | **OHLCV rows** | ~3,000,000 | ~250K/year |
-| **Tickers** | ~991 | ~20/year |
+| **Tickers** | ~951 | ~20/year |
 | **Database size** | ~460 MB | ~40 MB/year |
-| **API endpoints** | 94 | Stable |
-| **Unit tests** | 600+ | Growing |
+| **API endpoints** | 88 | Stable |
+| **Unit tests** | 750+ | Growing |
 | **Parquet files** | ~1,222 | ~100/year |
 
 ### 1.2 Performance Targets

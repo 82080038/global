@@ -407,6 +407,8 @@ OJK bersama pemerintah menetapkan **8 rencana aksi** dalam **4 klaster**:
 - Pengawasan perdagangan terkoordinasi
 - Edukasi investor ("Yuk Nabung Saham")
 - Galeri Investasi di kampus
+- **PPK/FCA reform (Jul 2026):** Hapus 3 kriteria teknis (free float, likuiditas, suspensi 1 hari), auto-reject berjenjang 4 kelompok harga, Non-Cancellation Period untuk PPK
+- **Non-Cancellation Period (Des 2025):** Diterapkan di pre-opening & pre-closing untuk mencegah spoofing
 
 ### 9.4 Upaya OJK
 
@@ -416,6 +418,8 @@ OJK bersama pemerintah menetapkan **8 rencana aksi** dalam **4 klaster**:
 - Pengawasan finfluencer
 - Program literasi keuangan
 - OJK Institute untuk edukasi
+- **POJK No. 3/2026 (Apr 2026):** Pengelompokan Perusahaan Efek (PEKU 1/2/3) — penguatan permodalan minimum (PEKU 3: Rp 110 miliar modal disetor)
+- **POJK No. 5/2026 (Apr 2026):** Pengelompokan Manajer Investasi (MIKU 1/2) — penguatan permodalan dan dana kelolaan minimum
 
 ---
 
@@ -434,6 +438,8 @@ OJK bersama pemerintah menetapkan **8 rencana aksi** dalam **4 klaster**:
 | **Finfluencer risk** | Conflict of interest warning |
 | **Foreign flow dependency** | Foreign flow tracker, domestic flow analysis |
 | **Auto-reject asimetris** | Auto-reject calculator, risk warning |
+| **PPK auto-reject berjenjang** | PPK board detection, tiered auto-reject calculator (4 kelompok harga) |
+| **Non-Cancellation Period** | Order lock period support, cancel/modify prohibition alert |
 | **Saham gorengan** | Gorengan detector (price spike + low fundamental) |
 | **MSCI rating** | Investability score, free float analysis |
 

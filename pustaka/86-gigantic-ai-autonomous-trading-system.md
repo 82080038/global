@@ -569,8 +569,8 @@ Every action — trade, code change, weight adjustment, model retrain — is log
 │       │                                                          │
 │  LAYER 0: INFRASTRUCTURE                                        │
 │  ├─ GPU 1 (LSTM training, local LLM inference)                  │
-│  ├─ API (94 endpoints)                                          │
-│  ├─ CLI (15 subcommands)                                        │
+│  ├─ API (88 endpoints)                                          │
+│  ├─ CLI (17 subcommands)                                        │
 │  ├─ Daily Runner (scheduler)                                    │
 │  ├─ Telegram Notifier                                           │
 │  └─ Audit Trail (immutable)                                     │

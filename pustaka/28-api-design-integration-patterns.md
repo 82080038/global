@@ -1080,7 +1080,7 @@ X-RateLimit-Reset: 1691542200
 
 ## Referensi
 
-1. `src/trading_system/api/app.py` — FastAPI application with 94 endpoints
+1. `src/trading_system/api/app.py` — FastAPI application with 88 endpoints (86 REST + 2 WebSocket)
 2. `src/trading_system/execution/broker_adapter.py` — Broker adapter ABC
 3. `src/trading_system/execution/interface.py` — TradingInterface ABC
 4. `src/trading_system/execution/__init__.py` — Factory pattern

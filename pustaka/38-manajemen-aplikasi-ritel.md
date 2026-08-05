@@ -941,7 +941,7 @@ Admin Order View:
 13. Swiset Ops Admin Dashboard: https://swiset.com/for-prop-firms/admin-dashboard
 14. cTrader Admin: https://www.spotware.com/ctrader/brokers/admin/
 15. Crassula FinTech Dashboard: https://crassula.io/features/dashboard/
-16. `src/trading_system/api/app.py` — 94 API endpoints existing
+16. `src/trading_system/api/app.py` — 88 API endpoints existing (86 REST + 2 WebSocket)
 17. `src/trading_system/monitoring/engine.py` — System health monitor
 18. `src/trading_system/utils/telegram_notifier.py` — Telegram notification
 

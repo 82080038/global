@@ -704,7 +704,7 @@ def weighted_ensemble(predictions: dict, weights: dict):
 
 | Faktor | Implikasi | Solusi |
 |--------|-----------|--------|
-| **Data terbatas** | ~2,904,119 rows OHLCV, 991 tickers | Transfer learning, simpler models |
+| **Data terbatas** | ~2,906,406 rows OHLCV, 951 tickers aktif | Transfer learning, simpler models |
 | **Fundamental sulit** | Data .JK terbatas di Yahoo | Skip fundamental, fokus teknikal |
 | **Korelasi tinggi** | Sahham IDX bergerak bersama | Cross-sectional features, HRP |
 | **Regime jelas** | Bull/bear cycles IDX kuat | HMM regime detection wajib |

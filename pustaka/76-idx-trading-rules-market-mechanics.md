@@ -249,6 +249,78 @@ def check_auto_reject(order_price: float, reference_price: float,
     return {"rejected": False, "reason": None}
 ```
 
+### 4.4 Auto-Reject Papan Pemantauan Khusus (PPK/FCA) — Reformasi 2026
+
+BEI sedang menyempurnakan batas auto-rejection untuk saham di Papan Pemantauan Khusus (Full Call Auction). Per Juli 2026, usulan dalam tahap akhir RMR:
+
+| Kelompok Harga (Rp) | Batas ARB/ARA Saat Ini | Usulan Batas Baru |
+|----------------------|------------------------|-------------------|
+| 1 – 10 | Perubahan Rp 1 | Tetap Rp 1 |
+| > 10 – 200 | ~10% | **35%** |
+| > 200 – 5,000 | ~10% | **25%** |
+| > 5,000 | ~10% | **20%** |
+
+```python
+# utils/auto_reject.py — PPK variant
+
+def get_ppk_auto_reject_limit(reference_price: float) -> dict:
+    """Get ARA/ARB limits for PPK/FCA stocks (usulan 2026)."""
+    if reference_price <= 10:
+        # Fixed Rp 1 change for very low price stocks
+        ara = reference_price + 1
+        arb = max(1, reference_price - 1)
+        pct = None  # Fixed amount, not percentage
+    elif reference_price <= 200:
+        pct = 0.35
+    elif reference_price <= 5000:
+        pct = 0.25
+    else:
+        pct = 0.20
+
+    if pct is not None:
+        ara = reference_price * (1 + pct)
+        arb = reference_price * (1 - pct)
+
+    ara = round_to_tick(ara)
+    arb = round_to_tick(arb)
+
+    return {
+        "reference_price": reference_price,
+        "ara": ara,
+        "arb": arb,
+        "ara_pct": pct * 100 if pct else "Rp 1",
+        "board": "PPK/FCA",
+    }
+```
+
+### 4.5 Non-Cancellation Period (PPK)
+
+Sejak 15 Desember 2025, BEI menerapkan **Non-Cancellation Period** di sesi pre-opening dan pre-closing. Usulan 2026 memperluas ke PPK:
+
+- Investor **tidak dapat membatalkan atau mengubah order** hingga random closing dan order matching selesai
+- Tujuan: mencegah spoofing, menjaga stabilitas harga, meningkatkan kualitas price discovery
+- Implementasi: OMS harus mendukung order lock period
+
+```python
+# execution/order_manager.py
+
+class NonCancellationPeriod:
+    """Manage non-cancellation period for PPK/FCA orders."""
+
+    def __init__(self):
+        self.locked = False
+
+    def check_can_cancel(self, order, current_session: str, board: str) -> dict:
+        """Check if order can be cancelled based on non-cancellation period."""
+        if board == "PPK" and self.locked:
+            return {
+                "can_cancel": False,
+                "reason": "non_cancellation_period",
+                "message": "Order tidak dapat dibatalkan selama Non-Cancellation Period",
+            }
+        return {"can_cancel": True}
+```
+
 ---
 
 ## 5. Circuit Breaker & Trading Halt
@@ -480,6 +552,8 @@ def validate_idx_order(
 - [ ] `check_auto_reject()` function
 - [ ] Integration with order validation
 - [ ] BEI override support (custom limits per stock)
+- [ ] PPK/FCA tiered auto-reject (4 kelompok harga, usulan 2026)
+- [ ] Non-Cancellation Period support (PPK order lock)
 - [ ] Unit tests
 
 ### Circuit Breaker
@@ -509,6 +583,8 @@ def validate_idx_order(
 6. `pustaka/36-gap-data-timezone-global-idx.md` — IDX trading hours & timezone
 7. BEI/IDX Trading Rules: https://www.idx.co.id
 8. POJK No. 6/POJK.03/2015 — Auto-Rejection & Trading Halt
+9. BEI PPK Reform (Jul 2026): https://www.idxchannel.com/market-news/bei-segera-terbitkan-aturan-baru-papan-fca-ini-perubahan-yang-disiapkan
+10. OJK Reformasi Pasar Modal (Feb 2026): https://ojk.go.id/id/berita-dan-kegiatan/siaran-pers/Pages/OJK-Percepat-Reformasi-Pasar-Modal-untuk-Perkuat-Likuiditas-dan-Kepercayaan-Investor.aspx
 
 ---
 

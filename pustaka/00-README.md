@@ -115,7 +115,7 @@ Berikut adalah keputusan desain tetap yang berlaku untuk seluruh dokumen di pust
 | 50 | `50-change-release-management-trading.md` | **Change & Release Management** | Change classification (A-E), blue-green deploy, canary release untuk trading logic, feature flags untuk trading, rollback strategy per komponen, change approval process, pre-deployment checklist, post-deployment verification |
 | 51 | `51-mlops-model-risk-management.md` | **MLOps & Model Risk Management** | MLOps lifecycle, model registry & versioning, drift detection (data drift PSI, concept drift), model monitoring (health score), champion/challenger pattern, model retirement policy, model risk governance, feature store integration |
 | 52 | `52-transaction-cost-analysis-execution-quality.md` | **TCA & Execution Quality** | Implementation shortfall, VWAP/TWAP/arrival benchmark, market impact model (square root), slippage analysis per ticker, best execution policy & score, TCA report template, IDX-specific costs (auto-reject, lot size, tick size) |
-| 53 | `53-data-governance-lineage.md` | **Data Governance & Lineage** | Data catalog (41 tables), data lineage graph (source→ingestion→storage→processing→output), data quality SLA (completeness/accuracy/timeliness/validity/uniqueness), data retention policy (forever→7yr→5yr→2yr→1yr), data stewardship, PII handling |
+| 53 | `53-data-governance-lineage.md` | **Data Governance & Lineage** | Data catalog (39 tables), data lineage graph (source→ingestion→storage→processing→output), data quality SLA (completeness/accuracy/timeliness/validity/uniqueness), data retention policy (forever→7yr→5yr→2yr→1yr), data stewardship, PII handling |
 | 54 | `54-trade-surveillance-market-abuse.md` | **Trade Surveillance & Market Abuse** | Wash trade detection, spoofing, layering, front-running, marking the close, excessive trading, surveillance dashboard, compliance log untuk OJK, alert & investigation process |
 | 55 | `55-capacity-planning-load-stress-testing.md` | **Capacity Planning & Stress Testing** | Current capacity baseline, capacity limits per komponen (GPU VRAM, CPU O(n²), SQLite, network), scale-up triggers, load test scenarios, stress test (multi-failure), capacity forecast, upgrade roadmap (GPU/RAM/PostgreSQL) |
 | 56 | `56-notification-strategy-alert-fatigue.md` | **Notification Strategy & Alert Fatigue** | Severity-based routing, alert deduplication, quiet hours & suppression, alert aggregation (daily/weekly summary), escalation policy, alert quality metrics (precision/recall/MTTA/fatigue index) |
@@ -324,6 +324,7 @@ Berikut adalah keputusan desain tetap yang berlaku untuk seluruh dokumen di pust
 72. Dokumen 84 berisi new data arrival processing pipeline: 7 tahap setiap data baru masuk (ingestion, pemeriksaan data lengkap 8 quality checks, testing & validasi, screening, penemuan pola, penandaan & labeling ke database, post-processing trigger), daily runner implementation, real-time pipeline roadmap
 73. Dokumen 85 berisi backtest-to-live gap prevention: 7 root causes (look-ahead, survivorship, overfitting, unrealistic costs, market impact, regime change, behavioral gap), 8 mekanisme yang sudah ada (next-bar-open, survivorship-free, walk-forward, realistic costs, regime filter, auto-execution, circuit breaker, paper trading), 6 gap yang masih kurang (WFA mandatory, paper-vs-backtest comparison, conservative slippage, faster regime detection, live degradation alert, mandatory paper period), transition protocol 6 step (backtest → WFA → paper 30 hari → live small → scale up → full), stop conditions, continuous validation loop
 74. Dokumen 86 berisi gigantic AI autonomous trading system: self-awareness layer (8 state: market/portfolio/performance/model/data/strategy/self/risk), self-reflection (5 pertanyaan: Am I profitable? Am I degrading? Is my model stale? Am I within risk limits? Are my self-improvements working?), autonomous decision loop 9-step (observe → analyze → reflect → decide → validate → execute → monitor → learn → evolve), runtime code generation dengan 7-layer validation + accountability, profitability guarantee 5-layer (strategy validation → pre-execution risk → post-execution monitoring → self-correction → circuit breaker), 7-layer architecture stack (Layer 0 infrastructure → Layer 1 data → Layer 2 AI/ML → Layer 3 analysis → Layer 4 decision → Layer 5 self-awareness → Layer 6 self-evolution), 5 autonomy levels (A0 manual → A4 fully autonomous), path to full autonomy 24 bulan, perbedaan gigantic AI vs AGI (operational self-awareness bukan philosophical consciousness)
+75. Dokumen 87 berisi perkembangan regulasi pasar modal 2026: timeline 2026, POJK No. 3/2026 (Perusahaan Efek — PEKU 1/2/3, permodalan minimum), POJK No. 5/2026 (Manajer Investasi — MIKU 1/2, dana kelolaan minimum), OJK 8 rencana aksi reformasi (free float 15%, UBO transparansi, demutualisasi BEI, enforcement, tata kelola emiten), BEI PPK/FCA reformasi (hapus 3 kriteria teknis, auto-reject berjenjang 4 kelompok harga, Non-Cancellation Period), implikasi untuk aplikasi trading, update konfigurasi, testing
 
 ---
 
@@ -338,8 +339,8 @@ Berikut adalah keputusan desain tetap yang berlaku untuk seluruh dokumen di pust
 ### Pengalaman Nyata
 - Proyek `trading-system` v0.1.11 — **implementasi nyata yang pernah dibangun dan dijalankan**
 - **Lokasi source code:** `/home/petrick/projects/global`
-- 991 tickers, ~3M rows OHLCV, 41 tabel SQLite
-- 94 API endpoints, 600+ unit tests
+- 951 tickers aktif (928 equity + 23 non-equity), ~2.9M rows OHLCV, 39 tabel SQLite
+- 88 API endpoints (86 REST + 2 WebSocket), 750+ unit tests across 51 test files
 - Bug produksi dan solusi yang terdokumentasi
 - **Catatan:** Kode dari proyek tersebut dapat diadopsi/dicopy sebagian atau seluruhnya ke aplikasi baru. Lihat `11-knowledge-transfer-aplikasi.md` untuk detail pola, pelajaran, dan modul yang dapat direuse.
 
@@ -351,9 +352,9 @@ Berikut adalah keputusan desain tetap yang berlaku untuk seluruh dokumen di pust
 
 ## Statistik
 
-- **Total dokumen:** 87 file Markdown (00-86)
-- **Total konten:** ~66000+ baris pengetahuan terstruktur
-- **Topik mencakup:** 86 area pengetahuan pasar modal
+- **Total dokumen:** 88 file Markdown (00-87)
+- **Total konten:** ~66500+ baris pengetahuan terstruktur
+- **Topik mencakup:** 87 area pengetahuan pasar modal
 - **Kode contoh:** Python (pandas, numpy, scikit-learn, FastAPI)
 - **Bahasa:** Indonesia (utama) dengan istilah teknis Inggris
 

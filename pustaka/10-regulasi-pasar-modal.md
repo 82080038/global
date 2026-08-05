@@ -97,6 +97,51 @@ Otoritas Jasa Keuangan (OJK) dibentuk berdasarkan **UU No. 21 Tahun 2011**. Kewe
 | POJK No. 20/2023 | Reksa Dana | Mutual funds |
 | POJK No. 27/2023 | Produk Digital Finansial | Digital financial products |
 | POJK No. 10/2023 | Layanan Permodalan Berbasis Teknologi (Equity Crowdfunding) | Equity crowdfunding |
+| **POJK No. 3/2026** | Penyelenggaraan Kegiatan Usaha Perusahaan Efek (PEE & PPE) | Pengelompokan PEKU 1/2/3, permodalan minimum |
+| **POJK No. 5/2026** | Penyelenggaraan Kegiatan Usaha Manajer Investasi | Pengelompokan MIKU 1/2, permodalan minimum |
+
+### 2.3 POJK 2026 — Penguatan Kelembagaan Pasar Modal
+
+#### POJK No. 3 Tahun 2026 (Perusahaan Efek)
+
+Diundangkan 29 April 2026. Menggantikan POJK No. 20/POJK.04/2016. Pengelompokan Perusahaan Efek berdasarkan Kegiatan Usaha (PEKU):
+
+| PEKU | Fokus | Modal Disetor Min. | MKBD Min. |
+|------|-------|---------------------|-----------|
+| **PEKU 1** | Pemasaran Efek terbatas | Rp 1 miliar | Rp 500 juta |
+| **PEKU 2** | PEE atau PPE terbatas | Rp 55 miliar | Rp 50 miliar |
+| **PEKU 3** | PEE + PPE luas (margin, produk terstruktur, transaksi luar negeri) | Rp 110 miliar | Rp 100 miliar |
+
+**Relevansi untuk aplikasi:** Broker adapter harus mengetahui klasifikasi PEKU partner broker — PEKU 1 tidak bisa melakukan margin trading atau pembiayaan transaksi.
+
+#### POJK No. 5 Tahun 2026 (Manajer Investasi)
+
+Diundangkan 29 April 2026. Pengelompokan Manajer Investasi berdasarkan Kegiatan Usaha (MIKU):
+
+| MIKU | Fokus | Modal Disetor Min. | MKBD Min. | Dana Kelolaan Min. |
+|------|-------|---------------------|-----------|---------------------|
+| **MIKU 1** | Produk investasi tertentu (terbatas) | Rp 25 miliar | Rp 5 miliar + 0.1% AUM | Rp 500 miliar |
+| **MIKU 2** | Seluruh kegiatan usaha MI | Rp 50 miliar | Rp 10 miliar + 0.1% AUM | Rp 1 triliun |
+
+### 2.4 OJK Reformasi Pasar Modal (Februari 2026)
+
+OJK mengumumkan **8 rencana aksi** percepatan reformasi pasar modal (1 Februari 2026), dikelompokkan dalam 4 klaster:
+
+| Klaster | Rencana Aksi | Status |
+|---------|-------------|--------|
+| **Free float** | Naikkan batas minimum free float dari 7.5% → 15% (bertahap) | In progress |
+| **Transparansi** | Penguatan transparansi Ultimate Beneficial Owner (UBO) | In progress |
+| **Data kepemilikan** | Penguatan data kepemilikan saham (sub-tipe investor, granular) | In progress |
+| **Tata kelola** | Demutualisasi BEI (sesuai amanat UU) | In progress |
+| **Enforcement** | Penegakan peraturan & sanksi (manipulasi, informasi menyesatkan) | Ongoing |
+| **Tata kelola emiten** | Pendidikan berkelanjutan direksi/komisaris, sertifikasi penyusun laporan keuangan | In progress |
+| **Sinergitas** | Penguatan peran investor institusi domestik | In progress |
+| **Sinergitas** | Perluasan basis investor domestik & asing | In progress |
+
+**Relevansi untuk aplikasi:**
+- Free float 15% → update screener liquidity filter
+- UBO transparansi → due diligence enhancement untuk fundamental analysis
+- Data kepemilikan granular → foreign flow analysis lebih detail
 
 ---
 
@@ -113,7 +158,38 @@ Mengatur:
 - Short selling dan margin trading
 - Negotiated trade
 
-### 3.2 Peraturan Nomor I-E (Pencatatan Efek)
+### 3.2 Papan Pemantauan Khusus (PPK) — Reformasi 2026
+
+BEI sedang menyempurnakan aturan PPK (Full Call Auction) sejak Maret 2024. Per Juli 2026, usulan perubahan dalam tahap akhir Rule Making Rule (RMR):
+
+#### Penghapusan 3 dari 11 Kriteria PPK
+
+Kriteria yang diusulkan dihapus (lebih teknis daripada fundamental):
+- Kriteria 6: Free float < 5%
+- Kriteria 7: Likuiditas rendah (< Rp 5 juta/hari, < 10K saham/hari, 3 bulan)
+- Kriteria 10: Suspensi 1 hari akibat aktivitas perdagangan
+
+Kriteria yang tetap: opini disclaimer, tidak ada pendapatan, ekuitas negatif, PKPU/pailit.
+
+#### Auto-Rejection Berjenjang (Usulan)
+
+| Kelompok Harga | Batas ARB/ARA Sebelumnya | Usulan Batas Baru |
+|----------------|--------------------------|-------------------|
+| Rp 1 – Rp 10 | Perubahan Rp 1 | Tetap Rp 1 |
+| > Rp 10 – Rp 200 | ~10% | **35%** |
+| > Rp 200 – Rp 5,000 | ~10% | **25%** |
+| > Rp 5,000 | ~10% | **20%** |
+
+#### Non-Cancellation Period
+
+Diterapkan di setiap sesi FCA — investor tidak dapat membatalkan/mengubah order hingga random closing dan matching selesai. Tujuan: mencegah spoofing, menjaga stabilitas harga.
+
+**Relevansi untuk aplikasi:**
+- Update auto-reject threshold di risk engine berdasarkan kelompok harga
+- PPK screening filter: kriteria teknis dihapus → fewer saham masuk PPK
+- Non-Cancellation Period: order management system harus mendukung lock period
+
+### 3.3 Peraturan Nomor I-E (Pencatatan Efek)
 
 Mengatur:
 - Syarat pencatatan (papan utama, pengembangan, akselerasi)
@@ -122,7 +198,7 @@ Mengatur:
 - Corporate actions
 - Delisting
 
-### 3.3 Kewajiban Emiten
+### 3.4 Kewajiban Emiten
 
 | Kewajiban | Frekuensi | Deadline |
 |-----------|-----------|----------|
@@ -133,7 +209,7 @@ Mengatur:
 | **Laporan Pemegang Saham** | Ad hoc | 5 hari kerja |
 | **Public Expose** | Tahunan | Minimal 1x per tahun |
 
-### 3.4 Notasi Khusus
+### 3.5 Notasi Khusus
 
 | Notasi | Arti | Implikasi |
 |--------|------|-----------|

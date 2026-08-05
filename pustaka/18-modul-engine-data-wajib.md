@@ -915,7 +915,7 @@ sell_cost_pct = sell_fee + levy + slippage  # 0.30043%
 | **File** | `src/trading_system/api/app.py` |
 | **Framework** | FastAPI + Uvicorn ASGI |
 | **Port** | 8000 |
-| **Total Endpoints** | 94 (REST + WebSocket) |
+| **Total Endpoints** | 88 (86 REST + 2 WebSocket) |
 
 #### Middleware
 
@@ -1001,7 +1001,7 @@ sell_cost_pct = sell_fee + levy + slippage  # 0.30043%
 
 | # | Tabel | Primary Key | Data |
 |---|-------|-------------|------|
-| 17 | `instrument_master` | ticker | 992 tickers (972 IDX + 19 global) |
+| 17 | `instrument_master` | ticker | 992 tickers (951 aktif: 928 equity + 23 non-equity) |
 | 18 | `fundamental_data` | ticker, date, source | 991 rows |
 | 19 | `macro_data` | series_name, date, source | 10,036 rows |
 | 20 | `foreign_flow` | ticker, date, source | 103,046 rows |
@@ -1067,12 +1067,12 @@ sell_cost_pct = sell_fee + levy + slippage  # 0.30043%
 
 | Kategori | Ticker | Jumlah |
 |----------|--------|--------|
-| **Saham IDX** | `*.JK` | 972 active + 40 delisted |
+| **Saham IDX** | `*.JK` | 928 active equity + 40 delisted |
 | **Indeks Global** | `^GSPC`, `^IXIC`, `^DJI`, `^HSI`, `^N225`, `^FTSE`, `^GDAXI` | 7 |
 | **Proxy Makro** | `^TNX`, `GC=F`, `CL=F`, `IDR=X`, `DX-Y.NYB` | 5 |
 | **Benchmark** | `^JKSE` | 1 |
 | **Forex** | `EURIDR=X`, `JPYIDR=X` | 2 (skip jika quality=0) |
-| **Total** | | 991 (972 IDX + 19 global) |
+| **Total** | | 992 (951 aktif: 928 equity + 23 non-equity) |
 
 ### 14.3 Default Tickers
 
@@ -1321,7 +1321,7 @@ Daftar lengkap semua engine terdaftar di `ENGINE_REGISTRY`:
 
 ### Phase 7: API & Frontend
 
-- [ ] FastAPI (94 endpoint: REST + WebSocket)
+- [ ] FastAPI (88 endpoint: 86 REST + 2 WebSocket)
 - [ ] API Key Auth (`secrets.compare_digest`)
 - [ ] SanitizedJSONResponse (NaN/Inf → null)
 - [ ] Rate Limiting (60 req/min)
@@ -1333,10 +1333,10 @@ Daftar lengkap semua engine terdaftar di `ENGINE_REGISTRY`:
 
 - [ ] Audit log (append-only, semua event tercatat)
 - [ ] Telegram notifier
-- [ ] CLI (15+ subcommands)
+- [ ] CLI (17+ subcommands)
 - [ ] Docker containerization
 - [ ] CI/CD (GitHub Actions)
-- [ ] Unit tests (600+ tests, coverage ≥ 50%)
+- [ ] Unit tests (750+ tests, coverage ≥ 50%)
 - [ ] E2E tests (Playwright)
 - [ ] Alembic schema migrations
 - [ ] Parquet cold archive (raw + archive dirs)

@@ -653,7 +653,7 @@ def load_parquet(path: str, columns: list = None, filters = None):
 | **Auto-reject ±15-20%** | Price validation | Include in validation rules |
 | **Suspend/delisting** | Saham hilang | is_active flag, filter downstream |
 | **Corporate actions frequent** | Price adjustment | Automated CA adjustment |
-| **991 tickers** | Batch ingestion lambat | Parallel ingestion (throttled) |
+| **951 tickers aktif** | Batch ingestion lambat | Parallel ingestion (throttled) |
 
 ### 11.2 Batch Ingestion Schedule
 

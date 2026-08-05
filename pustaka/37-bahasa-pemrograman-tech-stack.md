@@ -439,7 +439,7 @@
 
 **Alasan:**
 - Codebase `trading-system` v0.1.11 sudah Python + FastAPI + SQLite
-- 80+ modul, 600+ tests, 94 API endpoints sudah ada
+- 80+ modul, 750+ tests, 88 API endpoints (86 REST + 2 WebSocket) sudah ada
 - Ecosystem ML/data Python tidak tertandingi
 - Next.js + TypeScript untuk frontend baru (lebih modern dari existing)
 - Adopsi langsung, tidak perlu rewrite
@@ -549,7 +549,7 @@ IDX bukan market HFT. Tidak ada sub-microsecond execution requirement. Latency t
 | **Sentiment Engine** | Python | Production-ready | ✅ Copy langsung |
 | **AI/ML Engine** | Python | Production-ready | ✅ Copy langsung |
 | **CLI** | Python | Production-ready | ✅ Copy langsung |
-| **API (FastAPI)** | Python | 94 endpoints | ✅ Copy + extend |
+| **API (FastAPI)** | Python | 88 endpoints | ✅ Copy + extend |
 | **Frontend (Next.js)** | TypeScript | Data Inspection only | ⚠️ Perlu rebuild |
 
 ### 9.2 Yang Perlu Di-rewrite / Baru

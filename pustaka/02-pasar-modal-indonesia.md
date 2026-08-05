@@ -66,6 +66,11 @@
 - **2021:** Klasifikasi Industri Baru (IDX-IC), WBS, notasi khusus "X", penutupan kode broker
 - **2022:** Notasi khusus "N" untuk multiple voting shares, penutupan kode domisili
 - **2023:** UU No. 4 Tahun 2023 (Penguatan dan Pengembangan Sektor Keuangan) memperbarui UU Pasar Modal
+- **Maret 2024:** Papan Pemantauan Khusus (PPK) dengan mekanisme Full Call Auction (FCA) diterapkan — price discovery lebih baik, mengurangi volatilitas tidak wajar
+- **15 Desember 2025:** Non-Cancellation Period diterapkan di sesi pre-opening dan pre-closing
+- **1 Februari 2026:** OJK umumkan 8 rencana aksi percepatan reformasi pasar modal (free float 15%, UBO transparansi, demutualisasi BEI, enforcement, tata kelola emiten)
+- **29 April 2026:** POJK No. 3/2026 (Perusahaan Efek — PEKU 1/2/3) dan POJK No. 5/2026 (Manajer Investasi — MIKU 1/2) diundangkan — penguatan permodalan dan tata kelola
+- **Juli 2026:** BEI usulkan penyempurnaan PPK: hapus 3 kriteria teknis, auto-reject berjenjang 4 kelompok harga, Non-Cancellation Period untuk PPK (tahap akhir RMR)
 
 ---
 

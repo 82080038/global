@@ -85,7 +85,7 @@
 06:00 WIB  ── Scheduler trigger ──
                 │
                 ▼
-06:05       Fetch OHLCV (Yahoo Finance, ~991 tickers)
+06:05       Fetch OHLCV (Yahoo Finance, ~951 tickers aktif)
                 │  Rate limit: 1 call/detik
                 │  Retry: 3x dengan exponential backoff
                 ▼
@@ -751,8 +751,8 @@ Sell:
                    │ Integration │  API endpoint tests, cross-module
                    │  ~50 tests  │  Pipeline, storage+engine
                   ┌┴─────────────┴┐
-                  │     Unit      │  600+ tests across 45 files
-                  │  ~600 tests   │  Every engine, every function
+                  │     Unit      │  750+ tests across 51 files
+                  │  ~750 tests   │  Every engine, every function
                  ─┴───────────────┴─
                   │  Property     │  Hypothesis (invariants)
                   │  ~10 tests    │  Equity ≥ 0, win rate ∈ [0,1]
@@ -766,7 +766,7 @@ Sell:
 | **Core Engine** | ~200 | Technical, Fundamental, Macro, Global, Sentiment, Decision, Risk, XAI, AI Learning, Backtest, Paper Trading, Monitoring | pytest |
 | **Execution** | ~80 | Execution Engine, Interface, Automated, Broker Adapter | pytest |
 | **Data Layer** | ~60 | Storage CRUD, Validation, Data Source, Archive, Import Legacy | pytest |
-| **API & CLI** | ~100 | 94 endpoints, CRUD, 15 CLI subcommands | pytest |
+| **API & CLI** | ~100 | 88 endpoints, CRUD, 17 CLI subcommands | pytest |
 | **TIP Components** | ~155 | 6 layers (Data Quality, Advanced Technical, Alpha, Risk, AI, Validation) | pytest |
 | **Property-Based** | ~10 | Invariants: equity ≥ 0, PnL consistent, win rate ∈ [0,1] | Hypothesis |
 | **E2E** | ~5 | Dashboard load, ticker switch, chart render, comprehensive | Playwright |
@@ -930,7 +930,7 @@ Push to main
 │  Step 3: Unit Tests (pytest)                │
 │  pytest tests/unit/ --cov=trading_system    │
 │  Coverage gate: 50% minimum                  │
-│  600+ tests, 0 warnings                      │
+│  750+ tests, 0 warnings                      │
 └─────────────────────────────────────────────┘
     │
     ▼
@@ -991,11 +991,11 @@ type: short description
 
 | KPI | Target | Saat Ini | Metrik |
 |-----|--------|----------|--------|
-| **Total tickers** | ≥ 900 | 991 (972 IDX + 19 global) | `SELECT COUNT(*) FROM instrument_master` |
-| **Total OHLCV rows** | ≥ 2M | 2,904,119 | `SELECT COUNT(*) FROM ohlcv` |
-| **Total tabel** | ≥ 35 | 35+ | Schema count |
-| **API endpoints** | ≥ 80 | 94 | Route count |
-| **Unit tests** | ≥ 500 | 600+ | `pytest --collect-only` |
+| **Total tickers** | ≥ 900 | 951 (928 equity + 23 non-equity) | `SELECT COUNT(*) FROM instrument_master WHERE is_active=1` |
+| **Total OHLCV rows** | ≥ 2M | 2,906,406 | `SELECT COUNT(*) FROM ohlcv` |
+| **Total tabel** | ≥ 35 | 39 | Schema count |
+| **API endpoints** | ≥ 80 | 88 (86 REST + 2 WS) | Route count |
+| **Unit tests** | ≥ 500 | 752 | `pytest --collect-only` |
 | **Test coverage** | ≥ 50% | ≥ 50% | `pytest --cov` |
 | **Test warnings** | 0 | 0 | `pytest -W error` |
 | **DB size** | < 500 MB | ~460 MB | File size |
@@ -1353,7 +1353,7 @@ Kedua toggle mengupdate `os.environ` dan instance engine **tanpa restart server*
 
 ### 18.1 Pre-Release Checklist
 
-- [ ] **Unit tests:** 600+ tests passing, 0 warnings
+- [ ] **Unit tests:** 750+ tests passing, 0 warnings
 - [ ] **Coverage:** ≥ 50%
 - [ ] **Lint:** `ruff check` clean
 - [ ] **Type check:** `mypy` (non-blocking, no new errors)
@@ -1423,7 +1423,7 @@ Kedua toggle mengupdate `os.environ` dan instance engine **tanpa restart server*
 
 1. `docs/arsitektur-sistem-trading.md` — Arsitektur, alur data, event bus, data contracts
 2. `docs/buku-sistem-trading.md` — Buku panduan teknis (3092 baris)
-3. `docs/TEST_PLAN.md` — Test plan lengkap (600+ tests)
+3. `docs/TEST_PLAN.md` — Test plan lengkap (750+ tests)
 4. `docs/DEVELOPER_GUIDE.md` — Developer guide (997 baris)
 5. `docs/STATUS.md` — Status implementasi dan perbaikan
 6. `docs/SARAN_PENGEMBANGAN.md` — Saran pengembangan (1233 baris)

@@ -27,7 +27,7 @@
 
 | Tanpa Governance | Dengan Governance |
 |-----------------|-------------------|
-| Tidak tahu data apa yang ada | Data catalog: 41 tables, documented |
+| Tidak tahu data apa yang ada | Data catalog: 39 tables, documented |
 | Tidak tahu dari mana data berasal | Lineage: Yahoo → normalize → validate → SQLite |
 | Tidak tahu berapa lama simpan | Retention policy: OHLCV forever, audit_log 1 year |
 | Tidak tahu siapa owner data | Stewardship: setiap table punya owner |
